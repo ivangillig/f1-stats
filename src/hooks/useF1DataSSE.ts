@@ -61,6 +61,7 @@ export function useF1DataSSE(): F1DataState {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isConnectedRef = useRef(false); // Ref to avoid dependency issues
 
   // Store driver list from API (updated in real-time)
   const driverListRef = useRef<
@@ -391,7 +392,13 @@ export function useF1DataSSE(): F1DataState {
     eventSource.onopen = () => {
       console.log("[SSE] Connected");
       setIsConnected(true);
+      isConnectedRef.current = true;
       setError(null);
+      // Stop health checks since we're connected
+      if (healthCheckIntervalRef.current) {
+        clearInterval(healthCheckIntervalRef.current);
+        healthCheckIntervalRef.current = null;
+      }
     };
 
     eventSource.addEventListener("initial", (event) => {
@@ -408,6 +415,7 @@ export function useF1DataSSE(): F1DataState {
     eventSource.onerror = (err) => {
       console.error("[SSE] Error:", err);
       setIsConnected(false);
+      isConnectedRef.current = false;
       setError("Connection lost. Reconnecting...");
 
       eventSource.close();
@@ -539,14 +547,17 @@ export function useF1DataSSE(): F1DataState {
   }, []);
 
   // Health check function to detect when proxy comes online
+  // Uses refs to avoid recreating the callback and causing effect reruns
   const checkProxyHealth = useCallback(() => {
-    if (isConnected) return; // Already connected, no need to check
+    // Use ref to check connected status to avoid dependency issues
+    if (isConnectedRef.current) return;
 
     fetch(`${PROXY_URL}/health`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.status === "ok") {
-          console.log("[SSE] Proxy is now available, connecting...");
+        // Only connect if proxy has actual data (not just running)
+        if (data.status === "ok" && data.hasState && !isConnectedRef.current) {
+          console.log("[SSE] Proxy is now available with data, connecting...");
           setIsInDemoMode(false);
           setError(null);
           // Clear health check interval since we're connecting
@@ -562,17 +573,18 @@ export function useF1DataSSE(): F1DataState {
       .catch(() => {
         // Proxy still not available, will check again
       });
-  }, [connect, isConnected, clearAllData]);
+  }, [connect, clearAllData]); // Removed isConnected from deps
 
   useEffect(() => {
     // Try to connect to proxy
     fetch(`${PROXY_URL}/health`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.status === "ok") {
+        // Only connect if proxy has actual data
+        if (data.status === "ok" && data.hasState) {
           connect();
         } else {
-          throw new Error("Proxy not ready");
+          throw new Error("Proxy not ready or no data");
         }
       })
       .catch(() => {
@@ -582,7 +594,33 @@ export function useF1DataSSE(): F1DataState {
         generateDemoData();
 
         // Start periodic health check every 10 seconds
-        healthCheckIntervalRef.current = setInterval(checkProxyHealth, 10000);
+        // Store interval in ref so cleanup can clear it
+        healthCheckIntervalRef.current = setInterval(() => {
+          // Inline health check to avoid dependency issues
+          if (isConnectedRef.current) return;
+
+          fetch(`${PROXY_URL}/health`)
+            .then((res) => res.json())
+            .then((data) => {
+              if (
+                data.status === "ok" &&
+                data.hasState &&
+                !isConnectedRef.current
+              ) {
+                console.log(
+                  "[SSE] Proxy is now available with data, connecting..."
+                );
+                if (healthCheckIntervalRef.current) {
+                  clearInterval(healthCheckIntervalRef.current);
+                  healthCheckIntervalRef.current = null;
+                }
+                // Will trigger a page reload or we need to call connect
+                // For now, just log - user can refresh
+                window.location.reload();
+              }
+            })
+            .catch(() => {});
+        }, 10000);
       });
 
     return () => {
@@ -596,7 +634,8 @@ export function useF1DataSSE(): F1DataState {
         clearInterval(healthCheckIntervalRef.current);
       }
     };
-  }, [connect, generateDemoData, checkProxyHealth]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run once on mount
 
   return {
     drivers,

@@ -1,6 +1,12 @@
 import http from "http";
 import WebSocket from "ws";
 import { startReplay, stopReplay, isReplayRunning } from "./replay.js";
+import {
+  startMQTT,
+  stopMQTT,
+  isMQTTRunning,
+  hasMQTTCredentials,
+} from "./mqtt-client.js";
 
 const PORT = process.env.PORT || 4000;
 const F1_BASE_URL = "livetiming.formula1.com";
@@ -239,12 +245,19 @@ const server = http.createServer((req, res) => {
 
   // Health check
   if (req.url === "/health") {
+    const mode = isMQTTRunning()
+      ? "mqtt-live"
+      : isReplayRunning()
+      ? "replay"
+      : "f1-live";
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
         status: "ok",
+        mode: mode,
         clients: sseClients.size,
         hasState: Object.keys(currentState).length > 0,
+        mqttAvailable: hasMQTTCredentials(),
       })
     );
     return;
@@ -300,6 +313,13 @@ server.listen(PORT, () => {
   console.log(`[Server] F1 Proxy running on port ${PORT}`);
   console.log(`[Server] SSE endpoint: http://localhost:${PORT}/api/sse`);
 
-  // Connect to F1
-  connectToF1();
+  // Check for MQTT credentials first (preferred for live data)
+  if (hasMQTTCredentials()) {
+    console.log("[Server] OpenF1 credentials found, using MQTT for live data");
+    startMQTT(broadcastSSE, currentState);
+  } else {
+    console.log("[Server] No OpenF1 credentials, trying F1 SignalR...");
+    // Connect to F1 SignalR (fallback, will switch to replay if no session)
+    connectToF1();
+  }
 });
