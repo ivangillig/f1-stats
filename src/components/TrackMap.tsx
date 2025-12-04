@@ -134,16 +134,36 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
       };
     }, [mapData]);
 
-  // Generate simulated car positions on track
+  // Generate car positions on track using real X, Y coordinates from replay
   const carPositions = useMemo(() => {
     if (!points || points.length === 0) return [];
 
-    return drivers.map((driver, index) => {
-      // Distribute cars along the track based on position
+    return drivers.map((driver) => {
+      // If we have real track coordinates from replay, use them
+      if (driver.trackX !== undefined && driver.trackY !== undefined) {
+        // Apply same rotation as the track
+        const rotatedPos = rotate(
+          driver.trackX,
+          driver.trackY,
+          (mapData?.rotation || 0) + ROTATION_FIX,
+          centerX,
+          centerY
+        );
+        return {
+          driver,
+          x: rotatedPos.x,
+          y: rotatedPos.y,
+        };
+      }
+
+      // Fallback: distribute cars along the track based on race position
       const trackIndex =
-        Math.floor((index * points.length) / (drivers.length + 5)) %
-        points.length;
-      const pos = points[trackIndex];
+        Math.floor(
+          ((driver.position - 1) * points.length) / (drivers.length + 5)
+        ) % points.length;
+
+      const safeIndex = Math.max(0, Math.min(points.length - 1, trackIndex));
+      const pos = points[safeIndex];
 
       return {
         driver,
@@ -151,7 +171,7 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
         y: pos.y,
       };
     });
-  }, [drivers, points]);
+  }, [drivers, points, mapData, centerX, centerY]);
 
   if (loading) {
     return (

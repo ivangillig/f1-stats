@@ -11,14 +11,14 @@ export default function Footer() {
         <span>
           {t("footer.madeWith")} <span className="text-red-500">♥</span> by{" "}
           <a
-            href="https://github.com"
+            href="https://www.linkedin.com/in/ivangillig/"
             className="text-blue-400 hover:underline"
           >
-            Developer
+            Ivan Gillig
           </a>
         </span>
         <span className="text-zinc-700">•</span>
-        <a href="https://github.com" className="text-blue-400 hover:underline">
+        <a href="https://github.com/ivangillig" className="text-blue-400 hover:underline">
           GitHub
         </a>
         <span className="text-zinc-700">•</span>

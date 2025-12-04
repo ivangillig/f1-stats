@@ -56,9 +56,11 @@ export function useF1DataSSE(): F1DataState {
   >([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isInDemoMode, setIsInDemoMode] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Store driver list from API (updated in real-time)
   const driverListRef = useRef<
@@ -67,6 +69,22 @@ export function useF1DataSSE(): F1DataState {
       { name: string; team: string; code: string; teamColor: string }
     >
   >({});
+
+  // Store car track positions from replay
+  const carDataRef = useRef<Record<string, { x: number; y: number }>>({});
+
+  // Clear all cached data when switching from demo to live
+  const clearAllData = useCallback(() => {
+    console.log("[SSE] Clearing all cached data...");
+    setDrivers([]);
+    setSessionInfo(defaultSessionInfo);
+    setTrackStatus(defaultTrackStatus);
+    setWeather(undefined);
+    setTeamRadios([]);
+    setRaceControlMessages([]);
+    driverListRef.current = {};
+    carDataRef.current = {};
+  }, []);
 
   const processData = useCallback((data: any) => {
     if (!data) return;
@@ -192,8 +210,25 @@ export function useF1DataSSE(): F1DataState {
                 (x) => x.utc === m.utc && x.message === m.message
               ) === i
           );
+          // Sort by date descending (newest first)
+          uniqueMessages.sort(
+            (a, b) => new Date(b.utc).getTime() - new Date(a.utc).getTime()
+          );
           return uniqueMessages.slice(0, 30);
         });
+      }
+
+      // Process Position data (X, Y coordinates from replay)
+      const positionData = data.Position?.Position;
+      if (positionData) {
+        Object.entries(positionData).forEach(
+          ([num, posData]: [string, any]) => {
+            carDataRef.current[num] = {
+              x: posData.X || 0,
+              y: posData.Y || 0,
+            };
+          }
+        );
       }
 
       // Process Drivers
@@ -242,7 +277,29 @@ export function useF1DataSSE(): F1DataState {
                 return "none";
               };
 
+              // Parse mini sectors (segments) from each sector
+              const getSegmentStatus = (value: string | null): SectorStatus => {
+                if (value === "OverallFastest") return "purple";
+                if (value === "PersonalFastest") return "green";
+                return "yellow";
+              };
+
+              const parseMiniSectors = (sectors: any): SectorStatus[] => {
+                const allSegments: SectorStatus[] = [];
+                // Combine segments from all 3 sectors
+                ["0", "1", "2"].forEach((sectorNum) => {
+                  const sector = sectors?.[sectorNum];
+                  const segments = sector?.Segments || [];
+                  segments.forEach((seg: string | null) => {
+                    allSegments.push(seg ? getSegmentStatus(seg) : "none");
+                  });
+                });
+                // If no segments, return empty array (will be handled in component)
+                return allSegments.length > 0 ? allSegments : [];
+              };
+
               const sectors = driverData.Sectors || {};
+              const miniSectors = parseMiniSectors(sectors);
 
               const driver: Driver = {
                 position: driverData.Line || existing?.position || 0,
@@ -275,20 +332,45 @@ export function useF1DataSSE(): F1DataState {
                   getSectorStatus(sectors["2"]) ||
                   existing?.sector3Status ||
                   "none",
+                miniSectors:
+                  miniSectors.length > 0
+                    ? miniSectors
+                    : existing?.miniSectors || [],
                 tire: tireInfo,
                 inPit: driverData.InPit || existing?.inPit || false,
                 pitCount:
                   driverData.NumberOfPitStops ?? existing?.pitCount ?? 0,
                 retired: driverData.Retired || existing?.retired || false,
+                trackX: carDataRef.current[num]?.x ?? existing?.trackX,
+                trackY: carDataRef.current[num]?.y ?? existing?.trackY,
               };
 
               driversMap.set(num, driver);
             }
           );
 
-          return Array.from(driversMap.values())
-            .filter((d) => d.position > 0)
-            .sort((a, b) => a.position - b.position);
+          // Sort by gap to leader (interval)
+          // Leader has empty/null gap, others have "+X.XXX" format
+          const parseGap = (gap: string | undefined): number => {
+            if (!gap || gap === "" || gap === "---") return 0; // Leader
+            // Remove "+" and parse as float
+            const numericGap = parseFloat(gap.replace("+", ""));
+            return isNaN(numericGap) ? Infinity : numericGap;
+          };
+
+          const sortedDrivers = Array.from(driversMap.values())
+            .filter((d) => d.gap !== undefined || d.position > 0)
+            .sort((a, b) => {
+              const gapA = parseGap(a.gap);
+              const gapB = parseGap(b.gap);
+              return gapA - gapB;
+            });
+
+          // Update positions based on sorted order
+          return sortedDrivers.map((driver, index) => ({
+            ...driver,
+            position: index + 1,
+          }));
         });
       }
     } catch (err) {
@@ -456,6 +538,32 @@ export function useF1DataSSE(): F1DataState {
     setRaceControlMessages(demoRaceControl);
   }, []);
 
+  // Health check function to detect when proxy comes online
+  const checkProxyHealth = useCallback(() => {
+    if (isConnected) return; // Already connected, no need to check
+
+    fetch(`${PROXY_URL}/health`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.status === "ok") {
+          console.log("[SSE] Proxy is now available, connecting...");
+          setIsInDemoMode(false);
+          setError(null);
+          // Clear health check interval since we're connecting
+          if (healthCheckIntervalRef.current) {
+            clearInterval(healthCheckIntervalRef.current);
+            healthCheckIntervalRef.current = null;
+          }
+          // Clear all demo data before connecting to real data
+          clearAllData();
+          connect();
+        }
+      })
+      .catch(() => {
+        // Proxy still not available, will check again
+      });
+  }, [connect, isConnected, clearAllData]);
+
   useEffect(() => {
     // Try to connect to proxy
     fetch(`${PROXY_URL}/health`)
@@ -470,7 +578,11 @@ export function useF1DataSSE(): F1DataState {
       .catch(() => {
         console.log("[SSE] Proxy not available, using demo data");
         setError("DEMO_DATA");
+        setIsInDemoMode(true);
         generateDemoData();
+
+        // Start periodic health check every 10 seconds
+        healthCheckIntervalRef.current = setInterval(checkProxyHealth, 10000);
       });
 
     return () => {
@@ -480,8 +592,11 @@ export function useF1DataSSE(): F1DataState {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      if (healthCheckIntervalRef.current) {
+        clearInterval(healthCheckIntervalRef.current);
+      }
     };
-  }, [connect, generateDemoData]);
+  }, [connect, generateDemoData, checkProxyHealth]);
 
   return {
     drivers,

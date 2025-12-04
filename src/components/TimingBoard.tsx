@@ -4,6 +4,7 @@ import { Driver } from "@/types/f1";
 import { Card } from "@/components/ui/card";
 import DriverRow from "./DriverRow";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { AnimatePresence, motion } from "framer-motion";
 
 interface TimingBoardProps {
   drivers: Driver[];
@@ -27,12 +28,30 @@ export default function TimingBoard({ drivers }: TimingBoardProps) {
         <div className="text-center">{t("timing.s3")}</div>
       </div>
 
-      {/* Drivers list */}
-      <div>
+      {/* Drivers list with animation */}
+      <div className="relative">
         {drivers.length > 0 ? (
-          drivers.map((driver) => (
-            <DriverRow key={driver.driverNumber} driver={driver} />
-          ))
+          <AnimatePresence mode="popLayout">
+            {drivers.map((driver) => (
+              <motion.div
+                key={driver.driverNumber}
+                layout
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{
+                  layout: {
+                    type: "spring",
+                    stiffness: 50, // Reduced stiffness for smoother movement
+                    damping: 15, // Increased damping to reduce overshoot
+                  },
+                  opacity: { duration: 0.3 },
+                }}
+              >
+                <DriverRow driver={driver} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         ) : (
           <div className="px-4 py-12 text-center text-muted-foreground text-sm">
             {t("timing.waiting")}

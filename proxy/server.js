@@ -1,5 +1,6 @@
 import http from "http";
 import WebSocket from "ws";
+import { startReplay, stopReplay, isReplayRunning } from "./replay.js";
 
 const PORT = process.env.PORT || 4000;
 const F1_BASE_URL = "livetiming.formula1.com";
@@ -123,6 +124,26 @@ async function connectToF1() {
             currentState[key] = value;
           });
           console.log("[F1] Received initial state");
+
+          // Check if session is live
+          const sessionData = currentState.SessionInfo;
+          const sessionStatus = currentState.SessionStatus;
+
+          // If session ended or no active session, switch to replay
+          if (
+            sessionStatus?.Status === "Ends" ||
+            sessionStatus?.Status === "Ended" ||
+            !sessionData?.Meeting?.Name
+          ) {
+            console.log(
+              "[F1] No active session detected, switching to replay mode..."
+            );
+            stopReplay();
+            // Start replay BEFORE closing websocket so isReplayRunning() is true
+            startReplay(broadcastSSE, currentState);
+            ws.close();
+            return;
+          }
         }
       } catch (err) {
         // Ignore parse errors for heartbeat messages
@@ -131,9 +152,16 @@ async function connectToF1() {
 
     ws.on("close", (code, reason) => {
       console.log(`[F1] Connection closed: ${code} - ${reason}`);
-      currentState = {};
 
-      // Reconnect after delay
+      // Don't reconnect if in replay mode
+      if (isReplayRunning()) {
+        console.log("[F1] Replay is running, not reconnecting");
+        return;
+      }
+
+      // Clear state without reassigning the reference
+      Object.keys(currentState).forEach((key) => delete currentState[key]);
+
       setTimeout(() => {
         console.log("[F1] Attempting to reconnect...");
         connectToF1();
@@ -148,11 +176,19 @@ async function connectToF1() {
   } catch (error) {
     console.error("[F1] Connection error:", error.message);
 
-    // Retry connection
-    setTimeout(() => {
-      console.log("[F1] Retrying connection...");
-      connectToF1();
-    }, 10000);
+    // If not already in replay mode, start it
+    if (!isReplayRunning()) {
+      console.log("[F1] No live session available, starting replay mode...");
+      startReplay(broadcastSSE, currentState);
+    }
+
+    // Don't retry if in replay mode
+    if (!isReplayRunning()) {
+      setTimeout(() => {
+        console.log("[F1] Retrying connection...");
+        connectToF1();
+      }, 10000);
+    }
   }
 }
 

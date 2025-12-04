@@ -29,7 +29,8 @@ export default function Dashboard() {
   const [latestRaceControlMessage, setLatestRaceControlMessage] = useState<
     { category?: string; message: string } | undefined
   >();
-  const previousMessageCountRef = useRef(0);
+  const lastShownMessageRef = useRef<string | null>(null);
+  const bannerTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const updateHeight = () => {
@@ -52,36 +53,51 @@ export default function Dashboard() {
 
   // Detect new race control messages and show banner for 5 seconds
   useEffect(() => {
-    if (raceControlMessages.length > previousMessageCountRef.current) {
-      const newestMessage = raceControlMessages[raceControlMessages.length - 1];
-      setLatestRaceControlMessage({
-        category: newestMessage.category,
-        message: newestMessage.message,
-      });
+    if (raceControlMessages.length > 0) {
+      // Get the newest message (first in array after sorting by date desc)
+      const newestMessage = raceControlMessages[0];
 
-      const timer = setTimeout(() => {
-        setLatestRaceControlMessage(undefined);
-      }, 5000);
+      // Only show banner if this is a NEW message we haven't shown yet
+      if (
+        newestMessage &&
+        newestMessage.message !== lastShownMessageRef.current
+      ) {
+        // Filter out boring messages like "CLEAR IN TRACK SECTOR X"
+        const isInterestingMessage =
+          !newestMessage.message.includes("CLEAR IN TRACK SECTOR") &&
+          !newestMessage.message.includes("TRACK SURFACE SLIPPERY");
 
-      previousMessageCountRef.current = raceControlMessages.length;
+        if (isInterestingMessage) {
+          // Mark this message as shown
+          lastShownMessageRef.current = newestMessage.message;
 
-      return () => clearTimeout(timer);
+          // Clear any existing timer
+          if (bannerTimerRef.current) {
+            clearTimeout(bannerTimerRef.current);
+          }
+
+          setLatestRaceControlMessage({
+            category: newestMessage.category,
+            message: newestMessage.message,
+          });
+
+          // Set new timer to hide banner after 5 seconds
+          bannerTimerRef.current = setTimeout(() => {
+            setLatestRaceControlMessage(undefined);
+            bannerTimerRef.current = null;
+          }, 5000);
+        }
+      }
     }
   }, [raceControlMessages]);
 
-  // TEMP: Show test banner on mount
+  // Cleanup timer on unmount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLatestRaceControlMessage({
-        category: "Stewards",
-        message: "TRACK LIMITS - CAR 1 (VER)",
-      });
-      setTimeout(() => {
-        setLatestRaceControlMessage(undefined);
-      }, 5000);
-    }, 2000);
-
-    return () => clearTimeout(timer);
+    return () => {
+      if (bannerTimerRef.current) {
+        clearTimeout(bannerTimerRef.current);
+      }
+    };
   }, []);
 
   return (
@@ -123,7 +139,10 @@ export default function Dashboard() {
             >
               {/* Track Map */}
               <div className="flex-[3] min-h-0 border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
-                <TrackMap drivers={drivers} />
+                <TrackMap
+                  drivers={drivers}
+                  circuitKey={sessionInfo.circuitKey}
+                />
               </div>
 
               {/* Race Control */}

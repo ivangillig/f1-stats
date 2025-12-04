@@ -27,6 +27,9 @@ export interface Driver {
   drsEnabled?: boolean;
   positionChange?: number;
   lastLapPersonalBest?: boolean;
+  trackProgress?: number; // 0-1 position on track for map
+  trackX?: number; // X coordinate on track
+  trackY?: number; // Y coordinate on track
 }
 
 export interface TireInfo {

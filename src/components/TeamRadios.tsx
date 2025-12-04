@@ -2,7 +2,7 @@
 
 import { RadioCapture, Driver } from "@/types/f1";
 import { DRIVERS, TEAM_COLORS } from "@/lib/constants";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 interface TeamRadiosProps {
@@ -24,20 +24,89 @@ function formatTimeAgo(utc: string): string {
 export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
   const { t } = useLanguage();
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isActuallyPlaying, setIsActuallyPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const handlePlay = (index: number, path: string) => {
-    // In demo mode, just show visual feedback
-    if (playingIndex === index) {
-      setPlayingIndex(null);
+  // Clean up audio on unmount
+  useEffect(() => {
+    return () => {
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current = null;
       }
-    } else {
-      setPlayingIndex(index);
-      // Note: Real audio would come from F1 static server
-      // For demo, we just simulate the visual state
-      setTimeout(() => setPlayingIndex(null), 3000);
+    };
+  }, []);
+
+  const handlePlay = async (index: number, path: string) => {
+    // If clicking the same one that's playing, stop it
+    if (playingIndex === index) {
+      setPlayingIndex(null);
+      setIsActuallyPlaying(false);
+      setProgress(0);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      return;
+    }
+
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    setIsLoading(true);
+    setIsActuallyPlaying(false);
+    setPlayingIndex(index);
+    setProgress(0);
+
+    try {
+      // Create new audio element with the recording URL
+      const audio = new Audio(path);
+      audioRef.current = audio;
+
+      // Handle when audio ends
+      audio.onended = () => {
+        setPlayingIndex(null);
+        setIsActuallyPlaying(false);
+        setProgress(0);
+        audioRef.current = null;
+      };
+
+      // Handle errors
+      audio.onerror = () => {
+        console.error("Error loading audio:", path);
+        setPlayingIndex(null);
+        setIsLoading(false);
+        setIsActuallyPlaying(false);
+        setProgress(0);
+        audioRef.current = null;
+      };
+
+      // Update progress during playback
+      audio.ontimeupdate = () => {
+        if (audio.duration) {
+          setProgress((audio.currentTime / audio.duration) * 100);
+        }
+      };
+
+      // Handle when audio actually starts playing
+      audio.onplaying = () => {
+        setIsLoading(false);
+        setIsActuallyPlaying(true);
+      };
+
+      // Play the audio
+      await audio.play();
+    } catch (error) {
+      console.error("Error playing audio:", error);
+      setPlayingIndex(null);
+      setIsLoading(false);
+      setIsActuallyPlaying(false);
+      setProgress(0);
     }
   };
 
@@ -77,22 +146,24 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
               >
                 {/* Play button */}
                 <button
-                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
                     isPlaying
-                      ? "bg-red-500 scale-110"
+                      ? "bg-red-500 scale-105"
                       : "bg-zinc-700 hover:bg-zinc-600"
                   }`}
                 >
-                  {isPlaying ? (
-                    <span className="text-sm">⏹</span>
+                  {isPlaying && isLoading ? (
+                    <span className="text-xs">⏳</span>
+                  ) : isPlaying ? (
+                    <span className="text-xs">⏹</span>
                   ) : (
-                    <span className="text-sm ml-0.5">▶</span>
+                    <span className="text-xs ml-0.5">▶</span>
                   )}
                 </button>
 
                 {/* Driver info */}
                 <div
-                  className="w-10 h-6 rounded flex items-center justify-center text-xs font-bold"
+                  className="w-10 h-5 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0"
                   style={{
                     backgroundColor: `${teamColor}30`,
                     color: teamColor,
@@ -101,25 +172,22 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
                   {driverInfo.code}
                 </div>
 
-                {/* Waveform animation when playing */}
-                <div className="flex-1 flex items-center gap-0.5 h-4">
-                  {isPlaying ? (
-                    Array(20)
-                      .fill(0)
-                      .map((_, i) => (
+                {/* Progress bar */}
+                <div className="flex-1 flex items-center h-4 max-w-[100px]">
+                  <div className="w-full h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                    {isPlaying ? (
+                      isLoading ? (
+                        <div className="h-full bg-zinc-500 animate-pulse w-full" />
+                      ) : (
                         <div
-                          key={i}
-                          className="w-1 bg-red-500 rounded-full animate-pulse"
-                          style={{
-                            height: `${Math.random() * 100}%`,
-                            animationDelay: `${i * 50}ms`,
-                            animationDuration: "300ms",
-                          }}
+                          className="h-full bg-red-500 transition-all duration-200"
+                          style={{ width: `${progress}%` }}
                         />
-                      ))
-                  ) : (
-                    <div className="w-full h-0.5 bg-zinc-700 rounded-full" />
-                  )}
+                      )
+                    ) : (
+                      <div className="h-full bg-zinc-600 w-0" />
+                    )}
+                  </div>
                 </div>
 
                 {/* Time ago */}

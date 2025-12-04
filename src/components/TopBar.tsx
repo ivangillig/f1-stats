@@ -296,11 +296,11 @@ export default function TopBar({
           {/* Session info with country flag */}
           <div className="flex items-center gap-2 text-sm">
             <img
-              src={`https://flagcdn.com/w40/${getCountryCode(
+              src={`https://flagcdn.com/w80/${getCountryCode(
                 session.country
               )}.png`}
               alt={session.country}
-              className="h-5 w-auto rounded-sm"
+              className="h-8 w-auto rounded-sm shadow-md"
               title={session.country}
               onError={(e) => {
                 e.currentTarget.style.display = "none";
@@ -388,7 +388,7 @@ export default function TopBar({
           {/* Session time and laps */}
           <div className="flex items-center gap-3">
             {session.remainingTime && (
-              <div className="font-mono text-xl font-bold tabular-nums text-white">
+              <div className="font-mono text-4xl font-bold tabular-nums text-white">
                 {session.remainingTime}
               </div>
             )}
