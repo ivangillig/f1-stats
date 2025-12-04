@@ -1,0 +1,101 @@
+// Team colors mapping
+export const TEAM_COLORS: Record<string, string> = {
+  "Red Bull Racing": "#3671C6",
+  Ferrari: "#E8002D",
+  Mercedes: "#27F4D2",
+  McLaren: "#FF8000",
+  "Aston Martin": "#229971",
+  Alpine: "#FF87BC",
+  Williams: "#64C4FF",
+  RB: "#6692FF",
+  "Kick Sauber": "#52E252",
+  "Haas F1 Team": "#B6BABD",
+};
+
+// Driver info mapping (number -> info) - 2024/2025 Season
+// Note: This is a fallback, the app will use DriverList from F1 API when available
+export const DRIVERS: Record<
+  string,
+  { name: string; team: string; code: string }
+> = {
+  "1": { name: "Max Verstappen", team: "Red Bull Racing", code: "VER" },
+  "11": { name: "Sergio Perez", team: "Red Bull Racing", code: "PER" },
+  "16": { name: "Charles Leclerc", team: "Ferrari", code: "LEC" },
+  "55": { name: "Carlos Sainz", team: "Williams", code: "SAI" }, // 2025: Williams
+  "44": { name: "Lewis Hamilton", team: "Ferrari", code: "HAM" }, // 2025: Ferrari
+  "63": { name: "George Russell", team: "Mercedes", code: "RUS" },
+  "12": { name: "Andrea Kimi Antonelli", team: "Mercedes", code: "ANT" }, // 2025
+  "4": { name: "Lando Norris", team: "McLaren", code: "NOR" },
+  "81": { name: "Oscar Piastri", team: "McLaren", code: "PIA" },
+  "14": { name: "Fernando Alonso", team: "Aston Martin", code: "ALO" },
+  "18": { name: "Lance Stroll", team: "Aston Martin", code: "STR" },
+  "10": { name: "Pierre Gasly", team: "Alpine", code: "GAS" },
+  "7": { name: "Jack Doohan", team: "Alpine", code: "DOO" }, // 2025
+  "23": { name: "Alex Albon", team: "Williams", code: "ALB" },
+  "43": { name: "Franco Colapinto", team: "Williams", code: "COL" }, // 2024 replacement
+  "22": { name: "Yuki Tsunoda", team: "RB", code: "TSU" },
+  "30": { name: "Liam Lawson", team: "RB", code: "LAW" }, // 2024/2025
+  "6": { name: "Isack Hadjar", team: "RB", code: "HAD" }, // 2025
+  "87": { name: "Oliver Bearman", team: "Haas F1 Team", code: "BEA" }, // 2025
+  "31": { name: "Esteban Ocon", team: "Haas F1 Team", code: "OCO" }, // 2025: Haas
+  "5": { name: "Gabriel Bortoleto", team: "Kick Sauber", code: "BOR" }, // 2025
+  "27": { name: "Nico Hulkenberg", team: "Kick Sauber", code: "HUL" }, // 2025: Sauber
+  // Legacy numbers (might appear in historical data)
+  "77": { name: "Valtteri Bottas", team: "Kick Sauber", code: "BOT" },
+  "24": { name: "Zhou Guanyu", team: "Kick Sauber", code: "ZHO" },
+  "20": { name: "Kevin Magnussen", team: "Haas F1 Team", code: "MAG" },
+  "3": { name: "Daniel Ricciardo", team: "RB", code: "RIC" },
+  "2": { name: "Logan Sargeant", team: "Williams", code: "SAR" },
+};
+
+export const TIRE_COMPOUNDS: Record<string, { color: string; name: string }> = {
+  SOFT: { color: "#FF3333", name: "Soft" },
+  MEDIUM: { color: "#FFD700", name: "Medium" },
+  HARD: { color: "#FFFFFF", name: "Hard" },
+  INTERMEDIATE: { color: "#43B02A", name: "Inter" },
+  WET: { color: "#0067AD", name: "Wet" },
+};
+
+export const TRACK_STATUS: Record<number, { name: string; color: string }> = {
+  1: { name: "Green Flag", color: "#00bc7d" },
+  2: { name: "Yellow Flag", color: "#FFFF00" },
+  4: { name: "Safety Car", color: "#FFA500" },
+  5: { name: "Red Flag", color: "#FF0000" },
+  6: { name: "VSC Deployed", color: "#FFA500" },
+  7: { name: "VSC Ending", color: "#FFA500" },
+};
+
+// Country name to flag emoji mapping
+export const COUNTRY_FLAGS: Record<string, string> = {
+  Australia: "🇦🇺",
+  Austria: "🇦🇹",
+  Azerbaijan: "🇦🇿",
+  Bahrain: "🇧🇭",
+  Belgium: "🇧🇪",
+  Brazil: "🇧🇷",
+  Canada: "🇨🇦",
+  China: "🇨🇳",
+  France: "🇫🇷",
+  Germany: "🇩🇪",
+  "Great Britain": "🇬🇧",
+  Hungary: "🇭🇺",
+  Italy: "🇮🇹",
+  Japan: "🇯🇵",
+  Mexico: "🇲🇽",
+  Monaco: "🇲🇨",
+  Netherlands: "🇳🇱",
+  Portugal: "🇵🇹",
+  Qatar: "🇶🇦",
+  Russia: "🇷🇺",
+  "Saudi Arabia": "🇸🇦",
+  Singapore: "🇸🇬",
+  Spain: "🇪🇸",
+  UAE: "🇦🇪",
+  "United Arab Emirates": "🇦🇪",
+  "United States": "🇺🇸",
+  USA: "🇺🇸",
+  "Las Vegas": "🇺🇸",
+  Miami: "🇺🇸",
+  // Demo mode
+  "Demo Mode - Proxy Not Running": "🏁",
+};
