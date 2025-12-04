@@ -3,6 +3,7 @@
 import { RadioCapture, Driver } from "@/types/f1";
 import { DRIVERS, TEAM_COLORS } from "@/lib/constants";
 import { useState, useRef } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface TeamRadiosProps {
   radios: RadioCapture[];
@@ -21,6 +22,7 @@ function formatTimeAgo(utc: string): string {
 }
 
 export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
+  const { t } = useLanguage();
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -53,7 +55,7 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
       <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-900/80">
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
           <span>📻</span>
-          Team Radio
+          {t("teamRadios.title")}
         </h3>
       </div>
 
@@ -129,7 +131,7 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
           })
         ) : (
           <div className="flex items-center justify-center h-full text-zinc-500 text-sm">
-            No team radio messages
+            {t("teamRadios.noRadios")}
           </div>
         )}
       </div>

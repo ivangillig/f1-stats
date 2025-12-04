@@ -1,5 +1,8 @@
+"use client";
+
 import { RaceControlMessage, Driver } from "@/types/f1";
 import { TEAM_COLORS } from "@/lib/constants";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface TrackViolationsProps {
   messages: RaceControlMessage[];
@@ -16,6 +19,8 @@ export default function TrackViolations({
   messages,
   drivers,
 }: TrackViolationsProps) {
+  const { t } = useLanguage();
+
   // Count track limit violations per driver
   const violations: Record<string, number> = {};
 
@@ -49,7 +54,7 @@ export default function TrackViolations({
     <div className="flex flex-col h-full">
       <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-900/80">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          Track Violations
+          {t("violations.title")}
         </h3>
       </div>
 
@@ -74,14 +79,17 @@ export default function TrackViolations({
                   </div>
                 </div>
                 <span className="text-sm text-zinc-300">
-                  {count} {count === 1 ? "Violation" : "Violations"}
+                  {count}{" "}
+                  {count === 1
+                    ? t("violations.violation")
+                    : t("violations.violations")}
                 </span>
               </div>
             );
           })
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-zinc-500 text-sm">
-            <p>No violations</p>
+            <p>{t("violations.noViolations")}</p>
           </div>
         )}
       </div>

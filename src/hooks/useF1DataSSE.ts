@@ -40,7 +40,7 @@ const defaultSessionInfo: SessionInfo = {
 
 const defaultTrackStatus: TrackStatusInfo = {
   status: 1,
-  message: "Green Flag",
+  message: "",
 };
 
 export function useF1DataSSE(): F1DataState {
@@ -133,7 +133,7 @@ export function useF1DataSSE(): F1DataState {
       if (trackStatusData?.Status) {
         setTrackStatus({
           status: parseInt(trackStatusData.Status) || 1,
-          message: trackStatusData.Message || "Green Flag",
+          message: trackStatusData.Message || "",
         });
       }
 
@@ -427,16 +427,30 @@ export function useF1DataSSE(): F1DataState {
 
     const demoRaceControl: RaceControlMessage[] = [
       {
+        utc: new Date(Date.now() - 5000).toISOString(),
+        message: "GREEN FLAG",
+        category: "Flag",
+      },
+      {
         utc: new Date(Date.now() - 10000).toISOString(),
         message: "DRS ENABLED",
         category: "Drs",
-        flag: "GREEN",
+      },
+      {
+        utc: new Date(Date.now() - 25000).toISOString(),
+        message: "YELLOW FLAG - TURN 5",
+        category: "Flag",
       },
       {
         utc: new Date(Date.now() - 45000).toISOString(),
         message: "TRACK LIMITS - CAR 1 (VER)",
         category: "TrackLimits",
         driverNumber: "1",
+      },
+      {
+        utc: new Date(Date.now() - 60000).toISOString(),
+        message: "CHEQUERED FLAG",
+        category: "Flag",
       },
     ];
     setRaceControlMessages(demoRaceControl);
@@ -455,7 +469,7 @@ export function useF1DataSSE(): F1DataState {
       })
       .catch(() => {
         console.log("[SSE] Proxy not available, using demo data");
-        setError("Proxy not running. Showing demo data.");
+        setError("DEMO_DATA");
         generateDemoData();
       });
 

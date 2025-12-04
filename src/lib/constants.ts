@@ -56,13 +56,16 @@ export const TIRE_COMPOUNDS: Record<string, { color: string; name: string }> = {
   WET: { color: "#0067AD", name: "Wet" },
 };
 
-export const TRACK_STATUS: Record<number, { name: string; color: string }> = {
-  1: { name: "Green Flag", color: "#00bc7d" },
-  2: { name: "Yellow Flag", color: "#FFFF00" },
-  4: { name: "Safety Car", color: "#FFA500" },
-  5: { name: "Red Flag", color: "#FF0000" },
-  6: { name: "VSC Deployed", color: "#FFA500" },
-  7: { name: "VSC Ending", color: "#FFA500" },
+export const TRACK_STATUS: Record<
+  number,
+  { name: string; color: string; key: string }
+> = {
+  1: { name: "Green Flag", color: "#00bc7d", key: "green" },
+  2: { name: "Yellow Flag", color: "#FFFF00", key: "yellow" },
+  4: { name: "Safety Car", color: "#FFA500", key: "scDeployed" },
+  5: { name: "Red Flag", color: "#FF0000", key: "red" },
+  6: { name: "VSC Deployed", color: "#FFA500", key: "vscDeployed" },
+  7: { name: "VSC Ending", color: "#FFA500", key: "vscEnding" },
 };
 
 // Country name to flag emoji mapping

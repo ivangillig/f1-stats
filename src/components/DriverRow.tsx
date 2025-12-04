@@ -1,6 +1,9 @@
+"use client";
+
 import { Driver, SectorStatus } from "@/types/f1";
 import { TEAM_COLORS, TIRE_COMPOUNDS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface DriverRowProps {
   driver: Driver;
@@ -10,17 +13,19 @@ interface DriverRowProps {
 function MiniSectors({
   sectors,
   count = 6,
+  t,
 }: {
   sectors?: SectorStatus[];
   count?: number;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const items = sectors?.slice(0, count) || Array(count).fill("none");
 
   const getTooltip = (status: SectorStatus) => {
-    if (status === "purple") return "Mini sector record";
-    if (status === "green") return "Personal best mini sector";
-    if (status === "yellow") return "Slower than best";
-    return "No data";
+    if (status === "purple") return t("driver.miniSectorRecord");
+    if (status === "green") return t("driver.miniSectorBest");
+    if (status === "yellow") return t("driver.miniSectorSlower");
+    return t("driver.miniSectorNoData");
   };
 
   return (
@@ -47,10 +52,12 @@ function TireCompound({
   compound,
   laps,
   pitCount,
+  t,
 }: {
   compound: string;
   laps: number;
   pitCount: number;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const colors: Record<string, string> = {
     SOFT: "#FF3333",
@@ -59,20 +66,22 @@ function TireCompound({
     INTERMEDIATE: "#43B02A",
     WET: "#0067AD",
   };
-  const compoundNames: Record<string, string> = {
-    SOFT: "Soft",
-    MEDIUM: "Medium",
-    HARD: "Hard",
-    INTERMEDIATE: "Intermediate",
-    WET: "Wet",
+  const getCompoundName = (comp: string): string => {
+    const key = comp?.toUpperCase();
+    if (key === "SOFT") return t("driver.soft");
+    if (key === "MEDIUM") return t("driver.medium");
+    if (key === "HARD") return t("driver.hard");
+    if (key === "INTERMEDIATE") return t("driver.intermediate");
+    if (key === "WET") return t("driver.wet");
+    return comp;
   };
   const color = colors[compound?.toUpperCase()] || "#666";
-  const compoundName = compoundNames[compound?.toUpperCase()] || compound;
+  const compoundName = getCompoundName(compound);
 
   return (
     <div
       className="flex items-center gap-1.5"
-      title={`${compoundName} tire - ${laps} laps old`}
+      title={`${compoundName} - ${t("driver.lapsOld", { laps })}`}
     >
       <div
         className="w-[28px] h-[28px] rounded-full flex items-center justify-center text-sm font-bold"
@@ -96,7 +105,13 @@ function TireCompound({
 }
 
 // DRS indicator - bordered tag that illuminates when active
-function DrsIndicator({ active }: { active?: boolean }) {
+function DrsIndicator({
+  active,
+  t,
+}: {
+  active?: boolean;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
   return (
     <div
       className={cn(
@@ -105,7 +120,7 @@ function DrsIndicator({ active }: { active?: boolean }) {
           ? "border-[oklch(.696_.17_162.48)] text-[oklch(.696_.17_162.48)] bg-[oklch(.696_.17_162.48)]/10"
           : "border-zinc-600 text-zinc-600"
       )}
-      title={active ? "DRS Active" : "DRS Inactive"}
+      title={active ? t("driver.drsActive") : t("driver.drsInactive")}
     >
       DRS
     </div>
@@ -118,11 +133,13 @@ function SectorCell({
   time,
   bestTime,
   status,
+  t,
 }: {
   miniSectors?: SectorStatus[];
   time?: string;
   bestTime?: string;
   status: SectorStatus;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const getColor = (s: SectorStatus) => {
     if (s === "purple") return "text-[oklch(.541_.281_293.009)]";
@@ -132,15 +149,15 @@ function SectorCell({
   };
 
   const getTooltip = (s: SectorStatus) => {
-    if (s === "purple") return "Overall best sector";
-    if (s === "green") return "Personal best sector";
-    if (s === "yellow") return "Slower than personal best";
-    return "Current sector time";
+    if (s === "purple") return t("driver.sectorBest");
+    if (s === "green") return t("driver.sectorPersonalBest");
+    if (s === "yellow") return t("driver.sectorSlower");
+    return t("driver.sectorCurrent");
   };
 
   return (
     <div className="flex flex-col gap-1">
-      <MiniSectors sectors={miniSectors} count={6} />
+      <MiniSectors sectors={miniSectors} count={6} t={t} />
       <div className="flex items-center justify-center gap-2">
         <span
           className={cn(
@@ -153,7 +170,7 @@ function SectorCell({
         </span>
         <span
           className="text-sm text-zinc-500 tabular-nums leading-none"
-          title="Best sector time"
+          title={t("driver.bestSectorTime")}
         >
           {bestTime || ""}
         </span>
@@ -163,6 +180,8 @@ function SectorCell({
 }
 
 export default function DriverRow({ driver }: DriverRowProps) {
+  const { t } = useLanguage();
+
   // Use teamColor from API first, then fallback to hardcoded TEAM_COLORS
   const teamColor = driver.teamColor || TEAM_COLORS[driver.team] || "#888";
 
@@ -193,13 +212,14 @@ export default function DriverRow({ driver }: DriverRowProps) {
       </div>
 
       {/* DRS - bordered tag */}
-      <DrsIndicator active={driver.drsEnabled} />
+      <DrsIndicator active={driver.drsEnabled} t={t} />
 
       {/* Tire with L and PIT */}
       <TireCompound
         compound={driver.tire.compound}
         laps={driver.tire.age}
         pitCount={driver.pitCount}
+        t={t}
       />
 
       {/* Position change */}
@@ -224,13 +244,13 @@ export default function DriverRow({ driver }: DriverRowProps) {
       <div className="text-right leading-none">
         <div
           className="text-xl text-foreground tabular-nums font-medium leading-none"
-          title="Gap to leader"
+          title={t("driver.gapToLeader")}
         >
           {driver.position === 1 ? "—" : driver.gap || "—"}
         </div>
         <div
           className="text-sm text-zinc-500 tabular-nums mt-0.5"
-          title="Interval to car ahead"
+          title={t("driver.intervalToAhead")}
         >
           {driver.interval || ""}
         </div>
@@ -247,15 +267,15 @@ export default function DriverRow({ driver }: DriverRowProps) {
           )}
           title={
             driver.lastLapPersonalBest
-              ? "Last lap (Personal best!)"
-              : "Last lap time"
+              ? t("driver.lastLapBest")
+              : t("driver.bestLap")
           }
         >
           {driver.lastLap || "—"}
         </div>
         <div
           className="text-sm text-zinc-500 tabular-nums mt-0.5"
-          title="Best lap time"
+          title={t("driver.bestLapTime")}
         >
           {driver.bestLap || ""}
         </div>
@@ -267,6 +287,7 @@ export default function DriverRow({ driver }: DriverRowProps) {
         time={driver.sector1}
         bestTime={driver.bestSector1}
         status={driver.sector1Status}
+        t={t}
       />
 
       {/* S2 */}
@@ -275,6 +296,7 @@ export default function DriverRow({ driver }: DriverRowProps) {
         time={driver.sector2}
         bestTime={driver.bestSector2}
         status={driver.sector2Status}
+        t={t}
       />
 
       {/* S3 */}
@@ -283,6 +305,7 @@ export default function DriverRow({ driver }: DriverRowProps) {
         time={driver.sector3}
         bestTime={driver.bestSector3}
         status={driver.sector3Status}
+        t={t}
       />
     </div>
   );

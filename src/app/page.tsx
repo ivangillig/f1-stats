@@ -9,8 +9,10 @@ import RaceControl from "@/components/RaceControl";
 import TrackViolations from "@/components/TrackViolations";
 import Footer from "@/components/Footer";
 import { useF1DataSSE } from "@/hooks/useF1DataSSE";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Dashboard() {
+  const { t } = useLanguage();
   const {
     drivers,
     sessionInfo,
@@ -94,7 +96,8 @@ export default function Dashboard() {
       <main className="flex-1 flex flex-col w-full">
         {error && (
           <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm">
-            <span className="font-medium">Demo Mode:</span> {error}
+            <span className="font-medium">{t("error.demo")}</span>{" "}
+            {error === "DEMO_DATA" ? t("error.demoData") : error}
           </div>
         )}
 

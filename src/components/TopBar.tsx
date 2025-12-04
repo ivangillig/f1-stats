@@ -1,6 +1,10 @@
+"use client";
+
 import { SessionInfo, TrackStatusInfo, WeatherData } from "@/types/f1";
 import { Badge } from "@/components/ui/badge";
 import { TRACK_STATUS } from "@/lib/constants";
+import { useLanguage } from "@/contexts/LanguageContext";
+import LanguageToggle from "./LanguageToggle";
 
 // Country name to ISO 3166-1 alpha-2 code mapping
 const COUNTRY_CODES: Record<string, string> = {
@@ -231,6 +235,48 @@ export default function TopBar({
 }: TopBarProps) {
   const statusInfo = TRACK_STATUS[trackStatus.status] || TRACK_STATUS[1];
   const isRace = session.type === "Race";
+  const { t } = useLanguage();
+
+  // Traducir el mensaje del track status
+  const getTrackStatusText = () => {
+    if (trackStatus.message) {
+      // Traducir mensajes comunes de la API
+      const messageUpper = trackStatus.message.toUpperCase().trim();
+
+      // Verificar coincidencias exactas primero
+      if (messageUpper === "ALLCLEAR" || messageUpper === "ALL CLEAR") {
+        return t("status.allClear");
+      }
+
+      // Luego verificar contenidos
+      if (messageUpper.includes("GREEN")) {
+        return t("status.green");
+      }
+      if (messageUpper.includes("YELLOW")) {
+        return t("status.yellow");
+      }
+      if (messageUpper.includes("RED")) {
+        return t("status.red");
+      }
+      if (
+        messageUpper.includes("SC DEPLOYED") ||
+        messageUpper.includes("SAFETY CAR")
+      ) {
+        return t("status.scDeployed");
+      }
+      if (messageUpper.includes("VSC DEPLOYED")) {
+        return t("status.vscDeployed");
+      }
+      if (messageUpper.includes("VSC ENDING")) {
+        return t("status.vscEnding");
+      }
+      // Si no hay traducción, devolver el mensaje original
+      return trackStatus.message;
+    }
+    // Traducir los estados estándar basados en el código
+    const statusKey = `status.${statusInfo.key}`;
+    return t(statusKey);
+  };
 
   return (
     <header className="w-full border-b border-zinc-800 bg-zinc-950">
@@ -239,12 +285,11 @@ export default function TopBar({
         <div className="flex items-center gap-4 flex-shrink-0">
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <svg
-              viewBox="0 0 24 24"
-              className="h-5 w-5 text-red-500 fill-current"
-            >
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
+            <img
+              src="/images/logo.png"
+              alt="F1 Dashboard"
+              className="h-14 w-auto"
+            />
             <span className="font-bold text-base tracking-tight">F1 DASH</span>
           </div>
 
@@ -371,9 +416,12 @@ export default function TopBar({
               className="text-sm font-bold uppercase tracking-wider"
               style={{ color: "white" }}
             >
-              {trackStatus.message || statusInfo.name}
+              {getTrackStatusText()}
             </span>
           </div>
+
+          {/* Language Toggle */}
+          <LanguageToggle />
         </div>
       </div>
     </header>

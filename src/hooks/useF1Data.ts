@@ -40,7 +40,7 @@ const defaultSessionInfo: SessionInfo = {
 
 const defaultTrackStatus: TrackStatusInfo = {
   status: 1,
-  message: "Green Flag",
+  message: "",
 };
 
 export function useF1Data(): F1DataState {
@@ -91,7 +91,7 @@ export function useF1Data(): F1DataState {
       if (trackStatusData.Status) {
         setTrackStatus({
           status: parseInt(trackStatusData.Status) || 1,
-          message: trackStatusData.Message || "Green Flag",
+          message: trackStatusData.Message || "",
         });
       }
 

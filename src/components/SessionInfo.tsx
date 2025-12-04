@@ -1,19 +1,23 @@
+"use client";
+
 import { SessionInfo } from "@/types/f1";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface SessionInfoProps {
   session: SessionInfo;
 }
 
 export default function SessionInfoComponent({ session }: SessionInfoProps) {
+  const { t } = useLanguage();
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold uppercase tracking-wide">
-            Session
+            {t("session.title")}
           </CardTitle>
           {session.isLive && (
             <Badge variant="destructive" className="gap-1.5 text-xs">
@@ -35,7 +39,7 @@ export default function SessionInfoComponent({ session }: SessionInfoProps) {
 
         <div>
           <p className="text-xs text-muted-foreground uppercase mb-1">
-            Remaining
+            {t("session.remaining")}
           </p>
           <p className="text-2xl font-mono font-bold text-foreground tabular-nums">
             {session.remainingTime || "--:--:--"}
@@ -47,7 +51,7 @@ export default function SessionInfoComponent({ session }: SessionInfoProps) {
             <Separator />
             <div>
               <p className="text-xs text-muted-foreground uppercase mb-1">
-                Lap
+                {t("session.lap")}
               </p>
               <p className="text-lg font-mono font-semibold">
                 <span className="text-foreground">{session.currentLap}</span>
@@ -62,7 +66,9 @@ export default function SessionInfoComponent({ session }: SessionInfoProps) {
         <Separator />
 
         <div>
-          <p className="text-xs text-muted-foreground uppercase mb-1">Type</p>
+          <p className="text-xs text-muted-foreground uppercase mb-1">
+            {t("session.type")}
+          </p>
           <Badge
             variant="secondary"
             className={

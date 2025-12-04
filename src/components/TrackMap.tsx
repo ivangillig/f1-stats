@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { Driver } from "@/types/f1";
 import { TEAM_COLORS } from "@/lib/constants";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface MapData {
   x: number[];
@@ -40,6 +41,7 @@ const rotate = (x: number, y: number, a: number, px: number, py: number) => {
 };
 
 export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
+  const { t } = useLanguage();
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,7 +164,7 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
   if (!points || !bounds) {
     return (
       <div className="h-full w-full flex items-center justify-center text-muted-foreground">
-        <p>Map not available</p>
+        <p>{t("map.notAvailable")}</p>
       </div>
     );
   }
@@ -170,7 +172,7 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
   const [minX, minY, widthX, widthY] = bounds;
 
   return (
-    <div className="h-full w-full flex items-center justify-center p-1">
+    <div className="h-full w-full flex items-center justify-center py-0 px-1">
       <svg
         viewBox={`${minX} ${minY} ${widthX} ${widthY}`}
         className="w-full h-full"
