@@ -9,7 +9,7 @@ services:
     container_name: f1-proxy
     restart: unless-stopped
     ports:
-      - "4000:4000"
+      - "${PROXY_PORT:-4000}:4000"
     environment:
       - PORT=4000
       - PROXY_MODE=${PROXY_MODE:-auto}
