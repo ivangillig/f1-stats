@@ -12,6 +12,10 @@ services:
       - "4000:4000"
     environment:
       - PORT=4000
+      - PROXY_MODE=${PROXY_MODE:-auto}
+      - F1_SSE_HOST=${F1_SSE_HOST}
+      - F1_SSE_PATH=${F1_SSE_PATH}
+      - F1_SSE_SECURE=${F1_SSE_SECURE:-true}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
       interval: 30s
@@ -28,7 +32,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_PROXY_URL=http://proxy:4000
+      - NEXT_PUBLIC_PROXY_URL=${PROXY_PUBLIC_URL}
     depends_on:
       proxy:
         condition: service_healthy
