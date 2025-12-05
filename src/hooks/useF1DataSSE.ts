@@ -35,6 +35,7 @@ const defaultSessionInfo: SessionInfo = {
   remainingTime: "--:--",
   currentLap: 0,
   totalLaps: 0,
+  circuitKey: undefined,
   isLive: false,
 };
 
@@ -61,7 +62,15 @@ export function useF1DataSSE(): F1DataState {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const clockIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectedRef = useRef(false); // Ref to avoid dependency issues
+
+  // Store extrapolated clock data for local time calculation
+  const extrapolatedClockRef = useRef<{
+    utc: string;
+    remaining: string;
+    extrapolating: boolean;
+  } | null>(null);
 
   // Store driver list from API (updated in real-time)
   const driverListRef = useRef<
@@ -73,6 +82,12 @@ export function useF1DataSSE(): F1DataState {
 
   // Store car track positions from replay
   const carDataRef = useRef<Record<string, { x: number; y: number }>>({});
+
+  // Store session type for sorting logic
+  const sessionTypeRef = useRef<string>("Race");
+
+  // Store session path for building audio URLs
+  const sessionPathRef = useRef<string>("");
 
   // Clear all cached data when switching from demo to live
   const clearAllData = useCallback(() => {
@@ -130,19 +145,40 @@ export function useF1DataSSE(): F1DataState {
       // Process SessionInfo
       const sessionData = data.SessionInfo || {};
       const lapCount = data.LapCount || {};
-      const extrapolatedClock = data.ExtrapolatedClock || {};
+      const extrapolatedClock = data.ExtrapolatedClock;
 
-      if (sessionData.Meeting || extrapolatedClock.Remaining) {
+      if (sessionData.Type) {
+        sessionTypeRef.current = sessionData.Type;
+      }
+
+      // Store extrapolated clock data for local calculation
+      if (extrapolatedClock?.Utc && extrapolatedClock?.Remaining) {
+        extrapolatedClockRef.current = {
+          utc: extrapolatedClock.Utc,
+          remaining: extrapolatedClock.Remaining,
+          extrapolating: extrapolatedClock.Extrapolating === true,
+        };
+      }
+
+      if (sessionData.Meeting || extrapolatedClock?.Remaining) {
+        const newCircuitKey = sessionData.Meeting?.Circuit?.Key;
+        if (newCircuitKey) {
+          console.log("[F1 Data] Circuit Key received:", newCircuitKey);
+        }
+        // Store session path for building audio URLs
+        if (sessionData.Path) {
+          sessionPathRef.current = sessionData.Path;
+        }
         setSessionInfo((prev) => ({
           ...prev,
           type: sessionData.Type || prev.type,
           name: sessionData.Meeting?.Name || prev.name,
           track: sessionData.Meeting?.Circuit?.ShortName || prev.track,
           country: sessionData.Meeting?.Country?.Name || prev.country,
-          remainingTime: extrapolatedClock.Remaining || prev.remainingTime,
+          // Don't set remainingTime here, let the interval handle it
           currentLap: lapCount.CurrentLap || prev.currentLap,
           totalLaps: lapCount.TotalLaps || prev.totalLaps,
-          circuitKey: sessionData.Meeting?.Circuit?.Key || prev.circuitKey,
+          circuitKey: newCircuitKey || prev.circuitKey,
           isLive: true,
         }));
       }
@@ -174,14 +210,18 @@ export function useF1DataSSE(): F1DataState {
       // Process TeamRadio
       const teamRadioData = data.TeamRadio;
       if (teamRadioData?.Captures) {
+        const baseUrl = "https://livetiming.formula1.com/static/";
+        const sessionPath = sessionPathRef.current;
+
         setTeamRadios((prev) => {
-          const newCaptures = Object.values(teamRadioData.Captures).map(
-            (c: any) => ({
+          const newCaptures = Object.values(teamRadioData.Captures)
+            .filter((c: any) => c !== null && c?.Utc && c?.Path)
+            .map((c: any) => ({
               utc: c.Utc,
               racingNumber: c.RacingNumber,
-              path: c.Path,
-            })
-          );
+              // Build full URL: baseUrl + sessionPath + relative path
+              path: sessionPath ? `${baseUrl}${sessionPath}${c.Path}` : c.Path,
+            }));
           const allCaptures = [...newCaptures, ...prev];
           const uniqueCaptures = allCaptures.filter(
             (c, i) => allCaptures.findIndex((x) => x.path === c.path) === i
@@ -260,13 +300,21 @@ export function useF1DataSSE(): F1DataState {
                 age: 0,
                 isNew: false,
               };
-              if (appData?.Stints?.length > 0) {
-                const currentStint = appData.Stints[appData.Stints.length - 1];
-                tireInfo = {
-                  compound: currentStint.Compound || "UNKNOWN",
-                  age: currentStint.TotalLaps || 0,
-                  isNew: currentStint.New === "true",
-                };
+              // Stints can be object with numeric keys or array
+              const stintsData = appData?.Stints;
+              if (stintsData) {
+                const stintsArray = Array.isArray(stintsData)
+                  ? stintsData
+                  : Object.values(stintsData);
+                if (stintsArray.length > 0) {
+                  const currentStint = stintsArray[stintsArray.length - 1];
+                  tireInfo = {
+                    compound: currentStint.Compound || "UNKNOWN",
+                    age: currentStint.TotalLaps || 0,
+                    isNew:
+                      currentStint.New === "true" || currentStint.New === true,
+                  };
+                }
               }
 
               // Parse sector statuses
@@ -279,10 +327,24 @@ export function useF1DataSSE(): F1DataState {
               };
 
               // Parse mini sectors (segments) from each sector
-              const getSegmentStatus = (value: string | null): SectorStatus => {
-                if (value === "OverallFastest") return "purple";
-                if (value === "PersonalFastest") return "green";
-                return "yellow";
+              // Segments can be object with numeric keys or array
+              // Status codes: 2048=yellow, 2049=green, 2051=purple, 2064=blue(pit), 0=none
+              const getSegmentStatusFromCode = (
+                status: number
+              ): SectorStatus => {
+                if (status === 2051) return "purple";
+                if (status === 2049) return "green";
+                if (status === 2064) return "blue"; // Pit lane
+                if (status === 2048) return "yellow";
+                return "none";
+              };
+
+              // Count segments per sector
+              const getSegmentCount = (sector: any): number => {
+                if (!sector?.Segments) return 0;
+                return Array.isArray(sector.Segments)
+                  ? sector.Segments.length
+                  : Object.keys(sector.Segments).length;
               };
 
               const parseMiniSectors = (sectors: any): SectorStatus[] => {
@@ -290,28 +352,97 @@ export function useF1DataSSE(): F1DataState {
                 // Combine segments from all 3 sectors
                 ["0", "1", "2"].forEach((sectorNum) => {
                   const sector = sectors?.[sectorNum];
-                  const segments = sector?.Segments || [];
-                  segments.forEach((seg: string | null) => {
-                    allSegments.push(seg ? getSegmentStatus(seg) : "none");
-                  });
+                  const segmentsData = sector?.Segments;
+                  if (segmentsData) {
+                    // Segments is an object with numeric keys like {"0": {Status: 2049}, "1": {Status: 2048}}
+                    const segmentsArray = Array.isArray(segmentsData)
+                      ? segmentsData
+                      : Object.values(segmentsData);
+                    segmentsArray.forEach((seg: any) => {
+                      if (seg && typeof seg === "object" && "Status" in seg) {
+                        allSegments.push(getSegmentStatusFromCode(seg.Status));
+                      } else if (typeof seg === "string") {
+                        // Legacy format: string values
+                        if (seg === "OverallFastest")
+                          allSegments.push("purple");
+                        else if (seg === "PersonalFastest")
+                          allSegments.push("green");
+                        else allSegments.push("yellow");
+                      } else {
+                        allSegments.push("none");
+                      }
+                    });
+                  }
                 });
                 // If no segments, return empty array (will be handled in component)
                 return allSegments.length > 0 ? allSegments : [];
               };
 
+              // Calculate track progress (0-1) based on completed segments
+              const calculateTrackProgress = (sectors: any): number => {
+                let completedSegments = 0;
+                let totalSegments = 0;
+
+                ["0", "1", "2"].forEach((sectorNum) => {
+                  const sector = sectors?.[sectorNum];
+                  const segmentsData = sector?.Segments;
+                  if (segmentsData) {
+                    const segmentsArray = Array.isArray(segmentsData)
+                      ? segmentsData
+                      : Object.values(segmentsData);
+                    totalSegments += segmentsArray.length;
+                    segmentsArray.forEach((seg: any) => {
+                      // Status != 0 means segment is completed
+                      if (seg && typeof seg === "object" && seg.Status !== 0) {
+                        completedSegments++;
+                      }
+                    });
+                  }
+                });
+
+                if (totalSegments === 0) return 0;
+                return completedSegments / totalSegments;
+              };
+
               const sectors = driverData.Sectors || {};
               const miniSectors = parseMiniSectors(sectors);
 
+              // Position can be a number (Line) or string (Position)
+              const position = driverData.Position
+                ? parseInt(driverData.Position, 10)
+                : driverData.Line || existing?.position || 0;
+
+              // Get segment counts for each sector
+              const sector1SegmentCount =
+                getSegmentCount(sectors["0"]) ||
+                existing?.sector1SegmentCount ||
+                5;
+              const sector2SegmentCount =
+                getSegmentCount(sectors["1"]) ||
+                existing?.sector2SegmentCount ||
+                9;
+              const sector3SegmentCount =
+                getSegmentCount(sectors["2"]) ||
+                existing?.sector3SegmentCount ||
+                10;
+
               const driver: Driver = {
-                position: driverData.Line || existing?.position || 0,
+                position: position,
                 driverNumber: num,
                 code: driverInfo.code,
                 name: driverInfo.name,
                 team: driverInfo.team,
                 teamColor: driverInfo.teamColor || existing?.teamColor,
-                gap: driverData.GapToLeader || existing?.gap || "",
+                // Gap can be GapToLeader or TimeDiffToFastest depending on source
+                gap:
+                  driverData.GapToLeader ||
+                  driverData.TimeDiffToFastest ||
+                  existing?.gap ||
+                  "",
+                // Interval can be IntervalToPositionAhead.Value or TimeDiffToPositionAhead
                 interval:
                   driverData.IntervalToPositionAhead?.Value ||
+                  driverData.TimeDiffToPositionAhead ||
                   existing?.interval ||
                   "",
                 lastLap:
@@ -337,11 +468,15 @@ export function useF1DataSSE(): F1DataState {
                   miniSectors.length > 0
                     ? miniSectors
                     : existing?.miniSectors || [],
+                sector1SegmentCount,
+                sector2SegmentCount,
+                sector3SegmentCount,
                 tire: tireInfo,
                 inPit: driverData.InPit || existing?.inPit || false,
                 pitCount:
                   driverData.NumberOfPitStops ?? existing?.pitCount ?? 0,
                 retired: driverData.Retired || existing?.retired || false,
+                trackProgress: calculateTrackProgress(sectors),
                 trackX: carDataRef.current[num]?.x ?? existing?.trackX,
                 trackY: carDataRef.current[num]?.y ?? existing?.trackY,
               };
@@ -350,8 +485,23 @@ export function useF1DataSSE(): F1DataState {
             }
           );
 
-          // Sort by gap to leader (interval)
-          // Leader has empty/null gap, others have "+X.XXX" format
+          // Parse lap time string to milliseconds for comparison
+          const parseLapTime = (lapTime: string | undefined): number => {
+            if (!lapTime || lapTime === "" || lapTime === "---")
+              return Infinity;
+            // Format: "1:23.456" or "1:23:456" or just "23.456"
+            const parts = lapTime.split(/[:.]/).map(Number);
+            if (parts.length === 3) {
+              // M:SS.mmm
+              return parts[0] * 60000 + parts[1] * 1000 + parts[2];
+            } else if (parts.length === 2) {
+              // SS.mmm
+              return parts[0] * 1000 + parts[1];
+            }
+            return Infinity;
+          };
+
+          // Parse gap string to number
           const parseGap = (gap: string | undefined): number => {
             if (!gap || gap === "" || gap === "---") return 0; // Leader
             // Remove "+" and parse as float
@@ -359,19 +509,72 @@ export function useF1DataSSE(): F1DataState {
             return isNaN(numericGap) ? Infinity : numericGap;
           };
 
+          // Determine sort method based on session type
+          const sessionType = sessionTypeRef.current;
+          const isPracticeOrQualy =
+            sessionType === "Practice" ||
+            sessionType === "Qualifying" ||
+            sessionType?.includes("Practice") ||
+            sessionType?.includes("Qualifying");
+
           const sortedDrivers = Array.from(driversMap.values())
-            .filter((d) => d.gap !== undefined || d.position > 0)
+            .filter((d) => d.bestLap || d.gap !== undefined || d.position > 0)
             .sort((a, b) => {
-              const gapA = parseGap(a.gap);
-              const gapB = parseGap(b.gap);
-              return gapA - gapB;
+              if (isPracticeOrQualy) {
+                // In Practice/Qualifying: sort by best lap time (fastest first)
+                const timeA = parseLapTime(a.bestLap);
+                const timeB = parseLapTime(b.bestLap);
+                // If both have no time, maintain original position
+                if (timeA === Infinity && timeB === Infinity) {
+                  return (a.position || 99) - (b.position || 99);
+                }
+                return timeA - timeB;
+              } else {
+                // In Race: sort by gap to leader
+                const gapA = parseGap(a.gap);
+                const gapB = parseGap(b.gap);
+                return gapA - gapB;
+              }
             });
 
-          // Update positions based on sorted order
-          return sortedDrivers.map((driver, index) => ({
-            ...driver,
-            position: index + 1,
-          }));
+          // Update positions and calculate gaps based on sorted order
+          // Find the fastest lap time for gap calculation in practice/qualy
+          const fastestTime = isPracticeOrQualy
+            ? Math.min(...sortedDrivers.map((d) => parseLapTime(d.bestLap)))
+            : 0;
+
+          return sortedDrivers.map((driver, index) => {
+            let gap = driver.gap;
+            let interval = driver.interval;
+
+            if (isPracticeOrQualy && driver.bestLap) {
+              const driverTime = parseLapTime(driver.bestLap);
+              if (index === 0) {
+                gap = "";
+                interval = "";
+              } else if (driverTime !== Infinity) {
+                // Gap to leader (fastest)
+                const gapMs = driverTime - fastestTime;
+                gap = gapMs > 0 ? `+${(gapMs / 1000).toFixed(3)}` : "";
+
+                // Interval to position ahead
+                const prevDriver = sortedDrivers[index - 1];
+                const prevTime = parseLapTime(prevDriver?.bestLap);
+                if (prevTime !== Infinity) {
+                  const intervalMs = driverTime - prevTime;
+                  interval =
+                    intervalMs > 0 ? `+${(intervalMs / 1000).toFixed(3)}` : "";
+                }
+              }
+            }
+
+            return {
+              ...driver,
+              position: index + 1,
+              gap,
+              interval,
+            };
+          });
         });
       }
     } catch (err) {
@@ -574,6 +777,68 @@ export function useF1DataSSE(): F1DataState {
         // Proxy still not available, will check again
       });
   }, [connect, clearAllData]); // Removed isConnected from deps
+
+  // Extrapolated clock interval - update time every second
+  useEffect(() => {
+    const updateClock = () => {
+      const clockData = extrapolatedClockRef.current;
+      if (!clockData) return;
+
+      // Parse the remaining time (format: HH:MM:SS or MM:SS)
+      const remainingParts = clockData.remaining.split(":").map(Number);
+      let totalSeconds: number;
+
+      if (remainingParts.length === 3) {
+        // HH:MM:SS
+        totalSeconds =
+          remainingParts[0] * 3600 + remainingParts[1] * 60 + remainingParts[2];
+      } else if (remainingParts.length === 2) {
+        // MM:SS
+        totalSeconds = remainingParts[0] * 60 + remainingParts[1];
+      } else {
+        return;
+      }
+
+      if (clockData.extrapolating) {
+        // Calculate elapsed time since UTC timestamp
+        const utcTime = new Date(clockData.utc).getTime();
+        const now = Date.now();
+        const elapsedSeconds = Math.floor((now - utcTime) / 1000);
+        totalSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+      }
+
+      // Format the remaining time
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      let formatted: string;
+      if (hours > 0) {
+        formatted = `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+          .toString()
+          .padStart(2, "0")}`;
+      } else {
+        formatted = `${minutes.toString().padStart(2, "0")}:${seconds
+          .toString()
+          .padStart(2, "0")}`;
+      }
+
+      setSessionInfo((prev) => ({
+        ...prev,
+        remainingTime: formatted,
+      }));
+    };
+
+    // Update immediately and then every second
+    updateClock();
+    clockIntervalRef.current = setInterval(updateClock, 1000);
+
+    return () => {
+      if (clockIntervalRef.current) {
+        clearInterval(clockIntervalRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     // Try to connect to proxy

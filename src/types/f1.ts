@@ -19,6 +19,9 @@ export interface Driver {
   sector2Status: SectorStatus;
   sector3Status: SectorStatus;
   miniSectors?: SectorStatus[];
+  sector1SegmentCount?: number;
+  sector2SegmentCount?: number;
+  sector3SegmentCount?: number;
   tire: TireInfo;
   inPit: boolean;
   pitCount: number;
@@ -38,7 +41,7 @@ export interface TireInfo {
   isNew: boolean;
 }
 
-export type SectorStatus = "purple" | "green" | "yellow" | "none";
+export type SectorStatus = "purple" | "green" | "yellow" | "blue" | "none";
 
 export interface SessionInfo {
   type: string;

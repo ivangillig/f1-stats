@@ -48,6 +48,7 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
 
   useEffect(() => {
     const fetchMap = async () => {
+      console.log("[TrackMap] Fetching map for circuitKey:", circuitKey);
       try {
         setLoading(true);
         const year = new Date().getFullYear();
@@ -134,7 +135,7 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
       };
     }, [mapData]);
 
-  // Generate car positions on track using real X, Y coordinates from replay
+  // Generate car positions on track using trackProgress from segment data
   const carPositions = useMemo(() => {
     if (!points || points.length === 0) return [];
 
@@ -153,6 +154,18 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
           driver,
           x: rotatedPos.x,
           y: rotatedPos.y,
+        };
+      }
+
+      // Use trackProgress (0-1) from segment completion to position on track
+      if (driver.trackProgress !== undefined && driver.trackProgress > 0) {
+        const trackIndex = Math.floor(driver.trackProgress * points.length);
+        const safeIndex = Math.max(0, Math.min(points.length - 1, trackIndex));
+        const pos = points[safeIndex];
+        return {
+          driver,
+          x: pos.x,
+          y: pos.y,
         };
       }
 

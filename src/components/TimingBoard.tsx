@@ -13,10 +13,21 @@ interface TimingBoardProps {
 export default function TimingBoard({ drivers }: TimingBoardProps) {
   const { t } = useLanguage();
 
+  // Get segment counts from first driver or use defaults
+  const firstDriver = drivers[0];
+  const s1Count = firstDriver?.sector1SegmentCount || 6;
+  const s2Count = firstDriver?.sector2SegmentCount || 6;
+  const s3Count = firstDriver?.sector3SegmentCount || 6;
+
   return (
     <Card className="overflow-hidden h-fit">
       {/* Header - matches grid from DriverRow */}
-      <div className="grid grid-cols-[80px_44px_90px_48px_80px_100px_1fr_1fr_1fr] gap-3 px-3 py-2 bg-muted/30 text-xs text-muted-foreground uppercase tracking-wider font-medium border-b border-border">
+      <div
+        className="grid gap-3 px-3 py-2 bg-muted/30 text-xs text-muted-foreground uppercase tracking-wider font-medium border-b border-border"
+        style={{
+          gridTemplateColumns: `95px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,
+        }}
+      >
         <div>{t("timing.driver")}</div>
         <div className="text-center">{t("timing.drs")}</div>
         <div>{t("timing.tire")}</div>

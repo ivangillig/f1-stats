@@ -280,7 +280,7 @@ export default function TopBar({
 
   return (
     <header className="w-full border-b border-zinc-800 bg-zinc-950">
-      <div className="flex items-center justify-between px-4 py-2 gap-4">
+      <div className="flex items-center justify-between px-4 py-3 gap-4">
         {/* Left side - Logo, session, and indicators */}
         <div className="flex items-center gap-4 flex-shrink-0">
           {/* Logo */}
@@ -294,27 +294,28 @@ export default function TopBar({
           </div>
 
           {/* Session info with country flag */}
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-3 text-sm">
             <img
               src={`https://flagcdn.com/w80/${getCountryCode(
                 session.country
               )}.png`}
               alt={session.country}
-              className="h-8 w-auto rounded-sm shadow-md"
+              className="h-12 w-auto rounded-sm shadow-md"
               title={session.country}
               onError={(e) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="text-zinc-400">
-              {session.name || "No Session"}
-            </span>
-            <span className="text-zinc-600">•</span>
-            <span className="text-zinc-300 font-medium">{session.track}</span>
+            <div className="flex flex-col">
+              <span className="text-white font-bold text-base">
+                {session.name || "No Session"}
+              </span>
+              <span className="text-zinc-400 text-sm">{session.track}</span>
+            </div>
             {session.type && (
               <Badge
                 variant="secondary"
-                className={`text-[10px] ml-1 ${
+                className={`text-sm font-bold ml-2 ${
                   session.type === "Race"
                     ? "bg-red-500/20 text-red-400"
                     : session.type === "Qualifying"
@@ -324,7 +325,17 @@ export default function TopBar({
                     : "bg-zinc-500/20 text-zinc-400"
                 }`}
               >
-                {session.type}
+                {session.type === "Practice"
+                  ? t("session.practice")
+                  : session.type === "Qualifying"
+                  ? t("session.qualifying")
+                  : session.type === "Race"
+                  ? t("session.race")
+                  : session.type === "Sprint"
+                  ? t("session.sprint")
+                  : session.type === "Sprint Qualifying"
+                  ? t("session.sprintQualifying")
+                  : session.type}
               </Badge>
             )}
           </div>

@@ -7,9 +7,26 @@ import {
   isMQTTRunning,
   hasMQTTCredentials,
 } from "./mqtt-client.js";
+import {
+  startLivePolling,
+  stopLivePolling,
+  isLivePollingRunning,
+} from "./live-polling.js";
+import {
+  startF1DashClient,
+  stopF1DashClient,
+  hasF1DashState,
+} from "./f1dash-client.js";
 
 const PORT = process.env.PORT || 4000;
 const F1_BASE_URL = "livetiming.formula1.com";
+
+// Mode: "f1dash" | "live-polling" | "mqtt" | "replay" | "signalr"
+// Set via environment variable: PROXY_MODE=f1dash
+const PROXY_MODE = process.env.PROXY_MODE || "auto";
+
+// Track if f1dash client is running
+let isF1DashRunning = false;
 
 // Store current state
 let currentState = {};
@@ -245,11 +262,13 @@ const server = http.createServer((req, res) => {
 
   // Health check
   if (req.url === "/health") {
-    const mode = isMQTTRunning()
-      ? "mqtt-live"
-      : isReplayRunning()
-      ? "replay"
-      : "f1-live";
+    let mode = "unknown";
+    if (isF1DashRunning) mode = "f1dash-live";
+    else if (isLivePollingRunning()) mode = "live-polling";
+    else if (isMQTTRunning()) mode = "mqtt-live";
+    else if (isReplayRunning()) mode = "replay";
+    else mode = "f1-signalr";
+
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
@@ -309,17 +328,67 @@ const server = http.createServer((req, res) => {
 });
 
 // Start server
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`[Server] F1 Proxy running on port ${PORT}`);
   console.log(`[Server] SSE endpoint: http://localhost:${PORT}/api/sse`);
+  console.log(`[Server] Mode: ${PROXY_MODE}`);
 
-  // Check for MQTT credentials first (preferred for live data)
-  if (hasMQTTCredentials()) {
-    console.log("[Server] OpenF1 credentials found, using MQTT for live data");
+  // Determine which mode to use
+  if (PROXY_MODE === "f1dash") {
+    // Use f1-dash.com's processed feed (recommended for live sessions)
+    console.log("[Server] Using f1-dash.com realtime feed...");
+    isF1DashRunning = true;
+    startF1DashClient((state) => {
+      // Merge the state into currentState (preserving reference)
+      // The state from f1dash is already in F1 SignalR format
+      for (const key of Object.keys(state)) {
+        if (
+          typeof state[key] === "object" &&
+          state[key] !== null &&
+          !Array.isArray(state[key])
+        ) {
+          currentState[key] = deepMerge(currentState[key] || {}, state[key]);
+        } else {
+          currentState[key] = state[key];
+        }
+      }
+      // Broadcast update to SSE clients
+      broadcastSSE("update", state);
+    });
+  } else if (PROXY_MODE === "live-polling") {
+    // Force live polling mode (free REST API)
+    console.log("[Server] Using live polling mode (REST API)...");
+    const success = await startLivePolling(broadcastSSE, currentState);
+    if (!success) {
+      console.log("[Server] No live session, falling back to replay...");
+      startReplay(broadcastSSE, currentState);
+    }
+  } else if (PROXY_MODE === "mqtt" && hasMQTTCredentials()) {
+    // Force MQTT mode
+    console.log("[Server] Using MQTT mode...");
     startMQTT(broadcastSSE, currentState);
+  } else if (PROXY_MODE === "replay") {
+    // Force replay mode
+    console.log("[Server] Using replay mode...");
+    startReplay(broadcastSSE, currentState);
   } else {
-    console.log("[Server] No OpenF1 credentials, trying F1 SignalR...");
-    // Connect to F1 SignalR (fallback, will switch to replay if no session)
-    connectToF1();
+    // Auto mode: try f1dash > MQTT > SignalR > Replay
+    console.log("[Server] Auto mode: trying f1-dash.com feed...");
+    isF1DashRunning = true;
+    startF1DashClient((state) => {
+      // Merge the state into currentState
+      for (const key of Object.keys(state)) {
+        if (
+          typeof state[key] === "object" &&
+          state[key] !== null &&
+          !Array.isArray(state[key])
+        ) {
+          currentState[key] = deepMerge(currentState[key] || {}, state[key]);
+        } else {
+          currentState[key] = state[key];
+        }
+      }
+      broadcastSSE("update", state);
+    });
   }
 });

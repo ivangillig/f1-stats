@@ -19,25 +19,29 @@ function MiniSectors({
   count?: number;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  const items = sectors?.slice(0, count) || Array(count).fill("none");
+  // Use actual sectors length if available, otherwise use count
+  const actualCount = sectors?.length || count;
+  const items = sectors || Array(actualCount).fill("none");
 
   const getTooltip = (status: SectorStatus) => {
     if (status === "purple") return t("driver.miniSectorRecord");
     if (status === "green") return t("driver.miniSectorBest");
     if (status === "yellow") return t("driver.miniSectorSlower");
+    if (status === "blue") return t("driver.miniSectorPit");
     return t("driver.miniSectorNoData");
   };
 
   return (
-    <div className="flex gap-[3px] w-full">
+    <div className="flex gap-1 w-full justify-center">
       {items.map((status, i) => (
         <div
           key={i}
           className={cn(
-            "flex-1 h-[4px] rounded-sm cursor-default",
+            "w-[18px] h-[6px] rounded-[2px] cursor-default",
             status === "purple" && "bg-[oklch(.541_.281_293.009)]",
             status === "green" && "bg-[oklch(.696_.17_162.48)]",
             status === "yellow" && "bg-[oklch(.795_.184_86.047)]",
+            status === "blue" && "bg-[#2b7fff]",
             status === "none" && "bg-zinc-700"
           )}
           title={getTooltip(status)}
@@ -47,7 +51,7 @@ function MiniSectors({
   );
 }
 
-// Tire compound circle - larger with L and PIT info
+// Tire compound icon using SVG images
 function TireCompound({
   compound,
   laps,
@@ -59,13 +63,6 @@ function TireCompound({
   pitCount: number;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  const colors: Record<string, string> = {
-    SOFT: "#FF3333",
-    MEDIUM: "#FFD700",
-    HARD: "#FFFFFF",
-    INTERMEDIATE: "#43B02A",
-    WET: "#0067AD",
-  };
   const getCompoundName = (comp: string): string => {
     const key = comp?.toUpperCase();
     if (key === "SOFT") return t("driver.soft");
@@ -75,28 +72,32 @@ function TireCompound({
     if (key === "WET") return t("driver.wet");
     return comp;
   };
-  const color = colors[compound?.toUpperCase()] || "#666";
+
+  const compoundKey = compound?.toLowerCase() || "medium";
   const compoundName = getCompoundName(compound);
+
+  // Map compound to image file
+  const imageMap: Record<string, string> = {
+    soft: "/images/tires/soft.svg",
+    medium: "/images/tires/medium.svg",
+    hard: "/images/tires/hard.svg",
+    intermediate: "/images/tires/wet.svg", // Use wet for intermediate if no specific file
+    wet: "/images/tires/wet.svg",
+  };
+
+  const imageSrc = imageMap[compoundKey] || imageMap.medium;
 
   return (
     <div
       className="flex items-center gap-1.5"
       title={`${compoundName} - ${t("driver.lapsOld", { laps })}`}
     >
-      <div
-        className="w-[28px] h-[28px] rounded-full flex items-center justify-center text-sm font-bold"
-        style={{
-          border: `3px solid ${color}`,
-          color: color,
-        }}
-      >
-        {compound?.charAt(0) || "?"}
-      </div>
+      <img src={imageSrc} alt={compoundName} className="w-[32px] h-[32px]" />
       <div className="flex flex-col leading-none">
-        <span className="text-sm text-zinc-300 tabular-nums font-medium">
+        <span className="text-lg text-zinc-300 tabular-nums font-bold font-mono">
           L {laps}
         </span>
-        <span className="text-xs text-zinc-500 tabular-nums">
+        <span className="text-base text-zinc-500 tabular-nums font-mono">
           PIT {pitCount}
         </span>
       </div>
@@ -104,20 +105,32 @@ function TireCompound({
   );
 }
 
-// DRS indicator - bordered tag that illuminates when active
+// DRS/PIT indicator - bordered tag that illuminates when active or shows PIT
 function DrsIndicator({
   active,
+  inPit,
   t,
 }: {
   active?: boolean;
+  inPit?: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
+  if (inPit) {
+    return (
+      <div
+        className="text-lg inline-flex h-10 w-full items-center justify-center rounded-md border-[3px] font-mono font-black border-cyan-500 text-cyan-500"
+        title={t("driver.inPit")}
+      >
+        PIT
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
-        "flex items-center justify-center px-2 py-1 rounded text-sm font-bold tracking-wide border transition-all",
+        "text-lg inline-flex h-10 w-full items-center justify-center rounded-md border-2 font-mono font-black",
         active
-          ? "border-[oklch(.696_.17_162.48)] text-[oklch(.696_.17_162.48)] bg-[oklch(.696_.17_162.48)]/10"
+          ? "border-[oklch(.696_.17_162.48)] text-[oklch(.696_.17_162.48)]"
           : "border-zinc-600 text-zinc-600"
       )}
       title={active ? t("driver.drsActive") : t("driver.drsInactive")}
@@ -133,21 +146,16 @@ function SectorCell({
   time,
   bestTime,
   status,
+  isBestOverall,
   t,
 }: {
   miniSectors?: SectorStatus[];
   time?: string;
   bestTime?: string;
   status: SectorStatus;
+  isBestOverall?: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  const getColor = (s: SectorStatus) => {
-    if (s === "purple") return "text-[oklch(.541_.281_293.009)]";
-    if (s === "green") return "text-[oklch(.696_.17_162.48)]";
-    if (s === "yellow") return "text-[oklch(.795_.184_86.047)]";
-    return "text-white"; // Normal times are white
-  };
-
   const getTooltip = (s: SectorStatus) => {
     if (s === "purple") return t("driver.sectorBest");
     if (s === "green") return t("driver.sectorPersonalBest");
@@ -155,21 +163,26 @@ function SectorCell({
     return t("driver.sectorCurrent");
   };
 
+  // Use dynamic count based on actual sectors
+  const sectorCount = miniSectors?.length || 6;
+
   return (
     <div className="flex flex-col gap-1">
-      <MiniSectors sectors={miniSectors} count={6} t={t} />
+      <MiniSectors sectors={miniSectors} count={sectorCount} t={t} />
       <div className="flex items-center justify-center gap-2">
         <span
-          className={cn(
-            "text-base tabular-nums font-medium leading-none",
-            getColor(status)
-          )}
+          className="text-lg tabular-nums font-bold leading-none text-white"
           title={getTooltip(status)}
         >
           {time || "—"}
         </span>
         <span
-          className="text-sm text-zinc-500 tabular-nums leading-none"
+          className={cn(
+            "text-sm tabular-nums leading-none",
+            isBestOverall
+              ? "text-[oklch(.541_.281_293.009)] font-medium"
+              : "text-zinc-500"
+          )}
           title={t("driver.bestSectorTime")}
         >
           {bestTime || ""}
@@ -185,34 +198,42 @@ export default function DriverRow({ driver }: DriverRowProps) {
   // Use teamColor from API first, then fallback to hardcoded TEAM_COLORS
   const teamColor = driver.teamColor || TEAM_COLORS[driver.team] || "#888";
 
+  // Calculate total segments and proportional widths for sectors
+  const s1Count = driver.sector1SegmentCount || 6;
+  const s2Count = driver.sector2SegmentCount || 6;
+  const s3Count = driver.sector3SegmentCount || 6;
+  const totalSegments = s1Count + s2Count + s3Count;
+
   return (
     <div
       className={cn(
-        "grid grid-cols-[80px_44px_90px_48px_80px_100px_1fr_1fr_1fr] gap-3 px-3 py-2 items-center",
+        "grid gap-3 px-3 py-2 items-center",
         "border-b border-border/50 hover:bg-muted/30 transition-colors",
-        driver.inPit && "bg-[oklch(.623_.214_259.815)]/10",
         driver.retired && "opacity-40"
       )}
+      style={{
+        gridTemplateColumns: `95px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,
+      }}
     >
       {/* Position + Driver Tag - combined like f1-dash */}
       <div
-        className="flex items-center h-[34px] rounded-md overflow-hidden"
+        className="flex items-center h-[42px] rounded-md overflow-hidden"
         style={{ backgroundColor: teamColor }}
         title={driver.name}
       >
-        <span className="text-base font-bold tabular-nums leading-none w-9 text-center text-white">
+        <span className="text-2xl font-black font-mono tabular-nums leading-none w-12 text-center text-white">
           {driver.position}
         </span>
         <div
-          className="flex items-center justify-center h-[26px] px-1 rounded-sm text-base font-bold my-[4px] mr-[4px]"
+          className="flex items-center justify-center h-[34px] px-2 rounded-sm text-xl font-black font-mono my-[4px] mr-[4px]"
           style={{ backgroundColor: "white", color: teamColor }}
         >
           {driver.code}
         </div>
       </div>
 
-      {/* DRS - bordered tag */}
-      <DrsIndicator active={driver.drsEnabled} t={t} />
+      {/* DRS/PIT - bordered tag */}
+      <DrsIndicator active={driver.drsEnabled} inPit={driver.inPit} t={t} />
 
       {/* Tire with L and PIT */}
       <TireCompound
@@ -283,28 +304,39 @@ export default function DriverRow({ driver }: DriverRowProps) {
 
       {/* S1 */}
       <SectorCell
-        miniSectors={driver.miniSectors?.slice(0, 6)}
+        miniSectors={driver.miniSectors?.slice(
+          0,
+          driver.sector1SegmentCount || 6
+        )}
         time={driver.sector1}
         bestTime={driver.bestSector1}
         status={driver.sector1Status}
+        isBestOverall={driver.sector1Status === "purple"}
         t={t}
       />
 
       {/* S2 */}
       <SectorCell
-        miniSectors={driver.miniSectors?.slice(6, 12)}
+        miniSectors={driver.miniSectors?.slice(
+          driver.sector1SegmentCount || 6,
+          (driver.sector1SegmentCount || 6) + (driver.sector2SegmentCount || 6)
+        )}
         time={driver.sector2}
         bestTime={driver.bestSector2}
         status={driver.sector2Status}
+        isBestOverall={driver.sector2Status === "purple"}
         t={t}
       />
 
       {/* S3 */}
       <SectorCell
-        miniSectors={driver.miniSectors?.slice(12, 18)}
+        miniSectors={driver.miniSectors?.slice(
+          (driver.sector1SegmentCount || 6) + (driver.sector2SegmentCount || 6)
+        )}
         time={driver.sector3}
         bestTime={driver.bestSector3}
         status={driver.sector3Status}
+        isBestOverall={driver.sector3Status === "purple"}
         t={t}
       />
     </div>
