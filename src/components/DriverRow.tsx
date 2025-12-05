@@ -1,7 +1,7 @@
 "use client";
 
 import { Driver, SectorStatus } from "@/types/f1";
-import { TEAM_COLORS, TIRE_COMPOUNDS } from "@/lib/constants";
+import { TEAM_COLORS, TIRE_COMPOUNDS, TEAM_LOGOS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -212,25 +212,38 @@ export default function DriverRow({ driver }: DriverRowProps) {
         driver.retired && "opacity-40"
       )}
       style={{
-        gridTemplateColumns: `95px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,
+        gridTemplateColumns: `105px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,
       }}
     >
       {/* Position + Driver Tag - combined like f1-dash */}
       <div
-        className="flex items-center h-[42px] rounded-md overflow-hidden"
+        className="flex items-center h-[42px] px-1 rounded-md overflow-hidden"
         style={{ backgroundColor: teamColor }}
         title={driver.name}
       >
-        <span className="text-2xl font-black font-mono tabular-nums leading-none w-12 text-center text-white">
+        <span className="text-2xl mr-3 font-black font-mono tabular-nums leading-none w-10 text-center text-white">
           {driver.position}
         </span>
         <div
-          className="flex items-center justify-center h-[34px] px-2 rounded-sm text-xl font-black font-mono my-[4px] mr-[4px]"
+          className="flex items-center justify-center h-[34px] px-3 rounded-sm text-xl font-black font-mono my-[5px]"
           style={{ backgroundColor: "white", color: teamColor }}
         >
           {driver.code}
         </div>
       </div>
+
+      {/* Team Logo - HIDDEN FOR NOW
+      <div className="flex items-center justify-center">
+        {TEAM_LOGOS[driver.team] && (
+          <img
+            src={TEAM_LOGOS[driver.team]}
+            alt={driver.team}
+            className="h-7 w-7 object-contain"
+            title={driver.team}
+          />
+        )}
+      </div>
+      */}
 
       {/* DRS/PIT - bordered tag */}
       <DrsIndicator active={driver.drsEnabled} inPit={driver.inPit} t={t} />

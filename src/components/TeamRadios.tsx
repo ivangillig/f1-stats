@@ -4,6 +4,7 @@ import { RadioCapture, Driver } from "@/types/f1";
 import { DRIVERS, TEAM_COLORS } from "@/lib/constants";
 import { useState, useRef, useEffect } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import DriverTag from "./DriverTag";
 
 interface TeamRadiosProps {
   radios: RadioCapture[];
@@ -162,15 +163,12 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
                 </button>
 
                 {/* Driver info */}
-                <div
-                  className="w-10 h-5 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                  style={{
-                    backgroundColor: `${teamColor}30`,
-                    color: teamColor,
-                  }}
-                >
-                  {driverInfo.code}
-                </div>
+                <DriverTag
+                  code={driverInfo.code}
+                  team={driverInfo.team}
+                  size="sm"
+                  showLogo={false}
+                />
 
                 {/* Progress bar */}
                 <div className="flex-1 flex items-center h-4 max-w-[100px]">

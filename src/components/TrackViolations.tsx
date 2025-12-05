@@ -1,8 +1,8 @@
 "use client";
 
 import { RaceControlMessage, Driver } from "@/types/f1";
-import { TEAM_COLORS } from "@/lib/constants";
 import { useLanguage } from "@/contexts/LanguageContext";
+import DriverTag from "./DriverTag";
 
 interface TrackViolationsProps {
   messages: RaceControlMessage[];
@@ -61,23 +61,12 @@ export default function TrackViolations({
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {driversWithViolations.length > 0 ? (
           driversWithViolations.map(({ carNum, count, code, team }) => {
-            const teamColor = TEAM_COLORS[team] || "#888";
             return (
               <div
                 key={carNum}
                 className="flex items-center justify-between p-2 rounded-lg hover:bg-zinc-800/50 transition-colors"
               >
-                <div className="flex items-center gap-2">
-                  <div
-                    className="flex items-center justify-center w-[42px] h-[24px] rounded text-xs font-bold"
-                    style={{
-                      backgroundColor: teamColor,
-                      color: "#000",
-                    }}
-                  >
-                    {code}
-                  </div>
-                </div>
+                <DriverTag code={code} team={team} size="sm" showLogo={false} />
                 <span className="text-sm text-zinc-300">
                   {count}{" "}
                   {count === 1

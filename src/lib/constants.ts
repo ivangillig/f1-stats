@@ -1,15 +1,29 @@
-// Team colors mapping
+// Team colors mapping (F1 2024/2025 official colors)
 export const TEAM_COLORS: Record<string, string> = {
   "Red Bull Racing": "#3671C6",
-  Ferrari: "#E8002D",
+  Ferrari: "#E80020",
   Mercedes: "#27F4D2",
   McLaren: "#FF8000",
   "Aston Martin": "#229971",
   Alpine: "#FF87BC",
-  Williams: "#64C4FF",
+  Williams: "#1868DB",
   RB: "#6692FF",
   "Kick Sauber": "#52E252",
   "Haas F1 Team": "#B6BABD",
+};
+
+// Team logo mapping (team name -> image file in /images/teams/)
+export const TEAM_LOGOS: Record<string, string> = {
+  "Red Bull Racing": "/images/teams/redbull.png",
+  Ferrari: "/images/teams/ferrari.png",
+  Mercedes: "/images/teams/mercedes.png",
+  McLaren: "/images/teams/mclaren.png",
+  "Aston Martin": "/images/teams/astonmartin.png",
+  Alpine: "/images/teams/alpine.png",
+  Williams: "/images/teams/williams.png",
+  RB: "/images/teams/rb.png",
+  "Kick Sauber": "/images/teams/kicksauber.svg",
+  "Haas F1 Team": "/images/teams/haas.png",
 };
 
 // Driver info mapping (number -> info) - 2024/2025 Season

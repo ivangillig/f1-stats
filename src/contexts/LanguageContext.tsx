@@ -129,12 +129,12 @@ const translations = {
     "error.reconnecting": "Reconectando...",
 
     // Track status
-    "status.allClear": "Todo Despejado",
+    "status.allClear": "Despejado",
     "status.yellow": "Bandera Amarilla",
     "status.green": "Bandera Verde",
-    "status.scDeployed": "Safety Car Desplegado",
+    "status.scDeployed": "Safety Car",
     "status.red": "Bandera Roja",
-    "status.vscDeployed": "VSC Desplegado",
+    "status.vscDeployed": "Virtual Safety Car",
     "status.vscEnding": "VSC Finalizando",
 
     // Session types

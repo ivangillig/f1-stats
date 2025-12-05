@@ -25,10 +25,11 @@ export default function TimingBoard({ drivers }: TimingBoardProps) {
       <div
         className="grid gap-3 px-3 py-2 bg-muted/30 text-xs text-muted-foreground uppercase tracking-wider font-medium border-b border-border"
         style={{
-          gridTemplateColumns: `95px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,
+          gridTemplateColumns: `105px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,
         }}
       >
         <div>{t("timing.driver")}</div>
+        {/* <div></div> Team Logo column - HIDDEN */}
         <div className="text-center">{t("timing.drs")}</div>
         <div>{t("timing.tire")}</div>
         <div className="text-center">{t("timing.position")}</div>
