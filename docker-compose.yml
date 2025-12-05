@@ -21,6 +21,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - apps
 
   # Next.js Dashboard
   dashboard:
@@ -30,9 +32,15 @@ services:
     container_name: f1-dashboard
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${DASHBOARD_PORT:-3000}:3000"
     environment:
       - NEXT_PUBLIC_PROXY_URL=${PROXY_PUBLIC_URL}
     depends_on:
       proxy:
         condition: service_healthy
+    networks:
+      - apps
+
+networks:
+  apps:
+    external: true
