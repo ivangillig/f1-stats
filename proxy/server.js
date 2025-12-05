@@ -270,7 +270,10 @@ const server = http.createServer((req, res) => {
     else if (isReplayRunning()) mode = "replay";
     else mode = "f1-signalr";
 
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(200, { 
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    });
     res.end(
       JSON.stringify({
         status: "ok",
