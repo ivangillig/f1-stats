@@ -34,7 +34,7 @@ services:
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     environment:
-      - NEXT_PUBLIC_PROXY_URL=${PROXY_PUBLIC_URL}
+      - INTERNAL_PROXY_URL=http://f1-proxy:4000
     depends_on:
       proxy:
         condition: service_healthy

@@ -13,8 +13,12 @@ import {
 } from "@/types/f1";
 import { DRIVERS, TEAM_COLORS } from "@/lib/constants";
 
-// Use environment variable or default to localhost for development
-const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || "http://localhost:4000";
+// In browser: use relative path (goes through Next.js rewrite)
+// In development: use localhost
+const PROXY_URL =
+  typeof window !== "undefined"
+    ? "/api/proxy"
+    : process.env.INTERNAL_PROXY_URL || "http://localhost:4000";
 
 interface F1DataState {
   drivers: Driver[];
