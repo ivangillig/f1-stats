@@ -1,3 +1,4 @@
+import "dotenv/config";
 import http from "http";
 import WebSocket from "ws";
 import { startReplay, stopReplay, isReplayRunning } from "./replay.js";

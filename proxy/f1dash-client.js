@@ -165,6 +165,17 @@ class F1DashClient extends EventEmitter {
         } team radios`
       );
     }
+    // Debug: Log Position data structure
+    if (data.Position) {
+      console.log(`[F1Dash] Position data keys:`, Object.keys(data.Position));
+      const firstEntry = Object.entries(data.Position)[0];
+      if (firstEntry) {
+        console.log(
+          `[F1Dash] Position sample:`,
+          JSON.stringify(firstEntry[1]).substring(0, 200)
+        );
+      }
+    }
 
     // Emit the raw state for the server to broadcast
     this.emit("state", this.rawState);

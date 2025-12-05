@@ -9,6 +9,10 @@ interface DriverRowProps {
   driver: Driver;
 }
 
+// Empty time format placeholder
+const EMPTY_TIME = "--:--.---";
+const EMPTY_SECTOR = "--.---";
+
 // Mini sector bars - full width with better spacing and rounded corners
 function MiniSectors({
   sectors,
@@ -147,6 +151,7 @@ function SectorCell({
   bestTime,
   status,
   isBestOverall,
+  isActive,
   t,
 }: {
   miniSectors?: SectorStatus[];
@@ -154,6 +159,7 @@ function SectorCell({
   bestTime?: string;
   status: SectorStatus;
   isBestOverall?: boolean;
+  isActive?: boolean; // true if this sector is current or just completed
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const getTooltip = (s: SectorStatus) => {
@@ -166,26 +172,42 @@ function SectorCell({
   // Use dynamic count based on actual sectors
   const sectorCount = miniSectors?.length || 6;
 
+  // Determine time color based on status and whether sector has time
+  const getTimeColor = () => {
+    // If sector has a recorded time, color based on status
+    if (time) {
+      if (status === "purple") return "text-[oklch(.541_.281_293.009)]"; // Purple for overall best
+      if (status === "green") return "text-[oklch(.696_.17_162.48)]"; // Green for personal best
+      return "text-white"; // Yellow/normal = white (it's a recorded time this lap)
+    }
+    // No time recorded yet
+    if (isActive) return "text-white"; // Currently in this sector
+    return "text-zinc-400"; // Past sector without time (shouldn't happen often)
+  };
+
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       <MiniSectors sectors={miniSectors} count={sectorCount} t={t} />
       <div className="flex items-center justify-center gap-2">
         <span
-          className="text-lg tabular-nums font-bold leading-none text-white"
+          className={cn(
+            "text-lg font-f1 font-medium leading-none tracking-tight",
+            getTimeColor()
+          )}
           title={getTooltip(status)}
         >
-          {time || "—"}
+          {time || EMPTY_SECTOR}
         </span>
         <span
           className={cn(
-            "text-sm tabular-nums leading-none",
+            "text-sm font-f1 leading-none tracking-tight",
             isBestOverall
               ? "text-[oklch(.541_.281_293.009)] font-medium"
               : "text-zinc-500"
           )}
           title={t("driver.bestSectorTime")}
         >
-          {bestTime || ""}
+          {bestTime || EMPTY_SECTOR}
         </span>
       </div>
     </div>
@@ -204,10 +226,45 @@ export default function DriverRow({ driver }: DriverRowProps) {
   const s3Count = driver.sector3SegmentCount || 6;
   const totalSegments = s1Count + s2Count + s3Count;
 
+  // Determine which sector the driver is currently in based on minisectors
+  // A sector is "active" if it has segments with status != "none" or has a recorded time
+  const getCurrentSector = (): number => {
+    if (!driver.miniSectors || driver.miniSectors.length === 0) return 1;
+
+    // Check S3 segments (after s1Count + s2Count)
+    const s3Start = s1Count + s2Count;
+    const s3Segments = driver.miniSectors.slice(s3Start);
+    const hasS3Activity = s3Segments.some((s) => s !== "none");
+    if (hasS3Activity) return 3;
+
+    // Check S2 segments
+    const s2Segments = driver.miniSectors.slice(s1Count, s1Count + s2Count);
+    const hasS2Activity = s2Segments.some((s) => s !== "none");
+    if (hasS2Activity) return 2;
+
+    // Default to S1
+    return 1;
+  };
+
+  const currentSector = getCurrentSector();
+
+  // A sector is active if:
+  // - It's the current sector OR
+  // - It's the sector just before the current one (just completed)
+  const isSectorActive = (sectorNum: number): boolean => {
+    // If sector has a time, it was just completed - show as active
+    if (sectorNum === 1 && driver.sector1) return true;
+    if (sectorNum === 2 && driver.sector2) return true;
+    if (sectorNum === 3 && driver.sector3) return true;
+
+    // If it's the current sector being driven
+    return sectorNum === currentSector;
+  };
+
   return (
     <div
       className={cn(
-        "grid gap-3 px-3 py-2 items-center",
+        "grid gap-3 px-3 py-1 items-center",
         "border-b border-border/50 hover:bg-muted/30 transition-colors",
         driver.retired && "opacity-40"
       )}
@@ -277,13 +334,13 @@ export default function DriverRow({ driver }: DriverRowProps) {
       {/* Gap */}
       <div className="text-right leading-none">
         <div
-          className="text-xl text-foreground tabular-nums font-medium leading-none"
+          className="text-xl text-foreground font-f1 font-medium leading-none tracking-tight"
           title={t("driver.gapToLeader")}
         >
           {driver.position === 1 ? "—" : driver.gap || "—"}
         </div>
         <div
-          className="text-sm text-zinc-500 tabular-nums mt-0.5"
+          className="text-sm text-zinc-500 font-f1 mt-0.5 tracking-tight"
           title={t("driver.intervalToAhead")}
         >
           {driver.interval || ""}
@@ -294,7 +351,7 @@ export default function DriverRow({ driver }: DriverRowProps) {
       <div className="text-right leading-none">
         <div
           className={cn(
-            "text-xl tabular-nums font-medium leading-none",
+            "text-xl font-f1 font-medium leading-none tracking-tight",
             driver.lastLapPersonalBest
               ? "text-[oklch(.696_.17_162.48)]"
               : "text-foreground"
@@ -305,13 +362,13 @@ export default function DriverRow({ driver }: DriverRowProps) {
               : t("driver.bestLap")
           }
         >
-          {driver.lastLap || "—"}
+          {driver.lastLap || EMPTY_TIME}
         </div>
         <div
-          className="text-sm text-zinc-500 tabular-nums mt-0.5"
+          className="text-sm text-zinc-500 font-f1 mt-0.5 tracking-tight"
           title={t("driver.bestLapTime")}
         >
-          {driver.bestLap || ""}
+          {driver.bestLap || EMPTY_TIME}
         </div>
       </div>
 
@@ -324,7 +381,8 @@ export default function DriverRow({ driver }: DriverRowProps) {
         time={driver.sector1}
         bestTime={driver.bestSector1}
         status={driver.sector1Status}
-        isBestOverall={driver.sector1Status === "purple"}
+        isBestOverall={driver.hasSector1Record}
+        isActive={isSectorActive(1)}
         t={t}
       />
 
@@ -337,7 +395,8 @@ export default function DriverRow({ driver }: DriverRowProps) {
         time={driver.sector2}
         bestTime={driver.bestSector2}
         status={driver.sector2Status}
-        isBestOverall={driver.sector2Status === "purple"}
+        isBestOverall={driver.hasSector2Record}
+        isActive={isSectorActive(2)}
         t={t}
       />
 
@@ -349,7 +408,8 @@ export default function DriverRow({ driver }: DriverRowProps) {
         time={driver.sector3}
         bestTime={driver.bestSector3}
         status={driver.sector3Status}
-        isBestOverall={driver.sector3Status === "purple"}
+        isBestOverall={driver.hasSector3Record}
+        isActive={isSectorActive(3)}
         t={t}
       />
     </div>

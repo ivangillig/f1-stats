@@ -106,6 +106,22 @@ export function useF1DataSSE(): F1DataState {
     if (!data) return;
 
     try {
+      // Debug: Log Position data structure on first receive
+      if (data.Position && Object.keys(carDataRef.current).length === 0) {
+        console.log(
+          "[F1 Data] Position data structure:",
+          Object.keys(data.Position)
+        );
+        const sample = Object.entries(data.Position)[0];
+        if (sample) {
+          console.log(
+            "[F1 Data] Position sample:",
+            sample[0],
+            JSON.stringify(sample[1]).substring(0, 300)
+          );
+        }
+      }
+
       // Process DriverList first - this has the real driver info from F1 API
       const driverListData = data.DriverList;
       if (driverListData) {
@@ -136,6 +152,7 @@ export function useF1DataSSE(): F1DataState {
       // Process TimingData
       const timingData = data.TimingData?.Lines || {};
       const timingAppData = data.TimingAppData?.Lines || {};
+      const timingStatsData = data.TimingStats?.Lines || {};
 
       // Log timing data for debugging
       if (Object.keys(timingData).length > 0) {
@@ -259,17 +276,46 @@ export function useF1DataSSE(): F1DataState {
         });
       }
 
-      // Process Position data (X, Y coordinates from replay)
-      const positionData = data.Position?.Position;
+      // Process Position data (X, Y coordinates)
+      // Format can vary: Position.Position (entries with driver numbers)
+      // or Position with timestamp entries like {"0": {Entries: {"1": {X, Y}, ...}}}
+      const positionData = data.Position;
       if (positionData) {
-        Object.entries(positionData).forEach(
-          ([num, posData]: [string, any]) => {
-            carDataRef.current[num] = {
-              x: posData.X || 0,
-              y: posData.Y || 0,
-            };
+        // Check for direct Position.Position format
+        if (positionData.Position) {
+          Object.entries(positionData.Position).forEach(
+            ([num, posData]: [string, any]) => {
+              if (posData?.X !== undefined && posData?.Y !== undefined) {
+                carDataRef.current[num] = {
+                  x: posData.X,
+                  y: posData.Y,
+                };
+              }
+            }
+          );
+        } else {
+          // Check for timestamp-based format: {"0": {Entries: {...}}, "1": {Entries: {...}}}
+          // Take the most recent entry
+          const timestamps = Object.keys(positionData).filter(
+            (k) => !isNaN(Number(k))
+          );
+          if (timestamps.length > 0) {
+            const latestTimestamp = Math.max(...timestamps.map(Number));
+            const latestData = positionData[String(latestTimestamp)];
+            if (latestData?.Entries) {
+              Object.entries(latestData.Entries).forEach(
+                ([num, posData]: [string, any]) => {
+                  if (posData?.X !== undefined && posData?.Y !== undefined) {
+                    carDataRef.current[num] = {
+                      x: posData.X,
+                      y: posData.Y,
+                    };
+                  }
+                }
+              );
+            }
           }
-        );
+        }
       }
 
       // Process Drivers
@@ -426,6 +472,37 @@ export function useF1DataSSE(): F1DataState {
                 existing?.sector3SegmentCount ||
                 10;
 
+              // Get best sector times from TimingStats.Lines[num].BestSectors
+              const statsData = timingStatsData[num];
+              const bestSectors = statsData?.BestSectors || {};
+              const bestSector1 =
+                bestSectors["0"]?.Value || existing?.bestSector1 || "";
+              const bestSector2 =
+                bestSectors["1"]?.Value || existing?.bestSector2 || "";
+              const bestSector3 =
+                bestSectors["2"]?.Value || existing?.bestSector3 || "";
+
+              // Check if this driver has the overall best (record) for each sector
+              // Position 1 means this is the fastest sector time of the session
+              const hasSector1Record =
+                bestSectors["0"]?.Position === 1 ||
+                existing?.hasSector1Record ||
+                false;
+              const hasSector2Record =
+                bestSectors["1"]?.Position === 1 ||
+                existing?.hasSector2Record ||
+                false;
+              const hasSector3Record =
+                bestSectors["2"]?.Position === 1 ||
+                existing?.hasSector3Record ||
+                false;
+
+              // Check if last lap was a personal best
+              const lastLapPersonalBest =
+                driverData.LastLapTime?.PersonalFastest === true ||
+                existing?.lastLapPersonalBest ||
+                false;
+
               const driver: Driver = {
                 position: position,
                 driverNumber: num,
@@ -447,11 +524,15 @@ export function useF1DataSSE(): F1DataState {
                   "",
                 lastLap:
                   driverData.LastLapTime?.Value || existing?.lastLap || "",
+                lastLapPersonalBest,
                 bestLap:
                   driverData.BestLapTime?.Value || existing?.bestLap || "",
                 sector1: sectors["0"]?.Value || existing?.sector1 || "",
                 sector2: sectors["1"]?.Value || existing?.sector2 || "",
                 sector3: sectors["2"]?.Value || existing?.sector3 || "",
+                bestSector1,
+                bestSector2,
+                bestSector3,
                 sector1Status:
                   getSectorStatus(sectors["0"]) ||
                   existing?.sector1Status ||
@@ -471,6 +552,9 @@ export function useF1DataSSE(): F1DataState {
                 sector1SegmentCount,
                 sector2SegmentCount,
                 sector3SegmentCount,
+                hasSector1Record,
+                hasSector2Record,
+                hasSector3Record,
                 tire: tireInfo,
                 inPit: driverData.InPit || existing?.inPit || false,
                 pitCount:
@@ -619,6 +703,8 @@ export function useF1DataSSE(): F1DataState {
       console.error("[SSE] Error:", err);
       setIsConnected(false);
       isConnectedRef.current = false;
+      // Keep last received data - don't clear anything
+      // Just show reconnection message
       setError("Connection lost. Reconnecting...");
 
       eventSource.close();

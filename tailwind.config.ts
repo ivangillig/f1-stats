@@ -72,6 +72,8 @@ const config: Config = {
       },
       fontFamily: {
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
+        f1: ["Formula1 Display", "Arial", "sans-serif"],
+        "f1-wide": ["Formula1 Display Wide", "Arial", "sans-serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

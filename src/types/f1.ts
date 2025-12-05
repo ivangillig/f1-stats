@@ -15,6 +15,9 @@ export interface Driver {
   bestSector1?: string;
   bestSector2?: string;
   bestSector3?: string;
+  hasSector1Record?: boolean; // Has the overall best S1 time
+  hasSector2Record?: boolean; // Has the overall best S2 time
+  hasSector3Record?: boolean; // Has the overall best S3 time
   sector1Status: SectorStatus;
   sector2Status: SectorStatus;
   sector3Status: SectorStatus;
