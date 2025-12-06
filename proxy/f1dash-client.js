@@ -25,6 +25,7 @@ class F1DashClient extends EventEmitter {
     this.maxReconnectAttempts = 10;
     this.reconnectDelay = 5000;
     this.buffer = "";
+    this.lastDataTime = null; // Track when we last received real data
 
     // Store raw state in F1 SignalR format
     this.rawState = {};
@@ -37,6 +38,7 @@ class F1DashClient extends EventEmitter {
       hostname: F1_SSE_HOST,
       path: F1_SSE_PATH,
       method: "GET",
+      timeout: 120000, // 2 minutes - default Node.js timeout
       headers: {
         Accept: "text/event-stream",
         "Cache-Control": "no-cache",
@@ -83,10 +85,17 @@ class F1DashClient extends EventEmitter {
     });
 
     this.request.on("timeout", () => {
-      console.error("[F1Dash] Request timeout");
+      // Only log if we don't have state yet - during inactive sessions, timeouts are normal
+      if (!this.rawState.SessionInfo) {
+        console.error("[F1Dash] Request timeout (no session data yet)");
+      } else {
+        console.log("[F1Dash] Connection idle, reconnecting...");
+      }
       this.request.destroy();
       this.isConnected = false;
-      this.scheduleReconnect();
+      // Use longer delay if session seems inactive (no updates received)
+      const isSessionInactive = !this.lastDataTime || (Date.now() - this.lastDataTime > 60000);
+      this.scheduleReconnect(isSessionInactive);
     });
   }
 
@@ -134,36 +143,41 @@ class F1DashClient extends EventEmitter {
   }
 
   handleInitialState(data) {
+    // Check if this is a reconnect with same session data
+    const isReconnect = this.rawState.SessionInfo?.Name === data.SessionInfo?.Name;
+    
     // Store raw state directly - this IS the F1 SignalR format
     this.rawState = { ...data };
 
-    // Log what we got
-    if (data.DriverList) {
-      console.log(
-        `[F1Dash] Loaded ${Object.keys(data.DriverList).length} drivers`
-      );
-    }
-    if (data.SessionInfo) {
-      const session = data.SessionInfo;
-      console.log(
-        `[F1Dash] Session: ${session.Name || session.Type} at ${
-          session.Meeting?.Circuit?.ShortName || "Unknown"
-        }`
-      );
-    }
-    if (data.RaceControlMessages?.Messages) {
-      console.log(
-        `[F1Dash] Loaded ${
-          Object.keys(data.RaceControlMessages.Messages).length
-        } race control messages`
-      );
-    }
-    if (data.TeamRadio?.Captures) {
-      console.log(
-        `[F1Dash] Loaded ${
-          Object.keys(data.TeamRadio.Captures).length
-        } team radios`
-      );
+    // Log what we got (only on first connect or session change)
+    if (!isReconnect) {
+      if (data.DriverList) {
+        console.log(
+          `[F1Dash] Loaded ${Object.keys(data.DriverList).length} drivers`
+        );
+      }
+      if (data.SessionInfo) {
+        const session = data.SessionInfo;
+        console.log(
+          `[F1Dash] Session: ${session.Name || session.Type} at ${
+            session.Meeting?.Circuit?.ShortName || "Unknown"
+          }`
+        );
+      }
+      if (data.RaceControlMessages?.Messages) {
+        console.log(
+          `[F1Dash] Loaded ${
+            Object.keys(data.RaceControlMessages.Messages).length
+          } race control messages`
+        );
+      }
+      if (data.TeamRadio?.Captures) {
+        console.log(
+          `[F1Dash] Loaded ${
+            Object.keys(data.TeamRadio.Captures).length
+          } team radios`
+        );
+      }
     }
     // Debug: Log Position data structure
     if (data.Position) {
@@ -184,6 +198,11 @@ class F1DashClient extends EventEmitter {
   handleUpdate(data) {
     // Deep merge the update into raw state
     this.deepMerge(this.rawState, data);
+    
+    // Track that we received real data (not just initial state)
+    this.lastDataTime = Date.now();
+    // Reset reconnect attempts since we're getting live data
+    this.reconnectAttempts = 0;
 
     // Log significant updates
     if (data.RaceControlMessages?.Messages) {
@@ -226,20 +245,35 @@ class F1DashClient extends EventEmitter {
     }
   }
 
-  scheduleReconnect() {
+  scheduleReconnect(isSessionInactive = false) {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error("[F1Dash] Max reconnection attempts reached");
       this.emit("disconnected");
+      // Reset attempts after a long pause to allow future reconnects
+      setTimeout(() => {
+        this.reconnectAttempts = 0;
+        console.log("[F1Dash] Reset reconnect attempts, will retry on next trigger");
+      }, 60000);
       return;
     }
 
     this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5);
-    console.log(
-      `[F1Dash] Reconnecting in ${delay / 1000}s (attempt ${
-        this.reconnectAttempts
-      }/${this.maxReconnectAttempts})`
-    );
+    
+    // If session is inactive, use longer delays to avoid spamming
+    // Active session: 5s, 10s, 15s, 20s, 25s (max)
+    // Inactive session: 30s, 60s, 60s, 60s... (check every minute)
+    let delay;
+    if (isSessionInactive && this.rawState.SessionInfo) {
+      delay = this.reconnectAttempts === 1 ? 30000 : 60000; // 30s first, then 60s
+      console.log(`[F1Dash] Session inactive, checking again in ${delay / 1000}s`);
+    } else {
+      delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5);
+      console.log(
+        `[F1Dash] Reconnecting in ${delay / 1000}s (attempt ${
+          this.reconnectAttempts
+        }/${this.maxReconnectAttempts})`
+      );
+    }
 
     setTimeout(() => {
       this.connect();
