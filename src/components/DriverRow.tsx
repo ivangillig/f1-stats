@@ -226,17 +226,17 @@ export default function DriverRow({
   // Use teamColor from API first, then fallback to hardcoded TEAM_COLORS
   const teamColor = driver.teamColor || TEAM_COLORS[driver.team] || "#888";
 
-  // Check if driver is in elimination zone for Qualifying
+  // Check if driver is in elimination zone for Qualifying (at risk of being eliminated)
   const isInEliminationZone = (): boolean => {
     const pos = driver.position;
 
     // Use qualifyingPart if available (1=Q1, 2=Q2, 3=Q3)
     if (qualifyingPart) {
-      // Q1: positions 16-20 eliminated
+      // Q1: positions 16-20 at risk of elimination
       if (qualifyingPart === 1) return pos >= 16;
-      // Q2: positions 11-15 eliminated
+      // Q2: positions 11-15 at risk of elimination
       if (qualifyingPart === 2) return pos >= 11;
-      // Q3: no elimination
+      // Q3: no elimination zone (all remaining drivers compete)
       return false;
     }
 
@@ -251,7 +251,22 @@ export default function DriverRow({
     return false;
   };
 
+  // Check if driver has been eliminated (knocked out in previous Q session)
+  const isEliminated = (): boolean => {
+    const pos = driver.position;
+
+    if (qualifyingPart) {
+      // Q2: drivers in positions 16-20 were eliminated in Q1
+      if (qualifyingPart === 2) return pos >= 16;
+      // Q3: drivers in positions 11-20 were eliminated in Q1/Q2
+      if (qualifyingPart === 3) return pos >= 11;
+    }
+
+    return false;
+  };
+
   const inEliminationZone = isInEliminationZone();
+  const eliminated = isEliminated();
 
   // Calculate total segments and proportional widths for sectors
   const s1Count = driver.sector1SegmentCount || 6;
@@ -300,7 +315,8 @@ export default function DriverRow({
         "grid gap-3 px-3 py-1 items-center",
         "border-b border-border/50 hover:bg-muted/30 transition-colors",
         driver.retired && "opacity-40",
-        inEliminationZone && "bg-red-900/30"
+        eliminated && "opacity-40 bg-zinc-900/50", // Knocked out in previous Q
+        !eliminated && inEliminationZone && "bg-red-900/30" // At risk of elimination
       )}
       style={{
         gridTemplateColumns: `105px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,

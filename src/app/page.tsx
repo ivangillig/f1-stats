@@ -149,6 +149,7 @@ export default function Dashboard() {
                   trackStatus={trackStatus}
                   raceControlMessages={raceControlMessages}
                   isSessionActive={sessionInfo.isLive}
+                  qualifyingPart={sessionInfo.qualifyingPart}
                 />
               </div>
 

@@ -23,6 +23,7 @@ interface TrackMapProps {
   trackStatus?: TrackStatusInfo;
   raceControlMessages?: RaceControlMessage[];
   isSessionActive?: boolean;
+  qualifyingPart?: number; // 1=Q1, 2=Q2, 3=Q3 - used to detect session changes
 }
 
 const SPACE = 1000;
@@ -50,6 +51,7 @@ export default function TrackMap({
   trackStatus,
   raceControlMessages = [],
   isSessionActive = false,
+  qualifyingPart,
 }: TrackMapProps) {
   const { t } = useLanguage();
   const [mapData, setMapData] = useState<MapData | null>(null);
@@ -87,6 +89,13 @@ export default function TrackMap({
 
     fetchMap();
   }, [circuitKey]);
+
+  // Clear animated positions when session changes (Q1→Q2→Q3 or session restart)
+  useEffect(() => {
+    console.log("[TrackMap] Session change detected, clearing positions. qualifyingPart:", qualifyingPart, "isSessionActive:", isSessionActive);
+    animatedPositionsRef.current.clear();
+    setAnimatedPositions(new Map());
+  }, [qualifyingPart, isSessionActive]);
 
   const { points, bounds, rotation, centerX, centerY, corners } =
     useMemo(() => {
