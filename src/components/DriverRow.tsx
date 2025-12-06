@@ -251,22 +251,9 @@ export default function DriverRow({
     return false;
   };
 
-  // Check if driver has been eliminated (knocked out in previous Q session)
-  const isEliminated = (): boolean => {
-    const pos = driver.position;
-
-    if (qualifyingPart) {
-      // Q2: drivers in positions 16-20 were eliminated in Q1
-      if (qualifyingPart === 2) return pos >= 16;
-      // Q3: drivers in positions 11-20 were eliminated in Q1/Q2
-      if (qualifyingPart === 3) return pos >= 11;
-    }
-
-    return false;
-  };
-
   const inEliminationZone = isInEliminationZone();
-  const eliminated = isEliminated();
+  // Use knockedOut from API - it's set when driver is eliminated from qualifying
+  const eliminated = driver.knockedOut;
 
   // Calculate total segments and proportional widths for sectors
   const s1Count = driver.sector1SegmentCount || 6;

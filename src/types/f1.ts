@@ -29,6 +29,7 @@ export interface Driver {
   inPit: boolean;
   pitCount: number;
   retired: boolean;
+  knockedOut: boolean; // Eliminated in qualifying
   currentLap?: number;
   drsEnabled?: boolean;
   positionChange?: number;

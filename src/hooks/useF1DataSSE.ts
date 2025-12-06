@@ -583,6 +583,7 @@ export function useF1DataSSE(): F1DataState {
                 pitCount:
                   driverData.NumberOfPitStops ?? existing?.pitCount ?? 0,
                 retired: driverData.Retired || existing?.retired || false,
+                knockedOut: driverData.KnockedOut || existing?.knockedOut || false,
                 trackProgress: calculateTrackProgress(sectors),
                 trackX: carDataRef.current[num]?.x ?? existing?.trackX,
                 trackY: carDataRef.current[num]?.y ?? existing?.trackY,
@@ -627,6 +628,10 @@ export function useF1DataSSE(): F1DataState {
           const sortedDrivers = Array.from(driversMap.values())
             .filter((d) => d.driverNumber) // Include all drivers that have a number
             .sort((a, b) => {
+              // Knocked out drivers always go to the bottom
+              if (a.knockedOut && !b.knockedOut) return 1;
+              if (!a.knockedOut && b.knockedOut) return -1;
+
               if (isPracticeOrQualy) {
                 // In Practice/Qualifying: sort by best lap time (fastest first)
                 const timeA = parseLapTime(a.bestLap);
