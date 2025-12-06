@@ -206,6 +206,11 @@ class F1DashClient extends EventEmitter {
     // Reset reconnect attempts since we're getting live data
     this.reconnectAttempts = 0;
 
+    // Log clock updates specifically (for debugging)
+    if (data.ExtrapolatedClock) {
+      console.log(`[F1Dash] Clock update: ${data.ExtrapolatedClock.Remaining} (extrapolating: ${data.ExtrapolatedClock.Extrapolating})`);
+    }
+
     // Log significant updates
     if (data.RaceControlMessages?.Messages) {
       const newMsgs = Object.values(data.RaceControlMessages.Messages);

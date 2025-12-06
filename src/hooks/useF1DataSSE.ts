@@ -708,9 +708,12 @@ export function useF1DataSSE(): F1DataState {
     };
 
     eventSource.addEventListener("initial", (event) => {
-      console.log("[SSE] Received initial state");
       const data = JSON.parse(event.data);
-      processData(data);
+      const hasData = Object.keys(data).length > 0;
+      console.log("[SSE] Received initial state", hasData ? `(${Object.keys(data).length} keys)` : "(empty - waiting for data)");
+      if (hasData) {
+        processData(data);
+      }
     });
 
     eventSource.addEventListener("update", (event) => {

@@ -295,10 +295,8 @@ const server = http.createServer((req, res) => {
       "X-Accel-Buffering": "no", // Disable nginx buffering
     });
 
-    // Send current state as initial
-    if (Object.keys(currentState).length > 0) {
-      res.write(`event: initial\ndata: ${JSON.stringify(currentState)}\n\n`);
-    }
+    // Send current state as initial (even if empty, so client knows connection is working)
+    res.write(`event: initial\ndata: ${JSON.stringify(currentState)}\n\n`);
 
     // Add client to set
     sseClients.add(res);
@@ -344,6 +342,9 @@ server.listen(PORT, async () => {
   console.log(`[Server] SSE endpoint: http://localhost:${PORT}/api/sse`);
   console.log(`[Server] Mode: ${PROXY_MODE}`);
 
+  // Track if we've received initial data (for sending proper event type)
+  let hasReceivedInitialData = false;
+
   // Determine which mode to use
   if (PROXY_MODE === "f1dash") {
     // Use f1-dash.com's processed feed (recommended for live sessions)
@@ -363,8 +364,15 @@ server.listen(PORT, async () => {
           currentState[key] = state[key];
         }
       }
-      // Broadcast update to SSE clients
-      broadcastSSE("update", state);
+      // On first data with SessionInfo, send as "initial" to ensure all clients get full state
+      if (!hasReceivedInitialData && state.SessionInfo) {
+        hasReceivedInitialData = true;
+        console.log("[Server] Broadcasting initial state to all clients");
+        broadcastSSE("initial", currentState);
+      } else {
+        // Broadcast incremental updates
+        broadcastSSE("update", state);
+      }
     });
   } else if (PROXY_MODE === "live-polling") {
     // Force live polling mode (free REST API)
@@ -399,7 +407,14 @@ server.listen(PORT, async () => {
           currentState[key] = state[key];
         }
       }
-      broadcastSSE("update", state);
+      // On first data with SessionInfo, send as "initial" to ensure all clients get full state
+      if (!hasReceivedInitialData && state.SessionInfo) {
+        hasReceivedInitialData = true;
+        console.log("[Server] Broadcasting initial state to all clients");
+        broadcastSSE("initial", currentState);
+      } else {
+        broadcastSSE("update", state);
+      }
     });
   }
 });
