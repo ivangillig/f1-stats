@@ -48,7 +48,10 @@ function translateMessage(
     { regex: /CHEQUERED FLAG/gi, key: "raceControl.flag.chequered" },
     { regex: /DOUBLE YELLOW FLAG/gi, key: "raceControl.flag.doubleYellow" },
     { regex: /BLACK AND WHITE FLAG/gi, key: "raceControl.flag.blackWhite" },
-    { regex: /SAFETY CAR DEPLOYED/gi, key: "raceControl.msg.safetyCarDeployed" },
+    {
+      regex: /SAFETY CAR DEPLOYED/gi,
+      key: "raceControl.msg.safetyCarDeployed",
+    },
     { regex: /SAFETY CAR ENDING/gi, key: "raceControl.msg.safetyCarEnding" },
     { regex: /VSC DEPLOYED/gi, key: "raceControl.msg.vscDeployed" },
     { regex: /VSC ENDING/gi, key: "raceControl.msg.vscEnding" },
