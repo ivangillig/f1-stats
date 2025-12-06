@@ -216,7 +216,11 @@ function SectorCell({
   );
 }
 
-export default function DriverRow({ driver, sessionName, qualifyingPart }: DriverRowProps) {
+export default function DriverRow({
+  driver,
+  sessionName,
+  qualifyingPart,
+}: DriverRowProps) {
   const { t } = useLanguage();
 
   // Use teamColor from API first, then fallback to hardcoded TEAM_COLORS
@@ -225,17 +229,17 @@ export default function DriverRow({ driver, sessionName, qualifyingPart }: Drive
   // Check if driver is in elimination zone for Qualifying
   const isInEliminationZone = (): boolean => {
     const pos = driver.position;
-    
+
     // Use qualifyingPart if available (1=Q1, 2=Q2, 3=Q3)
     if (qualifyingPart) {
       // Q1: positions 16-20 eliminated
       if (qualifyingPart === 1) return pos >= 16;
-      // Q2: positions 11-15 eliminated  
+      // Q2: positions 11-15 eliminated
       if (qualifyingPart === 2) return pos >= 11;
       // Q3: no elimination
       return false;
     }
-    
+
     // Fallback: try to parse from sessionName
     const session = sessionName?.toLowerCase() || "";
     if (session.includes("q1") || session === "qualifying 1") {

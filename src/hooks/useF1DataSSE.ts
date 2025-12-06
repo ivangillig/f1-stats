@@ -169,13 +169,15 @@ export function useF1DataSSE(): F1DataState {
       const sessionData = data.SessionInfo || {};
       const lapCount = data.LapCount || {};
       const extrapolatedClock = data.ExtrapolatedClock;
-      
+
       // Get qualifying part from SessionData.Series (Q1=1, Q2=2, Q3=3)
       let qualifyingPart: number | undefined;
       if (data.SessionData?.Series) {
         const series = data.SessionData.Series;
         // Get the latest entry (highest key)
-        const keys = Object.keys(series).map(Number).sort((a, b) => b - a);
+        const keys = Object.keys(series)
+          .map(Number)
+          .sort((a, b) => b - a);
         if (keys.length > 0) {
           const latestEntry = series[String(keys[0])];
           if (latestEntry?.QualifyingPart) {

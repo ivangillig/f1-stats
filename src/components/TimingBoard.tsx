@@ -12,7 +12,11 @@ interface TimingBoardProps {
   qualifyingPart?: number;
 }
 
-export default function TimingBoard({ drivers, sessionName, qualifyingPart }: TimingBoardProps) {
+export default function TimingBoard({
+  drivers,
+  sessionName,
+  qualifyingPart,
+}: TimingBoardProps) {
   const { t } = useLanguage();
 
   // Get segment counts from first driver or use defaults
@@ -62,7 +66,11 @@ export default function TimingBoard({ drivers, sessionName, qualifyingPart }: Ti
                   opacity: { duration: 0.3 },
                 }}
               >
-                <DriverRow driver={driver} sessionName={sessionName} qualifyingPart={qualifyingPart} />
+                <DriverRow
+                  driver={driver}
+                  sessionName={sessionName}
+                  qualifyingPart={qualifyingPart}
+                />
               </motion.div>
             ))}
           </AnimatePresence>

@@ -126,9 +126,9 @@ export default function Dashboard() {
               ref={timingBoardRef}
               className="min-w-0 overflow-x-auto lg:w-[55%]"
             >
-              <TimingBoard 
-                drivers={drivers} 
-                sessionName={sessionInfo.sessionName} 
+              <TimingBoard
+                drivers={drivers}
+                sessionName={sessionInfo.sessionName}
                 qualifyingPart={sessionInfo.qualifyingPart}
               />
             </div>
