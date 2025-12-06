@@ -13,8 +13,11 @@ export default function Header({ isConnected }: HeaderProps) {
           <div className="bg-primary text-primary-foreground font-black text-lg px-2 py-0.5 rounded">
             F1
           </div>
-          <span className="text-foreground font-semibold text-base">
-            Live Timing
+          <span 
+            className="text-foreground font-semibold text-base"
+            style={{ fontFamily: "'Formula1 Display', sans-serif" }}
+          >
+            Stats
           </span>
         </div>
 

@@ -22,6 +22,58 @@ function formatTimeAgo(utc: string): string {
   return `${Math.floor(diffSec / 3600)}h ago`;
 }
 
+// Audio frequency bars component
+function AudioWaveform({ color, isAnimating }: { color: string; isAnimating: boolean }) {
+  return (
+    <div className="flex items-center gap-[2px] h-4">
+      {[...Array(5)].map((_, i) => (
+        <div
+          key={i}
+          className="w-[3px] rounded-full transition-all"
+          style={{
+            backgroundColor: color,
+            height: isAnimating ? undefined : '4px',
+            animation: isAnimating ? `audioWave 0.5s ease-in-out infinite` : 'none',
+            animationDelay: isAnimating ? `${i * 0.1}s` : '0s',
+          }}
+        />
+      ))}
+      <style jsx>{`
+        @keyframes audioWave {
+          0%, 100% { height: 4px; }
+          50% { height: 16px; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// Play/Stop button icons
+function PlayIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="12" height="12" rx="1" />
+    </svg>
+  );
+}
+
+function LoadingIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
   const { t } = useLanguage();
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
@@ -145,20 +197,20 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
                 }`}
                 onClick={() => handlePlay(index, radio.path)}
               >
-                {/* Play button */}
+                {/* Play/Stop button - cleaner design */}
                 <button
-                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 border-2 ${
                     isPlaying
-                      ? "bg-red-500 scale-105"
-                      : "bg-zinc-700 hover:bg-zinc-600"
+                      ? "border-white/20 bg-white/10 text-white"
+                      : "border-zinc-600 bg-zinc-800 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
                   }`}
                 >
                   {isPlaying && isLoading ? (
-                    <span className="text-xs">⏳</span>
+                    <LoadingIcon />
                   ) : isPlaying ? (
-                    <span className="text-xs">⏹</span>
+                    <StopIcon />
                   ) : (
-                    <span className="text-xs ml-0.5">▶</span>
+                    <PlayIcon />
                   )}
                 </button>
 
@@ -170,26 +222,51 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
                   showLogo={false}
                 />
 
-                {/* Progress bar */}
-                <div className="flex-1 flex items-center h-4 max-w-[100px]">
-                  <div className="w-full h-1.5 bg-zinc-700 rounded-full overflow-hidden">
-                    {isPlaying ? (
-                      isLoading ? (
-                        <div className="h-full bg-zinc-500 animate-pulse w-full" />
-                      ) : (
+                {/* Progress bar with waveform effect */}
+                <div className="flex-1 flex items-center gap-2 min-w-0">
+                  {isPlaying && isActuallyPlaying ? (
+                    <>
+                      {/* Waveform animation */}
+                      <AudioWaveform color={teamColor} isAnimating={true} />
+                      {/* Progress bar */}
+                      <div className="flex-1 h-1.5 bg-zinc-700/50 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-red-500 transition-all duration-200"
-                          style={{ width: `${progress}%` }}
+                          className="h-full rounded-full transition-all duration-100"
+                          style={{ 
+                            width: `${progress}%`,
+                            backgroundColor: teamColor,
+                          }}
                         />
-                      )
-                    ) : (
-                      <div className="h-full bg-zinc-600 w-0" />
-                    )}
-                  </div>
+                      </div>
+                    </>
+                  ) : isPlaying && isLoading ? (
+                    <>
+                      {/* Loading state with pulsing waveform */}
+                      <AudioWaveform color={teamColor} isAnimating={true} />
+                      <div className="flex-1 h-1.5 bg-zinc-700/50 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full animate-pulse"
+                          style={{ 
+                            width: '100%',
+                            backgroundColor: `${teamColor}40`,
+                          }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Static waveform */}
+                      <AudioWaveform color={teamColor} isAnimating={false} />
+                      {/* Empty progress bar */}
+                      <div className="flex-1 h-1.5 bg-zinc-700/50 rounded-full overflow-hidden">
+                        <div className="h-full w-0" />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Time ago */}
-                <span className="text-[10px] text-zinc-500 tabular-nums min-w-[40px] text-right">
+                <span className="text-[10px] text-zinc-500 tabular-nums flex-shrink-0">
                   {formatTimeAgo(radio.utc)}
                 </span>
               </div>

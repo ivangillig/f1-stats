@@ -284,14 +284,19 @@ export default function TopBar({
         {/* Left side - Logo, session, and indicators */}
         <div className="flex items-center gap-4 flex-shrink-0">
           {/* Logo */}
-          <div className="flex items-center gap-2">
+          <a href="/" className="flex items-center gap-2 mr-4">
             <img
               src="/images/logo.png"
-              alt="F1 Dashboard"
+              alt="F1 Stats"
               className="h-14 w-auto"
             />
-            <span className="font-bold text-base tracking-tight">F1 DASH</span>
-          </div>
+            <span 
+              className="font-bold tracking-tight text-2xl"
+              style={{ fontFamily: "'Formula1 Display', sans-serif" }}
+            >
+              F1 Stats
+            </span>
+          </a>
 
           {/* Session info with country flag */}
           <div className="flex items-center gap-3 text-sm">
@@ -300,7 +305,7 @@ export default function TopBar({
                 session.country
               )}.png`}
               alt={session.country}
-              className="h-12 w-auto rounded-sm shadow-md"
+              className="h-10 w-auto rounded-sm shadow-md"
               title={session.country}
               onError={(e) => {
                 e.currentTarget.style.display = "none";
