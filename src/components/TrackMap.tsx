@@ -81,6 +81,10 @@ export default function TrackMap({
       }
     };
 
+    // Clear animated positions when circuit changes to force recalculation
+    animatedPositionsRef.current.clear();
+    setAnimatedPositions(new Map());
+
     fetchMap();
   }, [circuitKey]);
 

@@ -148,6 +148,7 @@ const translations = {
     "session.practice": "Práctica",
     "session.sprintQualifying": "Sprint Qualifying",
     "session.sprint": "Sprint",
+    "session.noActive": "No hay sesión activa",
 
     // Weather
     "weather.trackTemp": "Temperatura de Pista",
@@ -291,6 +292,7 @@ const translations = {
     "session.practice": "Practice",
     "session.sprintQualifying": "Sprint Qualifying",
     "session.sprint": "Sprint",
+    "session.noActive": "No Active Session",
 
     // Weather
     "weather.trackTemp": "Track Temperature",
