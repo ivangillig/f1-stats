@@ -227,7 +227,8 @@ export function useF1Data(): F1DataState {
               inPit: driverData.InPit || existing?.inPit || false,
               pitCount: driverData.NumberOfPitStops || existing?.pitCount || 0,
               retired: driverData.Retired || existing?.retired || false,
-              knockedOut: driverData.KnockedOut || existing?.knockedOut || false,
+              knockedOut:
+                driverData.KnockedOut || existing?.knockedOut || false,
             };
 
             driversMap.set(num, driver);
