@@ -325,7 +325,15 @@ export default function TopBar({
                     : "bg-zinc-500/20 text-zinc-400"
                 }`}
               >
-                {session.type === "Practice"
+                {/* Use sessionName if available (e.g., "Practice 3"), translate the type part */}
+                {session.sessionName
+                  ? session.sessionName
+                      .replace("Practice", t("session.practice"))
+                      .replace("Qualifying", t("session.qualifying"))
+                      .replace("Sprint Qualifying", t("session.sprintQualifying"))
+                      .replace("Sprint", t("session.sprint"))
+                      .replace("Race", t("session.race"))
+                  : session.type === "Practice"
                   ? t("session.practice")
                   : session.type === "Qualifying"
                   ? t("session.qualifying")

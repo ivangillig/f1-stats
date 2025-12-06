@@ -49,6 +49,7 @@ export type SectorStatus = "purple" | "green" | "yellow" | "blue" | "none";
 export interface SessionInfo {
   type: string;
   name: string;
+  sessionName: string; // "Practice 3", "Qualifying", "Race", etc.
   track: string;
   country: string;
   remainingTime: string;

@@ -34,6 +34,7 @@ interface F1DataState {
 const defaultSessionInfo: SessionInfo = {
   type: "Unknown",
   name: "No Active Session",
+  sessionName: "",
   track: "",
   country: "",
   remainingTime: "--:--",
@@ -181,7 +182,7 @@ export function useF1DataSSE(): F1DataState {
         };
       }
 
-      if (sessionData.Meeting || extrapolatedClock?.Remaining) {
+      if (sessionData.Meeting || extrapolatedClock?.Remaining || sessionData.Name) {
         const newCircuitKey = sessionData.Meeting?.Circuit?.Key;
         if (newCircuitKey) {
           console.log("[F1 Data] Circuit Key received:", newCircuitKey);
@@ -194,6 +195,7 @@ export function useF1DataSSE(): F1DataState {
           ...prev,
           type: sessionData.Type || prev.type,
           name: sessionData.Meeting?.Name || prev.name,
+          sessionName: sessionData.Name || prev.sessionName, // "Practice 3", "Qualifying", etc.
           track: sessionData.Meeting?.Circuit?.ShortName || prev.track,
           country: sessionData.Meeting?.Country?.Name || prev.country,
           // Don't set remainingTime here, let the interval handle it
@@ -606,21 +608,36 @@ export function useF1DataSSE(): F1DataState {
             sessionType?.includes("Qualifying");
 
           const sortedDrivers = Array.from(driversMap.values())
-            .filter((d) => d.bestLap || d.gap !== undefined || d.position > 0)
+            .filter((d) => d.driverNumber) // Include all drivers that have a number
             .sort((a, b) => {
               if (isPracticeOrQualy) {
                 // In Practice/Qualifying: sort by best lap time (fastest first)
                 const timeA = parseLapTime(a.bestLap);
                 const timeB = parseLapTime(b.bestLap);
-                // If both have no time, maintain original position
+                
+                // If neither has a time, sort by their original position/line
                 if (timeA === Infinity && timeB === Infinity) {
-                  return (a.position || 99) - (b.position || 99);
+                  const posA = a.position || parseInt(a.driverNumber) || 99;
+                  const posB = b.position || parseInt(b.driverNumber) || 99;
+                  return posA - posB;
                 }
+                // If only one has a time, that one comes first
+                if (timeA === Infinity) return 1;
+                if (timeB === Infinity) return -1;
+                
                 return timeA - timeB;
               } else {
-                // In Race: sort by gap to leader
+                // In Race: sort by gap to leader, then by position
                 const gapA = parseGap(a.gap);
                 const gapB = parseGap(b.gap);
+                
+                // If neither has gap data, use position
+                if (gapA === Infinity && gapB === Infinity) {
+                  const posA = a.position || parseInt(a.driverNumber) || 99;
+                  const posB = b.position || parseInt(b.driverNumber) || 99;
+                  return posA - posB;
+                }
+                
                 return gapA - gapB;
               }
             });
@@ -772,6 +789,7 @@ export function useF1DataSSE(): F1DataState {
     setSessionInfo({
       type: "Race",
       name: "Demo Grand Prix",
+      sessionName: "Race",
       track: "Circuit de Monaco",
       country: "Monaco",
       remainingTime: "1:23:45",
