@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { Driver } from "@/types/f1";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { Driver, TrackStatusInfo, RaceControlMessage } from "@/types/f1";
 import { TEAM_COLORS } from "@/lib/constants";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -9,6 +9,7 @@ interface MapData {
   x: number[];
   y: number[];
   rotation: number;
+  miniSectorsIndexes?: number[];
   corners: {
     number: number;
     angle: number;
@@ -19,6 +20,8 @@ interface MapData {
 interface TrackMapProps {
   drivers: Driver[];
   circuitKey?: number;
+  trackStatus?: TrackStatusInfo;
+  raceControlMessages?: RaceControlMessage[];
 }
 
 const SPACE = 1000;
@@ -40,7 +43,12 @@ const rotate = (x: number, y: number, a: number, px: number, py: number) => {
   return { y: newX + px, x: newY + py };
 };
 
-export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
+export default function TrackMap({
+  drivers,
+  circuitKey = 63,
+  trackStatus,
+  raceControlMessages = [],
+}: TrackMapProps) {
   const { t } = useLanguage();
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -135,34 +143,117 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
       };
     }, [mapData]);
 
-  // Generate car positions on track using trackProgress from segment data
-  const carPositions = useMemo(() => {
-    if (!points || points.length === 0 || !bounds) return [];
+  // Get mini sector boundaries from mapData
+  // miniSectorsIndexes tells us where each mini sector ends in the track points array
+  const miniSectorBoundaries = useMemo(() => {
+    if (!points || points.length === 0 || !mapData?.miniSectorsIndexes)
+      return null;
 
-    // Pit lane is typically near the start/finish line (point 0)
-    // We'll position cars along the pit lane parallel to the main straight
-    // Get the start/finish area (first few points of the track)
-    const pitLaneStartIndex = 0;
-    const pitLaneEndIndex = Math.min(Math.floor(points.length * 0.05), 50); // First 5% of track or max 50 points
+    const indexes = mapData.miniSectorsIndexes;
+    const boundaries: { start: number; end: number }[] = [];
 
-    // Calculate pit lane offset (perpendicular to track direction)
-    const startPoint = points[pitLaneStartIndex];
-    const directionPoint = points[Math.min(pitLaneEndIndex, points.length - 1)];
+    // Each index in miniSectorsIndexes is the END of that mini sector
+    // Mini sector 1 goes from 0 to indexes[0]
+    // Mini sector 2 goes from indexes[0] to indexes[1], etc.
+    for (let i = 0; i < indexes.length; i++) {
+      const start = i === 0 ? 0 : indexes[i - 1];
+      const end = indexes[i];
+      boundaries.push({ start, end });
+    }
 
-    // Direction vector along the track
-    const dx = directionPoint.x - startPoint.x;
-    const dy = directionPoint.y - startPoint.y;
-    const length = Math.sqrt(dx * dx + dy * dy) || 1;
+    // Last mini sector wraps around to start
+    if (indexes.length > 0) {
+      boundaries.push({
+        start: indexes[indexes.length - 1],
+        end: points.length,
+      });
+    }
 
-    // Perpendicular offset for pit lane (offset to the "inside" of the track)
-    const pitOffset = 800; // Distance from track to pit lane
-    const perpX = (-dy / length) * pitOffset;
-    const perpY = (dx / length) * pitOffset;
+    console.log(
+      "[TrackMap] Mini sector boundaries:",
+      boundaries.length,
+      "sectors"
+    );
+    return boundaries;
+  }, [points, mapData]);
 
+  // Check track status flags
+  const isRedFlag = trackStatus?.status === 5;
+  const isYellowFlag = trackStatus?.status === 2;
+  const isGreenFlag = trackStatus?.status === 1;
+
+  // Detect yellow flag sectors from recent race control messages
+  const yellowFlagSectors = useMemo(() => {
+    // If green flag is active, no yellow sectors should show
+    if (isGreenFlag) return new Set<number>();
+
+    const sectors = new Set<number>();
+    const now = Date.now();
+    const recentThreshold = 30000; // Consider messages from last 30 seconds
+
+    // Sort messages by time (oldest first) to process in order
+    const sortedMessages = [...raceControlMessages].sort(
+      (a, b) => new Date(a.utc).getTime() - new Date(b.utc).getTime()
+    );
+
+    sortedMessages.forEach((msg) => {
+      const msgTime = new Date(msg.utc).getTime();
+      const isRecent = now - msgTime < recentThreshold;
+
+      if (!isRecent) return;
+
+      // Check if it's a yellow flag message with sector info
+      if (msg.flag === "YELLOW" && msg.sector) {
+        sectors.add(msg.sector);
+      }
+
+      // Also check message content for sector info (e.g., "YELLOW FLAG IN SECTOR 2")
+      if (msg.message) {
+        const sectorMatch =
+          msg.message.match(/YELLOW.*SECTOR\s*(\d+)/i) ||
+          msg.message.match(/SECTOR\s*(\d+).*YELLOW/i);
+        if (sectorMatch) {
+          sectors.add(parseInt(sectorMatch[1]));
+        }
+      }
+
+      // Clear sector if green/clear flag in that sector
+      if ((msg.flag === "CLEAR" || msg.flag === "GREEN") && msg.sector) {
+        sectors.delete(msg.sector);
+      }
+
+      // Clear all if track goes green
+      if (
+        msg.message?.includes("GREEN LIGHT") ||
+        msg.message?.includes("TRACK CLEAR")
+      ) {
+        sectors.clear();
+      }
+    });
+
+    return sectors;
+  }, [raceControlMessages, isGreenFlag]);
+
+  // Animation state - currentIndex is a float that moves smoothly through track points
+  const animatedPositionsRef = useRef<
+    Map<string, { currentIndex: number; inPit: boolean }>
+  >(new Map());
+  const [renderTick, setRenderTick] = useState(0); // Force re-render
+  const animationFrameRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef<number>(Date.now());
+
+  // Calculate target positions based on driver data (this is the "goal" for animation)
+  const targetPositions = useMemo(() => {
+    if (!points || points.length === 0 || !bounds)
+      return new Map<string, { targetIndex: number; inPit: boolean }>();
+
+    const pitLaneEndIndex = Math.min(Math.floor(points.length * 0.05), 50);
+    const miniSectorIndexes = mapData?.miniSectorsIndexes || [];
+
+    const targets = new Map<string, { targetIndex: number; inPit: boolean }>();
     let pitIndex = 0;
 
-    return drivers.map((driver) => {
-      // If driver is in pit or has no lap time data yet, show them in pit area
+    drivers.forEach((driver) => {
       const hasNoTrackData =
         !driver.trackX &&
         !driver.trackY &&
@@ -171,77 +262,256 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
         driver.inPit || (hasNoTrackData && !driver.bestLap && !driver.lastLap);
 
       if (shouldBeInPit) {
-        // Position cars along the pit lane, spaced out
+        // Position in pit lane
         const pitProgress =
           pitIndex /
           Math.max(
             20,
             drivers.filter((d) => d.inPit || (!d.bestLap && !d.lastLap)).length
           );
-        const trackIdx =
-          Math.floor(pitProgress * (pitLaneEndIndex - pitLaneStartIndex)) +
-          pitLaneStartIndex;
-        const safeIdx = Math.max(0, Math.min(points.length - 1, trackIdx));
-        const basePoint = points[safeIdx];
-
+        const trackIdx = Math.floor(pitProgress * pitLaneEndIndex);
         pitIndex++;
-        return {
-          driver,
-          x: basePoint.x + perpX,
-          y: basePoint.y + perpY,
+        targets.set(driver.driverNumber, {
+          targetIndex: trackIdx,
           inPit: true,
-        };
+        });
+        return;
       }
 
-      // If we have real track coordinates from replay, use them
-      if (driver.trackX !== undefined && driver.trackY !== undefined) {
-        // Apply same rotation as the track
-        const rotatedPos = rotate(
-          driver.trackX,
-          driver.trackY,
-          (mapData?.rotation || 0) + ROTATION_FIX,
-          centerX,
-          centerY
-        );
-        return {
-          driver,
-          x: rotatedPos.x,
-          y: rotatedPos.y,
-          inPit: false,
-        };
+      // Calculate position from mini sectors
+      if (
+        driver.miniSectors &&
+        driver.miniSectors.length > 0 &&
+        miniSectorIndexes.length > 0
+      ) {
+        const completedMiniSectors = driver.miniSectors.filter(
+          (s) => s !== "none"
+        ).length;
+
+        if (
+          completedMiniSectors > 0 &&
+          completedMiniSectors <= miniSectorIndexes.length
+        ) {
+          const targetIndex = miniSectorIndexes[completedMiniSectors - 1] || 0;
+          targets.set(driver.driverNumber, { targetIndex, inPit: false });
+          return;
+        }
       }
 
-      // Use trackProgress (0-1) from segment completion to position on track
+      // Use trackProgress if available
       if (driver.trackProgress !== undefined && driver.trackProgress > 0) {
         const trackIndex = Math.floor(driver.trackProgress * points.length);
-        const safeIndex = Math.max(0, Math.min(points.length - 1, trackIndex));
-        const pos = points[safeIndex];
-        return {
-          driver,
-          x: pos.x,
-          y: pos.y,
+        targets.set(driver.driverNumber, {
+          targetIndex: trackIndex,
           inPit: false,
-        };
+        });
+        return;
       }
 
-      // Fallback: distribute cars along the track based on race position
-      // Only for drivers that have some timing data
+      // Fallback: use position
       const trackIndex =
         Math.floor(
           ((driver.position - 1) * points.length) / (drivers.length + 5)
         ) % points.length;
+      targets.set(driver.driverNumber, {
+        targetIndex: trackIndex,
+        inPit: false,
+      });
+    });
 
-      const safeIndex = Math.max(0, Math.min(points.length - 1, trackIndex));
-      const pos = points[safeIndex];
+    return targets;
+  }, [drivers, points, bounds, mapData]);
+
+  // Helper to interpolate between two track points
+  const getInterpolatedPoint = useCallback(
+    (index: number) => {
+      if (!points || points.length === 0) return { x: 0, y: 0 };
+
+      const totalPoints = points.length;
+      const normalizedIndex =
+        ((index % totalPoints) + totalPoints) % totalPoints;
+      const floorIndex = Math.floor(normalizedIndex);
+      const ceilIndex = (floorIndex + 1) % totalPoints;
+      const fraction = normalizedIndex - floorIndex;
+
+      const p1 = points[floorIndex];
+      const p2 = points[ceilIndex];
+
+      return {
+        x: p1.x + (p2.x - p1.x) * fraction,
+        y: p1.y + (p2.y - p1.y) * fraction,
+      };
+    },
+    [points]
+  );
+
+  // Animation loop for smooth movement along track points
+  const animate = useCallback(() => {
+    if (!points || points.length === 0) {
+      animationFrameRef.current = requestAnimationFrame(animate);
+      return;
+    }
+
+    const now = Date.now();
+    const deltaTime = Math.min(now - lastFrameTimeRef.current, 100);
+    lastFrameTimeRef.current = now;
+
+    // Speed: points per second (a lap is ~90 seconds, track has ~770 points)
+    // Slightly faster for smoother feel: ~12 points per second
+    const pointsPerSecond = points.length / 65;
+    const movement = pointsPerSecond * (deltaTime / 1000);
+
+    let hasChanges = false;
+
+    targetPositions.forEach((target, driverNumber) => {
+      let current = animatedPositionsRef.current.get(driverNumber);
+
+      if (!current) {
+        // Initialize at target position
+        animatedPositionsRef.current.set(driverNumber, {
+          currentIndex: target.targetIndex,
+          inPit: target.inPit,
+        });
+        hasChanges = true;
+        return;
+      }
+
+      // Update pit status
+      if (current.inPit !== target.inPit) {
+        current.inPit = target.inPit;
+        if (target.inPit) {
+          // Just entered pit, jump to pit position
+          current.currentIndex = target.targetIndex;
+        }
+        hasChanges = true;
+      }
+
+      if (target.inPit) {
+        // In pit, just stay at pit position
+        if (Math.abs(current.currentIndex - target.targetIndex) > 0.5) {
+          current.currentIndex = target.targetIndex;
+          hasChanges = true;
+        }
+        return;
+      }
+
+      // On track - animate smoothly
+      const totalPoints = points.length;
+
+      // Calculate shortest path to target (considering wrap-around)
+      let diff = target.targetIndex - current.currentIndex;
+
+      // Normalize to handle crossing start/finish line
+      if (diff > totalPoints / 2) {
+        diff -= totalPoints;
+      } else if (diff < -totalPoints / 2) {
+        diff += totalPoints;
+      }
+
+      // Only move forward (F1 cars don't go backwards!)
+      // If target is "behind" us (negative diff), we need to complete the lap
+      if (diff < 0) {
+        diff += totalPoints;
+      }
+
+      // Move towards target
+      if (diff > 0.5) {
+        const step = Math.min(diff, movement);
+        current.currentIndex = (current.currentIndex + step) % totalPoints;
+        hasChanges = true;
+      }
+    });
+
+    if (hasChanges) {
+      setRenderTick((t) => t + 1);
+    }
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+  }, [points, targetPositions]);
+
+  // Start animation loop
+  useEffect(() => {
+    if (points && points.length > 0) {
+      lastFrameTimeRef.current = Date.now();
+      animationFrameRef.current = requestAnimationFrame(animate);
+    }
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [animate]);
+
+  // Build car positions for rendering - uses animatedPositionsRef for smooth positions
+  const carPositions = useMemo(() => {
+    if (!points || points.length === 0) return [];
+
+    // Calculate pit lane offset - use a fixed small offset inward from track
+    const pitOffset = 500;
+
+    return drivers.map((driver) => {
+      const animated = animatedPositionsRef.current.get(driver.driverNumber);
+      const target = targetPositions.get(driver.driverNumber);
+
+      if (!animated) {
+        // No animation data yet, use target directly
+        const idx = target?.targetIndex || 0;
+        const point = points[Math.floor(idx) % points.length] || points[0];
+
+        // For pit, calculate local perpendicular direction
+        if (target?.inPit) {
+          const nextIdx = (Math.floor(idx) + 1) % points.length;
+          const nextPoint = points[nextIdx];
+          const dx = nextPoint.x - point.x;
+          const dy = nextPoint.y - point.y;
+          const len = Math.sqrt(dx * dx + dy * dy) || 1;
+          // Perpendicular to track direction (inward)
+          return {
+            driver,
+            x: point.x + (dy / len) * pitOffset,
+            y: point.y - (dx / len) * pitOffset,
+            inPit: true,
+          };
+        }
+        return {
+          driver,
+          x: point.x,
+          y: point.y,
+          inPit: false,
+        };
+      }
+
+      // Get interpolated position from current animated index (smooth!)
+      const interpolated = getInterpolatedPoint(animated.currentIndex);
+
+      if (animated.inPit) {
+        // Calculate perpendicular for pit offset at this point
+        const idx = Math.floor(animated.currentIndex) % points.length;
+        const nextIdx = (idx + 1) % points.length;
+        const point = points[idx];
+        const nextPoint = points[nextIdx];
+        const dx = nextPoint.x - point.x;
+        const dy = nextPoint.y - point.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        return {
+          driver,
+          x: interpolated.x + (dy / len) * pitOffset,
+          y: interpolated.y - (dx / len) * pitOffset,
+          inPit: true,
+        };
+      }
 
       return {
         driver,
-        x: pos.x,
-        y: pos.y,
+        x: interpolated.x,
+        y: interpolated.y,
         inPit: false,
       };
     });
-  }, [drivers, points, bounds, mapData, centerX, centerY]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drivers, points, targetPositions, renderTick, getInterpolatedPoint]); // renderTick forces update on animation
 
   if (loading) {
     return (
@@ -261,6 +531,33 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
 
   const [minX, minY, widthX, widthY] = bounds;
 
+  // Helper to get points for a specific mini sector
+  // F1 sector numbers in messages appear to be 1-indexed (sector 1, 2, 3...)
+  // but miniSectorsIndexes array is 0-indexed
+  const getMiniSectorPath = (sectorNum: number) => {
+    if (!miniSectorBoundaries || !points) return "";
+
+    // Try direct index first (if F1 sends 0-indexed)
+    let index = sectorNum;
+    if (index < 0 || index >= miniSectorBoundaries.length) {
+      // If out of bounds, try 1-indexed (sectorNum - 1)
+      index = sectorNum - 1;
+    }
+    if (index < 0 || index >= miniSectorBoundaries.length) return "";
+
+    const boundary = miniSectorBoundaries[index];
+    const sectorPoints = points.slice(boundary.start, boundary.end + 1);
+    if (sectorPoints.length === 0) return "";
+
+    console.log(
+      `[TrackMap] Drawing sector ${sectorNum} (index ${index}): points ${boundary.start}-${boundary.end}`
+    );
+
+    return `M${sectorPoints[0].x},${sectorPoints[0].y} ${sectorPoints
+      .map((point) => `L${point.x},${point.y}`)
+      .join(" ")}`;
+  };
+
   return (
     <div className="h-full w-full flex items-center justify-center py-0 px-1">
       <svg
@@ -268,13 +565,25 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
         className="w-full h-full"
         xmlns="http://www.w3.org/2000/svg"
       >
+        {/* Track fill - changes color on red flag */}
+        <path
+          strokeWidth={0}
+          fill={isRedFlag ? "rgba(255, 0, 0, 0.25)" : "transparent"}
+          className={isRedFlag ? "red-flag-fill" : ""}
+          d={`M${points[0].x},${points[0].y} ${points
+            .map((point) => `L${point.x},${point.y}`)
+            .join(" ")} Z`}
+        />
+
         {/* Track outline */}
         <path
-          className="stroke-zinc-700"
+          stroke={isRedFlag ? "#ff4444" : undefined}
+          className={isRedFlag ? "" : "stroke-zinc-700"}
           strokeWidth={300}
           strokeLinejoin="round"
           strokeLinecap="round"
           fill="transparent"
+          style={{ transition: "stroke 0.5s ease" }}
           d={`M${points[0].x},${points[0].y} ${points
             .map((point) => `L${point.x},${point.y}`)
             .join(" ")} Z`}
@@ -291,6 +600,35 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
             .map((point) => `L${point.x},${point.y}`)
             .join(" ")} Z`}
         />
+
+        {/* Yellow flag mini sectors overlay */}
+        {Array.from(yellowFlagSectors).map((sectorNum) => (
+          <path
+            key={`yellow-sector-${sectorNum}`}
+            stroke="#ffb900"
+            strokeWidth={220}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            fill="transparent"
+            className="yellow-flag-sector"
+            d={getMiniSectorPath(sectorNum)}
+          />
+        ))}
+
+        {/* Full track yellow flag when status is yellow but no specific sector */}
+        {isYellowFlag && yellowFlagSectors.size === 0 && (
+          <path
+            stroke="#ffb900"
+            strokeWidth={220}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            fill="transparent"
+            opacity={0.5}
+            d={`M${points[0].x},${points[0].y} ${points
+              .map((point) => `L${point.x},${point.y}`)
+              .join(" ")} Z`}
+          />
+        )}
 
         {/* Corner numbers */}
         {corners.map((corner) => (

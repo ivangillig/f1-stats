@@ -269,6 +269,7 @@ export function useF1DataSSE(): F1DataState {
               flag: m.Flag,
               lap: m.Lap,
               driverNumber: m.RacingNumber,
+              sector: m.Sector, // Sector number for yellow flags
             })
           );
           const allMessages = [...newMessages, ...prev];

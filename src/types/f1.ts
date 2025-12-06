@@ -92,6 +92,7 @@ export interface RaceControlMessage {
   flag?: string;
   lap?: number;
   driverNumber?: string;
+  sector?: number; // Sector number for yellow flags
 }
 
 export interface F1State {

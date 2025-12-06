@@ -142,6 +142,8 @@ export default function Dashboard() {
                 <TrackMap
                   drivers={drivers}
                   circuitKey={sessionInfo.circuitKey}
+                  trackStatus={trackStatus}
+                  raceControlMessages={raceControlMessages}
                 />
               </div>
 

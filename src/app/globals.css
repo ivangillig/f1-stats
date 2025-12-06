@@ -93,3 +93,32 @@
 }
 
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+
+/* Track map flag animations */
+@keyframes yellowPulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes redPulse {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.yellow-flag-sector {
+  animation: yellowPulse 1s ease-in-out infinite;
+}
+
+.red-flag-fill {
+  animation: redPulse 1.5s ease-in-out infinite;
+}
