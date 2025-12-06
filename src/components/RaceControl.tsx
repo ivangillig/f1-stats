@@ -8,14 +8,17 @@ interface RaceControlProps {
 }
 
 function getFlagIcon(message: string) {
-  if (message.includes("YELLOW") || message.includes("DOUBLE YELLOW"))
-    return "🟡";
+  // Check most specific patterns first to avoid partial matches
+  // CHEQUERED contains "RED" so must be checked before RED FLAG
+  if (message.includes("CHEQUERED")) return "🏁";
+  if (message.includes("BLACK AND WHITE")) return "⚑";
+  if (message.includes("DOUBLE YELLOW")) return "🟡";
+  // Now check simpler patterns
+  if (message.includes("YELLOW")) return "🟡";
   if (message.includes("RED FLAG")) return "🔴";
   if (message.includes("GREEN")) return "🟢";
   if (message.includes("BLUE FLAG")) return "🔵";
-  if (message.includes("BLACK AND WHITE")) return "⚑";
   if (message.includes("BLACK FLAG")) return "⚫";
-  if (message.includes("CHEQUERED")) return "🏁";
   return null;
 }
 
@@ -41,18 +44,11 @@ function translateMessage(
 
   // Translation patterns - order matters (most specific first)
   const patterns = [
-    { regex: /DOUBLE YELLOW FLAG/gi, key: "raceControl.flag.doubleYellow" },
-    { regex: /YELLOW FLAG/gi, key: "raceControl.flag.yellow" },
-    { regex: /GREEN FLAG/gi, key: "raceControl.flag.green" },
-    { regex: /RED FLAG/gi, key: "raceControl.flag.red" },
-    { regex: /BLUE FLAG/gi, key: "raceControl.flag.blue" },
+    // Most specific patterns first to avoid partial matches
     { regex: /CHEQUERED FLAG/gi, key: "raceControl.flag.chequered" },
+    { regex: /DOUBLE YELLOW FLAG/gi, key: "raceControl.flag.doubleYellow" },
     { regex: /BLACK AND WHITE FLAG/gi, key: "raceControl.flag.blackWhite" },
-    { regex: /BLACK FLAG/gi, key: "raceControl.flag.black" },
-    {
-      regex: /SAFETY CAR DEPLOYED/gi,
-      key: "raceControl.msg.safetyCarDeployed",
-    },
+    { regex: /SAFETY CAR DEPLOYED/gi, key: "raceControl.msg.safetyCarDeployed" },
     { regex: /SAFETY CAR ENDING/gi, key: "raceControl.msg.safetyCarEnding" },
     { regex: /VSC DEPLOYED/gi, key: "raceControl.msg.vscDeployed" },
     { regex: /VSC ENDING/gi, key: "raceControl.msg.vscEnding" },
@@ -60,6 +56,12 @@ function translateMessage(
     { regex: /DRS DISABLED/gi, key: "raceControl.msg.drsDisabled" },
     { regex: /TRACK LIMITS/gi, key: "raceControl.msg.trackLimits" },
     { regex: /ALL CLEAR/gi, key: "raceControl.msg.allClear" },
+    // Simpler patterns last
+    { regex: /YELLOW FLAG/gi, key: "raceControl.flag.yellow" },
+    { regex: /GREEN FLAG/gi, key: "raceControl.flag.green" },
+    { regex: /RED FLAG/gi, key: "raceControl.flag.red" },
+    { regex: /BLUE FLAG/gi, key: "raceControl.flag.blue" },
+    { regex: /BLACK FLAG/gi, key: "raceControl.flag.black" },
     { regex: /\bCLEARED\b/gi, key: "raceControl.msg.cleared" },
     { regex: /\bCLEAR\b/gi, key: "raceControl.msg.clear" },
   ];
