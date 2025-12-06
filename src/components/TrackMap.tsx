@@ -92,7 +92,12 @@ export default function TrackMap({
 
   // Clear animated positions when session changes (Q1→Q2→Q3 or session restart)
   useEffect(() => {
-    console.log("[TrackMap] Session change detected, clearing positions. qualifyingPart:", qualifyingPart, "isSessionActive:", isSessionActive);
+    console.log(
+      "[TrackMap] Session change detected, clearing positions. qualifyingPart:",
+      qualifyingPart,
+      "isSessionActive:",
+      isSessionActive
+    );
     animatedPositionsRef.current.clear();
     setAnimatedPositions(new Map());
   }, [qualifyingPart, isSessionActive]);
