@@ -30,7 +30,9 @@ export default function SessionInfoComponent({ session }: SessionInfoProps) {
       <CardContent className="space-y-3">
         <div>
           <p className="text-lg font-semibold text-foreground">
-            {session.name === "No Active Session" ? t("session.noActive") : (session.name || "—")}
+            {session.name === "No Active Session"
+              ? t("session.noActive")
+              : session.name || "—"}
           </p>
           <span className="text-sm text-muted-foreground">{session.track}</span>
         </div>

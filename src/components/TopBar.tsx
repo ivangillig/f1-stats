@@ -342,7 +342,9 @@ export default function TopBar({
             />
             <div className="flex flex-col">
               <span className="text-white font-bold text-base">
-                {session.name === "No Active Session" ? t("session.noActive") : (session.name || t("session.noActive"))}
+                {session.name === "No Active Session"
+                  ? t("session.noActive")
+                  : session.name || t("session.noActive")}
               </span>
               <span className="text-zinc-400 text-sm">{session.track}</span>
             </div>
