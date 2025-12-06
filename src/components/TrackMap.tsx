@@ -234,13 +234,13 @@ export default function TrackMap({
     return sectors;
   }, [raceControlMessages, isGreenFlag]);
 
-  // Animation state - currentIndex is a float that moves smoothly through track points
+  // Animation state - store current position and velocity for smooth movement
   const animatedPositionsRef = useRef<
-    Map<string, { currentIndex: number; inPit: boolean }>
+    Map<string, { currentIndex: number; inPit: boolean; velocity: number }>
   >(new Map());
-  const [renderTick, setRenderTick] = useState(0); // Force re-render
   const animationFrameRef = useRef<number | null>(null);
-  const lastFrameTimeRef = useRef<number>(Date.now());
+  const lastFrameTimeRef = useRef<number>(performance.now());
+  const [animatedPositions, setAnimatedPositions] = useState<Map<string, { x: number; y: number; inPit: boolean }>>(new Map());
 
   // Calculate target positions based on driver data (this is the "goal" for animation)
   const targetPositions = useMemo(() => {
@@ -352,15 +352,18 @@ export default function TrackMap({
       return;
     }
 
-    const now = Date.now();
-    const deltaTime = Math.min(now - lastFrameTimeRef.current, 100);
+    const now = performance.now();
+    const deltaTime = Math.min((now - lastFrameTimeRef.current) / 1000, 0.1); // seconds, capped at 100ms
     lastFrameTimeRef.current = now;
 
-    // Speed: points per second (a lap is ~90 seconds, track has ~770 points)
-    // Slightly faster for smoother feel: ~12 points per second
-    const pointsPerSecond = points.length / 65;
-    const movement = pointsPerSecond * (deltaTime / 1000);
+    const totalPoints = points.length;
+    // Base speed: complete a lap in ~85 seconds
+    const baseSpeed = totalPoints / 85;
+    
+    // Pit lane offset calculation
+    const pitOffset = 500;
 
+    const newPositions = new Map<string, { x: number; y: number; inPit: boolean }>();
     let hasChanges = false;
 
     targetPositions.forEach((target, driverNumber) => {
@@ -368,71 +371,96 @@ export default function TrackMap({
 
       if (!current) {
         // Initialize at target position
-        animatedPositionsRef.current.set(driverNumber, {
+        current = {
           currentIndex: target.targetIndex,
           inPit: target.inPit,
-        });
-        hasChanges = true;
-        return;
+          velocity: baseSpeed,
+        };
+        animatedPositionsRef.current.set(driverNumber, current);
       }
 
-      // Update pit status
+      // Handle pit status change
       if (current.inPit !== target.inPit) {
         current.inPit = target.inPit;
         if (target.inPit) {
-          // Just entered pit, jump to pit position
           current.currentIndex = target.targetIndex;
         }
-        hasChanges = true;
       }
 
-      if (target.inPit) {
-        // In pit, just stay at pit position
-        if (Math.abs(current.currentIndex - target.targetIndex) > 0.5) {
-          current.currentIndex = target.targetIndex;
+      if (!target.inPit) {
+        // Calculate distance to target (always moving forward)
+        let diff = target.targetIndex - current.currentIndex;
+        
+        // Handle wrap-around (crossing start/finish)
+        while (diff < 0) diff += totalPoints;
+        while (diff > totalPoints) diff -= totalPoints;
+        
+        // If target jumped back significantly, it means new lap data - catch up faster
+        if (diff > totalPoints * 0.7) {
+          // Target is "behind" but actually ahead (new lap)
+          diff = totalPoints - diff;
+          if (diff < 0) diff += totalPoints;
+        }
+
+        // Smooth acceleration/deceleration based on distance to target
+        // When far from target, speed up; when close, match target speed
+        let targetVelocity = baseSpeed;
+        
+        if (diff > totalPoints * 0.1) {
+          // Far behind - speed up significantly to catch up
+          targetVelocity = baseSpeed * 3;
+        } else if (diff > totalPoints * 0.03) {
+          // Moderately behind - speed up a bit
+          targetVelocity = baseSpeed * 1.5;
+        } else if (diff < 2) {
+          // Very close - slow down to avoid overshooting
+          targetVelocity = baseSpeed * 0.8;
+        }
+
+        // Smooth velocity changes (lerp)
+        current.velocity += (targetVelocity - current.velocity) * Math.min(deltaTime * 3, 1);
+        
+        // Move forward
+        if (diff > 0.1) {
+          const step = current.velocity * deltaTime;
+          current.currentIndex = (current.currentIndex + step) % totalPoints;
           hasChanges = true;
         }
-        return;
       }
 
-      // On track - animate smoothly
-      const totalPoints = points.length;
-
-      // Calculate shortest path to target (considering wrap-around)
-      let diff = target.targetIndex - current.currentIndex;
-
-      // Normalize to handle crossing start/finish line
-      if (diff > totalPoints / 2) {
-        diff -= totalPoints;
-      } else if (diff < -totalPoints / 2) {
-        diff += totalPoints;
+      // Calculate screen position
+      const interpolated = getInterpolatedPoint(current.currentIndex);
+      
+      let x = interpolated.x;
+      let y = interpolated.y;
+      
+      if (current.inPit) {
+        // Calculate perpendicular offset for pit lane
+        const idx = Math.floor(current.currentIndex) % totalPoints;
+        const nextIdx = (idx + 1) % totalPoints;
+        const point = points[idx];
+        const nextPoint = points[nextIdx];
+        const dx = nextPoint.x - point.x;
+        const dy = nextPoint.y - point.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        x = interpolated.x + (dy / len) * pitOffset;
+        y = interpolated.y - (dx / len) * pitOffset;
       }
 
-      // Only move forward (F1 cars don't go backwards!)
-      // If target is "behind" us (negative diff), we need to complete the lap
-      if (diff < 0) {
-        diff += totalPoints;
-      }
-
-      // Move towards target
-      if (diff > 0.5) {
-        const step = Math.min(diff, movement);
-        current.currentIndex = (current.currentIndex + step) % totalPoints;
-        hasChanges = true;
-      }
+      newPositions.set(driverNumber, { x, y, inPit: current.inPit });
     });
 
-    if (hasChanges) {
-      setRenderTick((t) => t + 1);
+    // Batch update state only when there are changes
+    if (hasChanges || newPositions.size !== animatedPositions.size) {
+      setAnimatedPositions(newPositions);
     }
 
     animationFrameRef.current = requestAnimationFrame(animate);
-  }, [points, targetPositions]);
-
+  }, [points, targetPositions, getInterpolatedPoint, animatedPositions.size]);
   // Start animation loop
   useEffect(() => {
     if (points && points.length > 0) {
-      lastFrameTimeRef.current = Date.now();
+      lastFrameTimeRef.current = performance.now();
       animationFrameRef.current = requestAnimationFrame(animate);
     }
 
@@ -441,77 +469,24 @@ export default function TrackMap({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [animate]);
+  }, [animate, points]);
 
-  // Build car positions for rendering - uses animatedPositionsRef for smooth positions
+  // Build car positions for rendering from animated state
   const carPositions = useMemo(() => {
-    if (!points || points.length === 0) return [];
-
-    // Calculate pit lane offset - use a fixed small offset inward from track
-    const pitOffset = 500;
-
     return drivers.map((driver) => {
-      const animated = animatedPositionsRef.current.get(driver.driverNumber);
+      const pos = animatedPositions.get(driver.driverNumber);
+      if (pos) {
+        return { driver, x: pos.x, y: pos.y, inPit: pos.inPit };
+      }
+      // Fallback if no animated position yet
       const target = targetPositions.get(driver.driverNumber);
-
-      if (!animated) {
-        // No animation data yet, use target directly
-        const idx = target?.targetIndex || 0;
-        const point = points[Math.floor(idx) % points.length] || points[0];
-
-        // For pit, calculate local perpendicular direction
-        if (target?.inPit) {
-          const nextIdx = (Math.floor(idx) + 1) % points.length;
-          const nextPoint = points[nextIdx];
-          const dx = nextPoint.x - point.x;
-          const dy = nextPoint.y - point.y;
-          const len = Math.sqrt(dx * dx + dy * dy) || 1;
-          // Perpendicular to track direction (inward)
-          return {
-            driver,
-            x: point.x + (dy / len) * pitOffset,
-            y: point.y - (dx / len) * pitOffset,
-            inPit: true,
-          };
-        }
-        return {
-          driver,
-          x: point.x,
-          y: point.y,
-          inPit: false,
-        };
+      if (target && points && points.length > 0) {
+        const point = points[Math.floor(target.targetIndex) % points.length];
+        return { driver, x: point.x, y: point.y, inPit: target.inPit };
       }
-
-      // Get interpolated position from current animated index (smooth!)
-      const interpolated = getInterpolatedPoint(animated.currentIndex);
-
-      if (animated.inPit) {
-        // Calculate perpendicular for pit offset at this point
-        const idx = Math.floor(animated.currentIndex) % points.length;
-        const nextIdx = (idx + 1) % points.length;
-        const point = points[idx];
-        const nextPoint = points[nextIdx];
-        const dx = nextPoint.x - point.x;
-        const dy = nextPoint.y - point.y;
-        const len = Math.sqrt(dx * dx + dy * dy) || 1;
-
-        return {
-          driver,
-          x: interpolated.x + (dy / len) * pitOffset,
-          y: interpolated.y - (dx / len) * pitOffset,
-          inPit: true,
-        };
-      }
-
-      return {
-        driver,
-        x: interpolated.x,
-        y: interpolated.y,
-        inPit: false,
-      };
+      return { driver, x: 0, y: 0, inPit: false };
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drivers, points, targetPositions, renderTick, getInterpolatedPoint]); // renderTick forces update on animation
+  }, [drivers, animatedPositions, targetPositions, points]);
 
   if (loading) {
     return (
@@ -653,19 +628,15 @@ export default function TrackMap({
           return (
             <g
               key={`car.${driver.driverNumber}`}
-              style={{
-                transition: "all 1s linear",
-                transform: `translateX(${x}px) translateY(${y}px)`,
-              }}
+              transform={`translate(${x}, ${y})`}
             >
               <circle r={120} fill={teamColor} />
               <text
                 fontWeight="bold"
                 fontSize={300}
                 fill={teamColor}
-                style={{
-                  transform: "translateX(150px) translateY(-120px)",
-                }}
+                x={150}
+                y={-120}
               >
                 {driver.code}
               </text>
