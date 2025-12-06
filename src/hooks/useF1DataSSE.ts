@@ -583,7 +583,8 @@ export function useF1DataSSE(): F1DataState {
                 pitCount:
                   driverData.NumberOfPitStops ?? existing?.pitCount ?? 0,
                 retired: driverData.Retired || existing?.retired || false,
-                knockedOut: driverData.KnockedOut || existing?.knockedOut || false,
+                knockedOut:
+                  driverData.KnockedOut || existing?.knockedOut || false,
                 trackProgress: calculateTrackProgress(sectors),
                 trackX: carDataRef.current[num]?.x ?? existing?.trackX,
                 trackY: carDataRef.current[num]?.y ?? existing?.trackY,
