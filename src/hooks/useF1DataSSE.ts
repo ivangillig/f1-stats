@@ -182,7 +182,11 @@ export function useF1DataSSE(): F1DataState {
         };
       }
 
-      if (sessionData.Meeting || extrapolatedClock?.Remaining || sessionData.Name) {
+      if (
+        sessionData.Meeting ||
+        extrapolatedClock?.Remaining ||
+        sessionData.Name
+      ) {
         const newCircuitKey = sessionData.Meeting?.Circuit?.Key;
         if (newCircuitKey) {
           console.log("[F1 Data] Circuit Key received:", newCircuitKey);
@@ -614,7 +618,7 @@ export function useF1DataSSE(): F1DataState {
                 // In Practice/Qualifying: sort by best lap time (fastest first)
                 const timeA = parseLapTime(a.bestLap);
                 const timeB = parseLapTime(b.bestLap);
-                
+
                 // If neither has a time, sort by their original position/line
                 if (timeA === Infinity && timeB === Infinity) {
                   const posA = a.position || parseInt(a.driverNumber) || 99;
@@ -624,20 +628,20 @@ export function useF1DataSSE(): F1DataState {
                 // If only one has a time, that one comes first
                 if (timeA === Infinity) return 1;
                 if (timeB === Infinity) return -1;
-                
+
                 return timeA - timeB;
               } else {
                 // In Race: sort by gap to leader, then by position
                 const gapA = parseGap(a.gap);
                 const gapB = parseGap(b.gap);
-                
+
                 // If neither has gap data, use position
                 if (gapA === Infinity && gapB === Infinity) {
                   const posA = a.position || parseInt(a.driverNumber) || 99;
                   const posB = b.position || parseInt(b.driverNumber) || 99;
                   return posA - posB;
                 }
-                
+
                 return gapA - gapB;
               }
             });

@@ -330,7 +330,10 @@ export default function TopBar({
                   ? session.sessionName
                       .replace("Practice", t("session.practice"))
                       .replace("Qualifying", t("session.qualifying"))
-                      .replace("Sprint Qualifying", t("session.sprintQualifying"))
+                      .replace(
+                        "Sprint Qualifying",
+                        t("session.sprintQualifying")
+                      )
                       .replace("Sprint", t("session.sprint"))
                       .replace("Race", t("session.race"))
                   : session.type === "Practice"

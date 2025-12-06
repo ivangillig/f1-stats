@@ -144,36 +144,46 @@ export default function TrackMap({ drivers, circuitKey = 63 }: TrackMapProps) {
     // Get the start/finish area (first few points of the track)
     const pitLaneStartIndex = 0;
     const pitLaneEndIndex = Math.min(Math.floor(points.length * 0.05), 50); // First 5% of track or max 50 points
-    
+
     // Calculate pit lane offset (perpendicular to track direction)
     const startPoint = points[pitLaneStartIndex];
     const directionPoint = points[Math.min(pitLaneEndIndex, points.length - 1)];
-    
+
     // Direction vector along the track
     const dx = directionPoint.x - startPoint.x;
     const dy = directionPoint.y - startPoint.y;
     const length = Math.sqrt(dx * dx + dy * dy) || 1;
-    
+
     // Perpendicular offset for pit lane (offset to the "inside" of the track)
     const pitOffset = 800; // Distance from track to pit lane
     const perpX = (-dy / length) * pitOffset;
     const perpY = (dx / length) * pitOffset;
-    
+
     let pitIndex = 0;
 
     return drivers.map((driver) => {
       // If driver is in pit or has no lap time data yet, show them in pit area
-      const hasNoTrackData = !driver.trackX && !driver.trackY && 
-                             (driver.trackProgress === undefined || driver.trackProgress === 0);
-      const shouldBeInPit = driver.inPit || (hasNoTrackData && !driver.bestLap && !driver.lastLap);
-      
+      const hasNoTrackData =
+        !driver.trackX &&
+        !driver.trackY &&
+        (driver.trackProgress === undefined || driver.trackProgress === 0);
+      const shouldBeInPit =
+        driver.inPit || (hasNoTrackData && !driver.bestLap && !driver.lastLap);
+
       if (shouldBeInPit) {
         // Position cars along the pit lane, spaced out
-        const pitProgress = pitIndex / Math.max(20, drivers.filter(d => d.inPit || (!d.bestLap && !d.lastLap)).length);
-        const trackIdx = Math.floor(pitProgress * (pitLaneEndIndex - pitLaneStartIndex)) + pitLaneStartIndex;
+        const pitProgress =
+          pitIndex /
+          Math.max(
+            20,
+            drivers.filter((d) => d.inPit || (!d.bestLap && !d.lastLap)).length
+          );
+        const trackIdx =
+          Math.floor(pitProgress * (pitLaneEndIndex - pitLaneStartIndex)) +
+          pitLaneStartIndex;
         const safeIdx = Math.max(0, Math.min(points.length - 1, trackIdx));
         const basePoint = points[safeIdx];
-        
+
         pitIndex++;
         return {
           driver,
