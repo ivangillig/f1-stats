@@ -352,12 +352,16 @@ export default function DriverRow({ driver }: DriverRowProps) {
         <div
           className={cn(
             "text-xl font-f1 font-medium leading-none tracking-tight",
-            driver.lastLapPersonalBest
-              ? "text-[oklch(.696_.17_162.48)]"
+            driver.lastLapOverallFastest
+              ? "text-f1-purple" // Session fastest lap - purple
+              : driver.lastLapPersonalBest
+              ? "text-[oklch(.696_.17_162.48)]" // Personal best - green
               : "text-foreground"
           )}
           title={
-            driver.lastLapPersonalBest
+            driver.lastLapOverallFastest
+              ? t("driver.sessionFastest")
+              : driver.lastLapPersonalBest
               ? t("driver.lastLapBest")
               : t("driver.bestLap")
           }

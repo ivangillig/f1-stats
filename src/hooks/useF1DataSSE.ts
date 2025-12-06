@@ -494,24 +494,16 @@ export function useF1DataSSE(): F1DataState {
 
               // Check if this driver has the overall best (record) for each sector
               // Position 1 means this is the fastest sector time of the session
-              const hasSector1Record =
-                bestSectors["0"]?.Position === 1 ||
-                existing?.hasSector1Record ||
-                false;
-              const hasSector2Record =
-                bestSectors["1"]?.Position === 1 ||
-                existing?.hasSector2Record ||
-                false;
-              const hasSector3Record =
-                bestSectors["2"]?.Position === 1 ||
-                existing?.hasSector3Record ||
-                false;
+              // Don't persist old records - only true if currently Position === 1
+              const hasSector1Record = bestSectors["0"]?.Position === 1;
+              const hasSector2Record = bestSectors["1"]?.Position === 1;
+              const hasSector3Record = bestSectors["2"]?.Position === 1;
 
-              // Check if last lap was a personal best
+              // Check if last lap was a personal best or overall fastest
               const lastLapPersonalBest =
-                driverData.LastLapTime?.PersonalFastest === true ||
-                existing?.lastLapPersonalBest ||
-                false;
+                driverData.LastLapTime?.PersonalFastest === true;
+              const lastLapOverallFastest =
+                driverData.LastLapTime?.OverallFastest === true;
 
               const driver: Driver = {
                 position: position,
@@ -535,6 +527,7 @@ export function useF1DataSSE(): F1DataState {
                 lastLap:
                   driverData.LastLapTime?.Value || existing?.lastLap || "",
                 lastLapPersonalBest,
+                lastLapOverallFastest,
                 bestLap:
                   driverData.BestLapTime?.Value || existing?.bestLap || "",
                 sector1: sectors["0"]?.Value || existing?.sector1 || "",
