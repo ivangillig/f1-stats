@@ -94,7 +94,8 @@ class F1DashClient extends EventEmitter {
       this.request.destroy();
       this.isConnected = false;
       // Use longer delay if session seems inactive (no updates received)
-      const isSessionInactive = !this.lastDataTime || (Date.now() - this.lastDataTime > 60000);
+      const isSessionInactive =
+        !this.lastDataTime || Date.now() - this.lastDataTime > 60000;
       this.scheduleReconnect(isSessionInactive);
     });
   }
@@ -144,8 +145,9 @@ class F1DashClient extends EventEmitter {
 
   handleInitialState(data) {
     // Check if this is a reconnect with same session data
-    const isReconnect = this.rawState.SessionInfo?.Name === data.SessionInfo?.Name;
-    
+    const isReconnect =
+      this.rawState.SessionInfo?.Name === data.SessionInfo?.Name;
+
     // Store raw state directly - this IS the F1 SignalR format
     this.rawState = { ...data };
 
@@ -198,7 +200,7 @@ class F1DashClient extends EventEmitter {
   handleUpdate(data) {
     // Deep merge the update into raw state
     this.deepMerge(this.rawState, data);
-    
+
     // Track that we received real data (not just initial state)
     this.lastDataTime = Date.now();
     // Reset reconnect attempts since we're getting live data
@@ -252,20 +254,24 @@ class F1DashClient extends EventEmitter {
       // Reset attempts after a long pause to allow future reconnects
       setTimeout(() => {
         this.reconnectAttempts = 0;
-        console.log("[F1Dash] Reset reconnect attempts, will retry on next trigger");
+        console.log(
+          "[F1Dash] Reset reconnect attempts, will retry on next trigger"
+        );
       }, 60000);
       return;
     }
 
     this.reconnectAttempts++;
-    
+
     // If session is inactive, use longer delays to avoid spamming
     // Active session: 5s, 10s, 15s, 20s, 25s (max)
     // Inactive session: 30s, 60s, 60s, 60s... (check every minute)
     let delay;
     if (isSessionInactive && this.rawState.SessionInfo) {
       delay = this.reconnectAttempts === 1 ? 30000 : 60000; // 30s first, then 60s
-      console.log(`[F1Dash] Session inactive, checking again in ${delay / 1000}s`);
+      console.log(
+        `[F1Dash] Session inactive, checking again in ${delay / 1000}s`
+      );
     } else {
       delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5);
       console.log(
