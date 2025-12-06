@@ -809,6 +809,7 @@ export function useF1DataSSE(): F1DataState {
         inPit: Math.random() > 0.95,
         pitCount: Math.floor(Math.random() * 3),
         retired: false,
+        knockedOut: false,
         miniSectors: generateMiniSectors(),
         bestSector1: `${(28 + Math.random() * 2).toFixed(3)}`,
         bestSector2: `${(35 + Math.random() * 3).toFixed(3)}`,

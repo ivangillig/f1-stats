@@ -227,6 +227,7 @@ export function useF1Data(): F1DataState {
               inPit: driverData.InPit || existing?.inPit || false,
               pitCount: driverData.NumberOfPitStops || existing?.pitCount || 0,
               retired: driverData.Retired || existing?.retired || false,
+              knockedOut: driverData.KnockedOut || existing?.knockedOut || false,
             };
 
             driversMap.set(num, driver);
@@ -341,6 +342,7 @@ export function useF1Data(): F1DataState {
           inPit: false,
           pitCount: Math.floor(Math.random() * 3),
           retired: false,
+          knockedOut: false,
           currentLap: 18 + Math.floor(Math.random() * 8),
           drsEnabled: Math.random() > 0.6,
           positionChange: Math.floor(Math.random() * 7) - 3,
