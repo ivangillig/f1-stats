@@ -23,7 +23,13 @@ function formatTimeAgo(utc: string): string {
 }
 
 // Audio frequency bars component
-function AudioWaveform({ color, isAnimating }: { color: string; isAnimating: boolean }) {
+function AudioWaveform({
+  color,
+  isAnimating,
+}: {
+  color: string;
+  isAnimating: boolean;
+}) {
   return (
     <div className="flex items-center gap-[2px] h-4">
       {[...Array(5)].map((_, i) => (
@@ -32,16 +38,23 @@ function AudioWaveform({ color, isAnimating }: { color: string; isAnimating: boo
           className="w-[3px] rounded-full transition-all"
           style={{
             backgroundColor: color,
-            height: isAnimating ? undefined : '4px',
-            animation: isAnimating ? `audioWave 0.5s ease-in-out infinite` : 'none',
-            animationDelay: isAnimating ? `${i * 0.1}s` : '0s',
+            height: isAnimating ? undefined : "4px",
+            animation: isAnimating
+              ? `audioWave 0.5s ease-in-out infinite`
+              : "none",
+            animationDelay: isAnimating ? `${i * 0.1}s` : "0s",
           }}
         />
       ))}
       <style jsx>{`
         @keyframes audioWave {
-          0%, 100% { height: 4px; }
-          50% { height: 16px; }
+          0%,
+          100% {
+            height: 4px;
+          }
+          50% {
+            height: 16px;
+          }
         }
       `}</style>
     </div>
@@ -67,7 +80,15 @@ function StopIcon() {
 
 function LoadingIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className="animate-spin"
+    >
       <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
       <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
     </svg>
@@ -232,7 +253,7 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
                       <div className="flex-1 h-1.5 bg-zinc-700/50 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-100"
-                          style={{ 
+                          style={{
                             width: `${progress}%`,
                             backgroundColor: teamColor,
                           }}
@@ -244,10 +265,10 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
                       {/* Loading state with pulsing waveform */}
                       <AudioWaveform color={teamColor} isAnimating={true} />
                       <div className="flex-1 h-1.5 bg-zinc-700/50 rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className="h-full rounded-full animate-pulse"
-                          style={{ 
-                            width: '100%',
+                          style={{
+                            width: "100%",
                             backgroundColor: `${teamColor}40`,
                           }}
                         />

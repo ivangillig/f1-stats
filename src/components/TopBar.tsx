@@ -290,7 +290,7 @@ export default function TopBar({
               alt="F1 Stats"
               className="h-14 w-auto"
             />
-            <span 
+            <span
               className="font-bold tracking-tight text-2xl"
               style={{ fontFamily: "'Formula1 Display', sans-serif" }}
             >
