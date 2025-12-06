@@ -198,7 +198,6 @@ const translations = {
     "driver.miniSectorBest": "Personal best mini sector",
     "driver.miniSectorSlower": "Slower than best",
     "driver.sectorBest": "Overall best sector",
-    "driver.sectorBest": "Overall best sector",
     "driver.sectorPersonalBest": "Personal best sector",
     "driver.sectorSlower": "Slower than personal best",
     "driver.sectorCurrent": "Current sector time",

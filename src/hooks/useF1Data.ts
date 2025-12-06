@@ -30,6 +30,7 @@ interface F1DataState {
 const defaultSessionInfo: SessionInfo = {
   type: "Unknown",
   name: "No Active Session",
+  sessionName: "No Active Session",
   track: "",
   country: "",
   remainingTime: "--:--",
@@ -352,6 +353,7 @@ export function useF1Data(): F1DataState {
     setSessionInfo({
       type: "Demo",
       name: "Abu Dhabi Grand Prix",
+      sessionName: "Demo Race",
       track: "Yas Marina",
       country: "Demo Mode - No Live Session",
       remainingTime: "1:23:45",
