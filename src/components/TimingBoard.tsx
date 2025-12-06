@@ -8,9 +8,11 @@ import { AnimatePresence, motion } from "framer-motion";
 
 interface TimingBoardProps {
   drivers: Driver[];
+  sessionName?: string;
+  qualifyingPart?: number;
 }
 
-export default function TimingBoard({ drivers }: TimingBoardProps) {
+export default function TimingBoard({ drivers, sessionName, qualifyingPart }: TimingBoardProps) {
   const { t } = useLanguage();
 
   // Get segment counts from first driver or use defaults
@@ -60,7 +62,7 @@ export default function TimingBoard({ drivers }: TimingBoardProps) {
                   opacity: { duration: 0.3 },
                 }}
               >
-                <DriverRow driver={driver} />
+                <DriverRow driver={driver} sessionName={sessionName} qualifyingPart={qualifyingPart} />
               </motion.div>
             ))}
           </AnimatePresence>

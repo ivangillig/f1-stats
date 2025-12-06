@@ -126,7 +126,11 @@ export default function Dashboard() {
               ref={timingBoardRef}
               className="min-w-0 overflow-x-auto lg:w-[55%]"
             >
-              <TimingBoard drivers={drivers} />
+              <TimingBoard 
+                drivers={drivers} 
+                sessionName={sessionInfo.sessionName} 
+                qualifyingPart={sessionInfo.qualifyingPart}
+              />
             </div>
 
             {/* Column 2 - Map + Race Control stacked - height matches TimingBoard */}

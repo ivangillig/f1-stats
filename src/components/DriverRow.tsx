@@ -7,6 +7,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 interface DriverRowProps {
   driver: Driver;
+  sessionName?: string;
+  qualifyingPart?: number; // 1 = Q1, 2 = Q2, 3 = Q3
 }
 
 // Empty time format placeholder
@@ -214,11 +216,38 @@ function SectorCell({
   );
 }
 
-export default function DriverRow({ driver }: DriverRowProps) {
+export default function DriverRow({ driver, sessionName, qualifyingPart }: DriverRowProps) {
   const { t } = useLanguage();
 
   // Use teamColor from API first, then fallback to hardcoded TEAM_COLORS
   const teamColor = driver.teamColor || TEAM_COLORS[driver.team] || "#888";
+
+  // Check if driver is in elimination zone for Qualifying
+  const isInEliminationZone = (): boolean => {
+    const pos = driver.position;
+    
+    // Use qualifyingPart if available (1=Q1, 2=Q2, 3=Q3)
+    if (qualifyingPart) {
+      // Q1: positions 16-20 eliminated
+      if (qualifyingPart === 1) return pos >= 16;
+      // Q2: positions 11-15 eliminated  
+      if (qualifyingPart === 2) return pos >= 11;
+      // Q3: no elimination
+      return false;
+    }
+    
+    // Fallback: try to parse from sessionName
+    const session = sessionName?.toLowerCase() || "";
+    if (session.includes("q1") || session === "qualifying 1") {
+      return pos >= 16;
+    }
+    if (session.includes("q2") || session === "qualifying 2") {
+      return pos >= 11;
+    }
+    return false;
+  };
+
+  const inEliminationZone = isInEliminationZone();
 
   // Calculate total segments and proportional widths for sectors
   const s1Count = driver.sector1SegmentCount || 6;
@@ -266,7 +295,8 @@ export default function DriverRow({ driver }: DriverRowProps) {
       className={cn(
         "grid gap-3 px-3 py-1 items-center",
         "border-b border-border/50 hover:bg-muted/30 transition-colors",
-        driver.retired && "opacity-40"
+        driver.retired && "opacity-40",
+        inEliminationZone && "bg-red-900/30"
       )}
       style={{
         gridTemplateColumns: `105px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,

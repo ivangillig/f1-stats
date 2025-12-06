@@ -58,6 +58,7 @@ export interface SessionInfo {
   totalLaps: number;
   circuitKey?: number;
   isLive: boolean;
+  qualifyingPart?: number; // 1 = Q1, 2 = Q2, 3 = Q3
 }
 
 export interface TrackStatusInfo {

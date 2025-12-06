@@ -42,6 +42,7 @@ const defaultSessionInfo: SessionInfo = {
   totalLaps: 0,
   circuitKey: undefined,
   isLive: false,
+  qualifyingPart: undefined,
 };
 
 const defaultTrackStatus: TrackStatusInfo = {
@@ -168,6 +169,20 @@ export function useF1DataSSE(): F1DataState {
       const sessionData = data.SessionInfo || {};
       const lapCount = data.LapCount || {};
       const extrapolatedClock = data.ExtrapolatedClock;
+      
+      // Get qualifying part from SessionData.Series (Q1=1, Q2=2, Q3=3)
+      let qualifyingPart: number | undefined;
+      if (data.SessionData?.Series) {
+        const series = data.SessionData.Series;
+        // Get the latest entry (highest key)
+        const keys = Object.keys(series).map(Number).sort((a, b) => b - a);
+        if (keys.length > 0) {
+          const latestEntry = series[String(keys[0])];
+          if (latestEntry?.QualifyingPart) {
+            qualifyingPart = latestEntry.QualifyingPart;
+          }
+        }
+      }
 
       if (sessionData.Type) {
         sessionTypeRef.current = sessionData.Type;
@@ -185,7 +200,8 @@ export function useF1DataSSE(): F1DataState {
       if (
         sessionData.Meeting ||
         extrapolatedClock?.Remaining ||
-        sessionData.Name
+        sessionData.Name ||
+        qualifyingPart
       ) {
         const newCircuitKey = sessionData.Meeting?.Circuit?.Key;
         if (newCircuitKey) {
@@ -207,6 +223,7 @@ export function useF1DataSSE(): F1DataState {
           totalLaps: lapCount.TotalLaps || prev.totalLaps,
           circuitKey: newCircuitKey || prev.circuitKey,
           isLive: true,
+          qualifyingPart: qualifyingPart || prev.qualifyingPart,
         }));
       }
 
@@ -710,7 +727,12 @@ export function useF1DataSSE(): F1DataState {
     eventSource.addEventListener("initial", (event) => {
       const data = JSON.parse(event.data);
       const hasData = Object.keys(data).length > 0;
-      console.log("[SSE] Received initial state", hasData ? `(${Object.keys(data).length} keys)` : "(empty - waiting for data)");
+      console.log(
+        "[SSE] Received initial state",
+        hasData
+          ? `(${Object.keys(data).length} keys)`
+          : "(empty - waiting for data)"
+      );
       if (hasData) {
         processData(data);
       }

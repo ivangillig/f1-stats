@@ -208,7 +208,9 @@ class F1DashClient extends EventEmitter {
 
     // Log clock updates specifically (for debugging)
     if (data.ExtrapolatedClock) {
-      console.log(`[F1Dash] Clock update: ${data.ExtrapolatedClock.Remaining} (extrapolating: ${data.ExtrapolatedClock.Extrapolating})`);
+      console.log(
+        `[F1Dash] Clock update: ${data.ExtrapolatedClock.Remaining} (extrapolating: ${data.ExtrapolatedClock.Extrapolating})`
+      );
     }
 
     // Log significant updates
