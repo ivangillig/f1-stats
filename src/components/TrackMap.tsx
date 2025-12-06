@@ -240,7 +240,9 @@ export default function TrackMap({
   >(new Map());
   const animationFrameRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(performance.now());
-  const [animatedPositions, setAnimatedPositions] = useState<Map<string, { x: number; y: number; inPit: boolean }>>(new Map());
+  const [animatedPositions, setAnimatedPositions] = useState<
+    Map<string, { x: number; y: number; inPit: boolean }>
+  >(new Map());
 
   // Calculate target positions based on driver data (this is the "goal" for animation)
   const targetPositions = useMemo(() => {
@@ -359,11 +361,14 @@ export default function TrackMap({
     const totalPoints = points.length;
     // Base speed: complete a lap in ~85 seconds
     const baseSpeed = totalPoints / 85;
-    
+
     // Pit lane offset calculation
     const pitOffset = 500;
 
-    const newPositions = new Map<string, { x: number; y: number; inPit: boolean }>();
+    const newPositions = new Map<
+      string,
+      { x: number; y: number; inPit: boolean }
+    >();
     let hasChanges = false;
 
     targetPositions.forEach((target, driverNumber) => {
@@ -390,11 +395,11 @@ export default function TrackMap({
       if (!target.inPit) {
         // Calculate distance to target (always moving forward)
         let diff = target.targetIndex - current.currentIndex;
-        
+
         // Handle wrap-around (crossing start/finish)
         while (diff < 0) diff += totalPoints;
         while (diff > totalPoints) diff -= totalPoints;
-        
+
         // If target jumped back significantly, it means new lap data - catch up faster
         if (diff > totalPoints * 0.7) {
           // Target is "behind" but actually ahead (new lap)
@@ -405,7 +410,7 @@ export default function TrackMap({
         // Smooth acceleration/deceleration based on distance to target
         // When far from target, speed up; when close, match target speed
         let targetVelocity = baseSpeed;
-        
+
         if (diff > totalPoints * 0.1) {
           // Far behind - speed up significantly to catch up
           targetVelocity = baseSpeed * 3;
@@ -418,8 +423,9 @@ export default function TrackMap({
         }
 
         // Smooth velocity changes (lerp)
-        current.velocity += (targetVelocity - current.velocity) * Math.min(deltaTime * 3, 1);
-        
+        current.velocity +=
+          (targetVelocity - current.velocity) * Math.min(deltaTime * 3, 1);
+
         // Move forward
         if (diff > 0.1) {
           const step = current.velocity * deltaTime;
@@ -430,10 +436,10 @@ export default function TrackMap({
 
       // Calculate screen position
       const interpolated = getInterpolatedPoint(current.currentIndex);
-      
+
       let x = interpolated.x;
       let y = interpolated.y;
-      
+
       if (current.inPit) {
         // Calculate perpendicular offset for pit lane
         const idx = Math.floor(current.currentIndex) % totalPoints;
