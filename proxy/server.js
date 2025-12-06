@@ -326,6 +326,13 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Viewers count endpoint
+  if (req.url === "/api/viewers") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ viewers: sseClients.size }));
+    return;
+  }
+
   // 404
   res.writeHead(404, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: "Not found" }));

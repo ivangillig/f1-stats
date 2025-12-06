@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { SessionInfo, TrackStatusInfo, WeatherData } from "@/types/f1";
 import { Badge } from "@/components/ui/badge";
 import { TRACK_STATUS } from "@/lib/constants";
@@ -41,6 +42,33 @@ const COUNTRY_CODES: Record<string, string> = {
 
 function getCountryCode(country: string): string {
   return COUNTRY_CODES[country] || "un";
+}
+
+// Hook to fetch viewer count
+function useViewerCount() {
+  const [viewers, setViewers] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchViewers = async () => {
+      try {
+        const res = await fetch("/api/proxy/api/viewers");
+        if (res.ok) {
+          const data = await res.json();
+          setViewers(data.viewers);
+        }
+      } catch {
+        // Silently fail - viewers count is not critical
+      }
+    };
+
+    // Fetch immediately and then every 10 seconds
+    fetchViewers();
+    const interval = setInterval(fetchViewers, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return viewers;
 }
 
 interface TopBarProps {
@@ -236,6 +264,7 @@ export default function TopBar({
   const statusInfo = TRACK_STATUS[trackStatus.status] || TRACK_STATUS[1];
   const isRace = session.type === "Race";
   const { t } = useLanguage();
+  const viewers = useViewerCount();
 
   // Traducir el mensaje del track status
   const getTrackStatusText = () => {
@@ -449,6 +478,31 @@ export default function TopBar({
 
           {/* Language Toggle */}
           <LanguageToggle />
+
+          {/* Viewers count */}
+          {viewers !== null && viewers > 0 && (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-800/50 border border-zinc-700"
+              title={t("viewers.watching") || "Watching now"}
+            >
+              {/* Eye icon */}
+              <svg
+                className="w-4 h-4 text-red-500"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                <path
+                  fillRule="evenodd"
+                  d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span className="text-sm font-medium text-zinc-300 tabular-nums">
+                {viewers}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </header>

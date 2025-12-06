@@ -22,6 +22,7 @@ interface TrackMapProps {
   circuitKey?: number;
   trackStatus?: TrackStatusInfo;
   raceControlMessages?: RaceControlMessage[];
+  isSessionActive?: boolean;
 }
 
 const SPACE = 1000;
@@ -48,6 +49,7 @@ export default function TrackMap({
   circuitKey = 63,
   trackStatus,
   raceControlMessages = [],
+  isSessionActive = false,
 }: TrackMapProps) {
   const { t } = useLanguage();
   const [mapData, setMapData] = useState<MapData | null>(null);
@@ -260,8 +262,13 @@ export default function TrackMap({
         !driver.trackX &&
         !driver.trackY &&
         (driver.trackProgress === undefined || driver.trackProgress === 0);
+
+      // When session is not active (demo/replay), show all drivers in pit lane
+      // When session IS active, use normal logic (inPit flag or no track data)
       const shouldBeInPit =
-        driver.inPit || (hasNoTrackData && !driver.bestLap && !driver.lastLap);
+        !isSessionActive ||
+        driver.inPit ||
+        (hasNoTrackData && !driver.bestLap && !driver.lastLap);
 
       if (shouldBeInPit) {
         // Position in pit lane
@@ -322,7 +329,7 @@ export default function TrackMap({
     });
 
     return targets;
-  }, [drivers, points, bounds, mapData]);
+  }, [drivers, points, bounds, mapData, isSessionActive]);
 
   // Helper to interpolate between two track points
   const getInterpolatedPoint = useCallback(

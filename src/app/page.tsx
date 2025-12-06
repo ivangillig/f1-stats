@@ -144,6 +144,7 @@ export default function Dashboard() {
                   circuitKey={sessionInfo.circuitKey}
                   trackStatus={trackStatus}
                   raceControlMessages={raceControlMessages}
+                  isSessionActive={sessionInfo.isLive}
                 />
               </div>
 

@@ -156,6 +156,10 @@ const translations = {
     "weather.rain": "Lluvia detectada",
     "weather.dry": "Condiciones secas",
     "weather.wind": "Viento",
+
+    // Viewers
+    "viewers.watching": "Viendo ahora",
+    "viewers.count": "{{count}} espectadores",
   },
   en: {
     // TopBar
@@ -295,6 +299,10 @@ const translations = {
     "weather.rain": "Rain detected",
     "weather.dry": "Dry conditions",
     "weather.wind": "Wind",
+
+    // Viewers
+    "viewers.watching": "Watching now",
+    "viewers.count": "{{count}} viewers",
   },
 };
 
