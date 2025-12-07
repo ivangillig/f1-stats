@@ -650,18 +650,10 @@ export function useF1DataSSE(): F1DataState {
 
                 return timeA - timeB;
               } else {
-                // In Race: sort by gap to leader, then by position
-                const gapA = parseGap(a.gap);
-                const gapB = parseGap(b.gap);
-
-                // If neither has gap data, use position
-                if (gapA === Infinity && gapB === Infinity) {
-                  const posA = a.position || parseInt(a.driverNumber) || 99;
-                  const posB = b.position || parseInt(b.driverNumber) || 99;
-                  return posA - posB;
-                }
-
-                return gapA - gapB;
+                // In Race: sort by position (which reflects current race position or grid position pre-race)
+                const posA = a.position || parseInt(a.driverNumber) || 99;
+                const posB = b.position || parseInt(b.driverNumber) || 99;
+                return posA - posB;
               }
             });
 
