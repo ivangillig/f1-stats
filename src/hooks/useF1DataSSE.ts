@@ -579,12 +579,12 @@ export function useF1DataSSE(): F1DataState {
                 hasSector2Record,
                 hasSector3Record,
                 tire: tireInfo,
-                inPit: driverData.InPit || existing?.inPit || false,
+                // Use explicit check for boolean fields to allow false to override true
+                inPit: driverData.InPit !== undefined ? driverData.InPit : (existing?.inPit ?? false),
                 pitCount:
                   driverData.NumberOfPitStops ?? existing?.pitCount ?? 0,
-                retired: driverData.Retired || existing?.retired || false,
-                knockedOut:
-                  driverData.KnockedOut || existing?.knockedOut || false,
+                retired: driverData.Retired !== undefined ? driverData.Retired : (existing?.retired ?? false),
+                knockedOut: driverData.KnockedOut !== undefined ? driverData.KnockedOut : (existing?.knockedOut ?? false),
                 trackProgress: calculateTrackProgress(sectors),
                 trackX: carDataRef.current[num]?.x ?? existing?.trackX,
                 trackY: carDataRef.current[num]?.y ?? existing?.trackY,

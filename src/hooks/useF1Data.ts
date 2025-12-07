@@ -224,11 +224,11 @@ export function useF1Data(): F1DataState {
                 existing?.sector3Status ||
                 "none",
               tire: tireInfo,
-              inPit: driverData.InPit || existing?.inPit || false,
-              pitCount: driverData.NumberOfPitStops || existing?.pitCount || 0,
-              retired: driverData.Retired || existing?.retired || false,
-              knockedOut:
-                driverData.KnockedOut || existing?.knockedOut || false,
+              // Use explicit check for boolean fields to allow false to override true
+              inPit: driverData.InPit !== undefined ? driverData.InPit : (existing?.inPit ?? false),
+              pitCount: driverData.NumberOfPitStops ?? existing?.pitCount ?? 0,
+              retired: driverData.Retired !== undefined ? driverData.Retired : (existing?.retired ?? false),
+              knockedOut: driverData.KnockedOut !== undefined ? driverData.KnockedOut : (existing?.knockedOut ?? false),
             };
 
             driversMap.set(num, driver);
