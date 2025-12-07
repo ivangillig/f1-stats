@@ -280,8 +280,9 @@ export function useF1DataSSE(): F1DataState {
       const raceControlData = data.RaceControlMessages;
       if (raceControlData?.Messages) {
         setRaceControlMessages((prev) => {
-          const newMessages = Object.values(raceControlData.Messages).map(
-            (m: any) => ({
+          const newMessages = Object.values(raceControlData.Messages)
+            .filter((m: any) => m !== null && m?.Utc && m?.Message)
+            .map((m: any) => ({
               utc: m.Utc,
               message: m.Message,
               category: m.Category,
@@ -289,8 +290,7 @@ export function useF1DataSSE(): F1DataState {
               lap: m.Lap,
               driverNumber: m.RacingNumber,
               sector: m.Sector, // Sector number for yellow flags
-            })
-          );
+            }));
           const allMessages = [...newMessages, ...prev];
           const uniqueMessages = allMessages.filter(
             (m, i) =>
