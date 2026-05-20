@@ -18,11 +18,16 @@ import {
   stopF1DashClient,
   hasF1DashState,
 } from "./f1dash-client.js";
+import {
+  startOpenF1Client,
+  stopOpenF1Client,
+  isOpenF1Connected,
+} from "./openf1-client.js";
 
 const PORT = process.env.PORT || 4000;
 const F1_BASE_URL = "livetiming.formula1.com";
 
-// Mode: "f1dash" | "live-polling" | "mqtt" | "replay" | "signalr"
+// Mode: "openf1" | "f1dash" | "live-polling" | "mqtt" | "replay" | "signalr"
 // Set via environment variable: PROXY_MODE=f1dash
 const PROXY_MODE = process.env.PROXY_MODE || "auto";
 
@@ -390,6 +395,31 @@ server.listen(PORT, async () => {
     // Force replay mode
     console.log("[Server] Using replay mode...");
     startReplay(broadcastSSE, currentState);
+  } else if (PROXY_MODE === "signalr") {
+    console.log("[Server] Using direct F1 SignalR connection...");
+    connectToF1();
+  } else if (PROXY_MODE === "openf1") {
+    // OpenF1 paid tier — real-time MQTT/WebSocket
+    console.log("[Server] Using OpenF1 real-time client...");
+    startOpenF1Client((update, fullState) => {
+      for (const key of Object.keys(update)) {
+        if (
+          typeof update[key] === "object" &&
+          update[key] !== null &&
+          !Array.isArray(update[key])
+        ) {
+          currentState[key] = deepMerge(currentState[key] || {}, update[key]);
+        } else {
+          currentState[key] = update[key];
+        }
+      }
+      if (!hasReceivedInitialData && fullState.SessionInfo) {
+        hasReceivedInitialData = true;
+        broadcastSSE("initial", currentState);
+      } else {
+        broadcastSSE("update", update);
+      }
+    });
   } else {
     // Auto mode: try f1dash > MQTT > SignalR > Replay
     console.log("[Server] Auto mode: trying f1-dash.com feed...");

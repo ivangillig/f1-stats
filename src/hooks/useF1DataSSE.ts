@@ -11,14 +11,15 @@ import {
   RadioCapture,
   RaceControlMessage,
 } from "@/types/f1";
-import { DRIVERS, TEAM_COLORS } from "@/lib/constants";
+import { DRIVERS } from "@/lib/constants";
 
-// In browser: use relative path (goes through Next.js rewrite)
-// In development: use localhost
+// Use NEXT_PUBLIC_PROXY_URL if set (preferred — direct connection, no Next.js rewrite needed).
+// Falls back to /api/proxy (Next.js rewrite) for backwards compatibility.
 const PROXY_URL =
-  typeof window !== "undefined"
+  process.env.NEXT_PUBLIC_PROXY_URL ||
+  (typeof window !== "undefined"
     ? "/api/proxy"
-    : process.env.INTERNAL_PROXY_URL || "http://localhost:4000";
+    : process.env.INTERNAL_PROXY_URL || "http://localhost:4000");
 
 interface F1DataState {
   drivers: Driver[];
@@ -63,7 +64,6 @@ export function useF1DataSSE(): F1DataState {
   >([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isInDemoMode, setIsInDemoMode] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -94,19 +94,6 @@ export function useF1DataSSE(): F1DataState {
 
   // Store session path for building audio URLs
   const sessionPathRef = useRef<string>("");
-
-  // Clear all cached data when switching from demo to live
-  const clearAllData = useCallback(() => {
-    console.log("[SSE] Clearing all cached data...");
-    setDrivers([]);
-    setSessionInfo(defaultSessionInfo);
-    setTrackStatus(defaultTrackStatus);
-    setWeather(undefined);
-    setTeamRadios([]);
-    setRaceControlMessages([]);
-    driverListRef.current = {};
-    carDataRef.current = {};
-  }, []);
 
   const processData = useCallback((data: any) => {
     if (!data) return;
@@ -756,13 +743,8 @@ export function useF1DataSSE(): F1DataState {
       console.error("[SSE] Error:", err);
       setIsConnected(false);
       isConnectedRef.current = false;
-      // Keep last received data - don't clear anything
-      // Just show reconnection message
-      setError("Connection lost. Reconnecting...");
-
+      setError("RECONNECTING");
       eventSource.close();
-
-      // Reconnect after delay
       reconnectTimeoutRef.current = setTimeout(() => {
         connect();
       }, 5000);
@@ -770,155 +752,6 @@ export function useF1DataSSE(): F1DataState {
   }, [processData]);
 
   // Generate demo data when not connected
-  const generateDemoData = useCallback(() => {
-    const generateMiniSectors = (): SectorStatus[] => {
-      const statuses: SectorStatus[] = ["purple", "green", "yellow", "none"];
-      return Array(18)
-        .fill(null)
-        .map(() => statuses[Math.floor(Math.random() * statuses.length)]);
-    };
-
-    const demoDrivers: Driver[] = Object.entries(DRIVERS).map(
-      ([num, info], index) => ({
-        position: index + 1,
-        driverNumber: num,
-        code: info.code,
-        name: info.name,
-        team: info.team,
-        gap:
-          index === 0 ? "" : `+${(Math.random() * 30 + index * 2).toFixed(3)}`,
-        interval: index === 0 ? "" : `+${(Math.random() * 2).toFixed(3)}`,
-        lastLap: `1:${(20 + Math.random() * 5).toFixed(3)}`,
-        bestLap: `1:${(19 + Math.random() * 3).toFixed(3)}`,
-        sector1: `${(28 + Math.random() * 3).toFixed(3)}`,
-        sector2: `${(35 + Math.random() * 4).toFixed(3)}`,
-        sector3: `${(25 + Math.random() * 3).toFixed(3)}`,
-        sector1Status: ["purple", "green", "yellow", "none"][
-          Math.floor(Math.random() * 4)
-        ] as SectorStatus,
-        sector2Status: ["purple", "green", "yellow", "none"][
-          Math.floor(Math.random() * 4)
-        ] as SectorStatus,
-        sector3Status: ["purple", "green", "yellow", "none"][
-          Math.floor(Math.random() * 4)
-        ] as SectorStatus,
-        tire: {
-          compound: ["SOFT", "MEDIUM", "HARD"][Math.floor(Math.random() * 3)],
-          age: Math.floor(Math.random() * 20),
-          isNew: Math.random() > 0.7,
-        },
-        inPit: Math.random() > 0.95,
-        pitCount: Math.floor(Math.random() * 3),
-        retired: false,
-        knockedOut: false,
-        miniSectors: generateMiniSectors(),
-        bestSector1: `${(28 + Math.random() * 2).toFixed(3)}`,
-        bestSector2: `${(35 + Math.random() * 3).toFixed(3)}`,
-        bestSector3: `${(25 + Math.random() * 2).toFixed(3)}`,
-      })
-    );
-
-    setDrivers(demoDrivers.slice(0, 20));
-    setSessionInfo({
-      type: "Race",
-      name: "Demo Grand Prix",
-      sessionName: "Race",
-      track: "Circuit de Monaco",
-      country: "Monaco",
-      remainingTime: "1:23:45",
-      currentLap: 25,
-      totalLaps: 58,
-      isLive: false,
-    });
-    setWeather({
-      airTemp: 28.5,
-      humidity: 52,
-      pressure: 1013.5,
-      rainfall: false,
-      trackTemp: 42.3,
-      windDirection: 135,
-      windSpeed: 3.2,
-    });
-
-    const demoRadios: RadioCapture[] = [
-      {
-        utc: new Date(Date.now() - 30000).toISOString(),
-        racingNumber: "1",
-        path: "TeamRadio/1_30.mp3",
-      },
-      {
-        utc: new Date(Date.now() - 60000).toISOString(),
-        racingNumber: "16",
-        path: "TeamRadio/16_45.mp3",
-      },
-      {
-        utc: new Date(Date.now() - 90000).toISOString(),
-        racingNumber: "44",
-        path: "TeamRadio/44_25.mp3",
-      },
-    ];
-    setTeamRadios(demoRadios);
-
-    const demoRaceControl: RaceControlMessage[] = [
-      {
-        utc: new Date(Date.now() - 5000).toISOString(),
-        message: "GREEN FLAG",
-        category: "Flag",
-      },
-      {
-        utc: new Date(Date.now() - 10000).toISOString(),
-        message: "DRS ENABLED",
-        category: "Drs",
-      },
-      {
-        utc: new Date(Date.now() - 25000).toISOString(),
-        message: "YELLOW FLAG - TURN 5",
-        category: "Flag",
-      },
-      {
-        utc: new Date(Date.now() - 45000).toISOString(),
-        message: "TRACK LIMITS - CAR 1 (VER)",
-        category: "TrackLimits",
-        driverNumber: "1",
-      },
-      {
-        utc: new Date(Date.now() - 60000).toISOString(),
-        message: "CHEQUERED FLAG",
-        category: "Flag",
-      },
-    ];
-    setRaceControlMessages(demoRaceControl);
-  }, []);
-
-  // Health check function to detect when proxy comes online
-  // Uses refs to avoid recreating the callback and causing effect reruns
-  const checkProxyHealth = useCallback(() => {
-    // Use ref to check connected status to avoid dependency issues
-    if (isConnectedRef.current) return;
-
-    fetch(`${PROXY_URL}/health`)
-      .then((res) => res.json())
-      .then((data) => {
-        // Only connect if proxy has actual data (not just running)
-        if (data.status === "ok" && data.hasState && !isConnectedRef.current) {
-          console.log("[SSE] Proxy is now available with data, connecting...");
-          setIsInDemoMode(false);
-          setError(null);
-          // Clear health check interval since we're connecting
-          if (healthCheckIntervalRef.current) {
-            clearInterval(healthCheckIntervalRef.current);
-            healthCheckIntervalRef.current = null;
-          }
-          // Clear all demo data before connecting to real data
-          clearAllData();
-          connect();
-        }
-      })
-      .catch(() => {
-        // Proxy still not available, will check again
-      });
-  }, [connect, clearAllData]); // Removed isConnected from deps
-
   // Extrapolated clock interval - update time every second
   useEffect(() => {
     const updateClock = () => {
@@ -982,66 +815,53 @@ export function useF1DataSSE(): F1DataState {
   }, []);
 
   useEffect(() => {
-    // Try to connect to proxy
-    fetch(`${PROXY_URL}/health`)
-      .then((res) => res.json())
-      .then((data) => {
-        // Only connect if proxy has actual data
-        if (data.status === "ok" && data.hasState) {
-          connect();
-        } else {
-          throw new Error("Proxy not ready or no data");
-        }
-      })
-      .catch(() => {
-        console.log("[SSE] Proxy not available, using demo data");
-        setError("DEMO_DATA");
-        setIsInDemoMode(true);
-        generateDemoData();
+    const tryConnect = () => {
+      fetch(`${PROXY_URL}/health`)
+        .then((res) => res.json())
+        .then((data) => {
+          console.log(`[SSE] Health: status=${data.status} mode=${data.mode}`);
+          if (data.status === "ok") {
+            setError(null);
+            if (healthCheckIntervalRef.current) {
+              clearInterval(healthCheckIntervalRef.current);
+              healthCheckIntervalRef.current = null;
+            }
+            connect();
+          } else {
+            throw new Error("Proxy not ok");
+          }
+        })
+        .catch(() => {
+          console.log("[SSE] Proxy offline, retrying every 10s");
+          setError("OFFLINE");
+          if (!healthCheckIntervalRef.current) {
+            healthCheckIntervalRef.current = setInterval(() => {
+              if (isConnectedRef.current) return;
+              fetch(`${PROXY_URL}/health`)
+                .then((res) => res.json())
+                .then((data) => {
+                  if (data.status === "ok" && !isConnectedRef.current) {
+                    setError(null);
+                    clearInterval(healthCheckIntervalRef.current!);
+                    healthCheckIntervalRef.current = null;
+                    connect();
+                  }
+                })
+                .catch(() => {});
+            }, 10000);
+          }
+        });
+    };
 
-        // Start periodic health check every 10 seconds
-        // Store interval in ref so cleanup can clear it
-        healthCheckIntervalRef.current = setInterval(() => {
-          // Inline health check to avoid dependency issues
-          if (isConnectedRef.current) return;
-
-          fetch(`${PROXY_URL}/health`)
-            .then((res) => res.json())
-            .then((data) => {
-              if (
-                data.status === "ok" &&
-                data.hasState &&
-                !isConnectedRef.current
-              ) {
-                console.log(
-                  "[SSE] Proxy is now available with data, connecting..."
-                );
-                if (healthCheckIntervalRef.current) {
-                  clearInterval(healthCheckIntervalRef.current);
-                  healthCheckIntervalRef.current = null;
-                }
-                // Will trigger a page reload or we need to call connect
-                // For now, just log - user can refresh
-                window.location.reload();
-              }
-            })
-            .catch(() => {});
-        }, 10000);
-      });
+    tryConnect();
 
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (healthCheckIntervalRef.current) {
-        clearInterval(healthCheckIntervalRef.current);
-      }
+      if (eventSourceRef.current) eventSourceRef.current.close();
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (healthCheckIntervalRef.current) clearInterval(healthCheckIntervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty deps - only run once on mount
+  }, []);
 
   return {
     drivers,

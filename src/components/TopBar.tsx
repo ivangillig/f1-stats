@@ -51,7 +51,8 @@ function useViewerCount() {
   useEffect(() => {
     const fetchViewers = async () => {
       try {
-        const res = await fetch("/api/proxy/api/viewers");
+        const proxyUrl = process.env.NEXT_PUBLIC_PROXY_URL || "/api/proxy";
+        const res = await fetch(`${proxyUrl}/api/viewers`);
         if (res.ok) {
           const data = await res.json();
           setViewers(data.viewers);

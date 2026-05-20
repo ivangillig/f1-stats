@@ -123,9 +123,8 @@ const translations = {
       "Este sitio no está afiliado, asociado, autorizado, respaldado por, o de ninguna manera oficialmente conectado con Formula 1, FIA, o cualquiera de sus subsidiarias o afiliados.",
 
     // Error messages
-    "error.demo": "Modo Demo:",
-    "error.demoData":
-      "Datos en vivo no disponibles. Mostrando datos de demostración.",
+    "error.offline": "Sistema temporalmente fuera de servicio",
+    "error.retrying": "Cuando el servicio esté operativo serás redirigido automáticamente",
     "error.connection": "Conectando al servidor...",
     "error.reconnecting": "Reconectando...",
 
@@ -268,8 +267,8 @@ const translations = {
       "This site is not affiliated, associated, authorized, endorsed by, or in any way officially connected with Formula 1, FIA, or any of its subsidiaries or affiliates.",
 
     // Error messages
-    "error.demo": "Demo Mode:",
-    "error.demoData": "Live data unavailable. Displaying demo data.",
+    "error.offline": "System temporarily unavailable",
+    "error.retrying": "You will be redirected automatically when the service is back online",
     "error.connection": "Connecting to server...",
     "error.reconnecting": "Reconnecting...",
 

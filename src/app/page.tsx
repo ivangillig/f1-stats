@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
+import Image from "next/image";
 import TopBar from "@/components/TopBar";
 import TimingBoard from "@/components/TimingBoard";
 import TrackMap from "@/components/TrackMap";
@@ -100,6 +101,44 @@ export default function Dashboard() {
     };
   }, []);
 
+  if (error === "OFFLINE") {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-10">
+        {/* Logo */}
+        <Image
+          src="/images/logo.png"
+          alt="F1 Dashboard"
+          width={180}
+          height={60}
+          className="opacity-90"
+          priority
+        />
+
+        {/* Línea roja */}
+        <div className="w-20 h-0.5 bg-primary" />
+
+        {/* Mensaje */}
+        <div className="text-center space-y-3">
+          <p
+            className="text-foreground text-2xl tracking-widest uppercase"
+            style={{ fontFamily: "'Formula1 Display', sans-serif", fontWeight: 700 }}
+          >
+            {t("error.offline")}
+          </p>
+          <p className="text-muted-foreground text-sm tracking-wide">
+            {t("error.retrying")}
+          </p>
+        </div>
+
+        {/* Indicador animado */}
+        <div className="flex items-center gap-2 text-muted-foreground/50 text-xs tracking-widest uppercase">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+          Offline
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <TopBar
@@ -110,10 +149,9 @@ export default function Dashboard() {
       />
 
       <main className="flex-1 flex flex-col w-full">
-        {error && (
+        {error === "RECONNECTING" && (
           <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm">
-            <span className="font-medium">{t("error.demo")}</span>{" "}
-            {error === "DEMO_DATA" ? t("error.demoData") : error}
+            {t("error.reconnecting")}
           </div>
         )}
 
