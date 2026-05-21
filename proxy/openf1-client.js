@@ -263,7 +263,9 @@ class OpenF1Client extends EventEmitter {
       if (!this.state.TimingData.Lines[num])
         this.state.TimingData.Lines[num] = {};
 
-      const lapTime = entry.lap_duration ? formatLapTime(entry.lap_duration) : null;
+      const lapTime = entry.lap_duration
+        ? formatLapTime(entry.lap_duration)
+        : null;
       const s1 = formatSectorTime(entry.duration_sector_1);
       const s2 = formatSectorTime(entry.duration_sector_2);
       const s3 = formatSectorTime(entry.duration_sector_3);
@@ -344,12 +346,18 @@ class OpenF1Client extends EventEmitter {
     const lastFlagMsg = [...newMessages].reverse().find((m) => m.Flag);
     if (lastFlagMsg) {
       const flag = lastFlagMsg.Flag;
-      if (flag === "GREEN") this.state.TrackStatus = { Status: "1", Message: "AllClear" };
-      else if (flag === "YELLOW") this.state.TrackStatus = { Status: "2", Message: "Yellow" };
-      else if (flag === "RED") this.state.TrackStatus = { Status: "5", Message: "Red" };
-      else if (flag === "SC") this.state.TrackStatus = { Status: "4", Message: "SC Deployed" };
-      else if (flag === "VSC") this.state.TrackStatus = { Status: "6", Message: "VSC Deployed" };
-      else if (flag === "CHEQUERED") this.state.TrackStatus = { Status: "7", Message: "Chequered" };
+      if (flag === "GREEN")
+        this.state.TrackStatus = { Status: "1", Message: "AllClear" };
+      else if (flag === "YELLOW")
+        this.state.TrackStatus = { Status: "2", Message: "Yellow" };
+      else if (flag === "RED")
+        this.state.TrackStatus = { Status: "5", Message: "Red" };
+      else if (flag === "SC")
+        this.state.TrackStatus = { Status: "4", Message: "SC Deployed" };
+      else if (flag === "VSC")
+        this.state.TrackStatus = { Status: "6", Message: "VSC Deployed" };
+      else if (flag === "CHEQUERED")
+        this.state.TrackStatus = { Status: "7", Message: "Chequered" };
     }
 
     const update = {
@@ -406,7 +414,9 @@ class OpenF1Client extends EventEmitter {
 
     const update = { SessionInfo: this.state.SessionInfo };
     this.emit("update", update);
-    console.log(`[OpenF1] Session: ${session.session_name} at ${session.circuit_short_name}`);
+    console.log(
+      `[OpenF1] Session: ${session.session_name} at ${session.circuit_short_name}`,
+    );
   }
 
   handleDrivers(entries) {
@@ -453,7 +463,9 @@ class OpenF1Client extends EventEmitter {
     }
     this.reconnectAttempts++;
     const delay = Math.min(this.reconnectDelay * this.reconnectAttempts, 60000);
-    console.log(`[OpenF1] Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts})`);
+    console.log(
+      `[OpenF1] Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts})`,
+    );
     setTimeout(() => this.connect(), delay);
   }
 

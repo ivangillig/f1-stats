@@ -70,7 +70,7 @@ const SIGNALR_SUBSCRIBE = JSON.stringify({
 // Negotiate SignalR connection
 async function negotiate() {
   const url = `https://${F1_BASE_URL}/signalr/negotiate?clientProtocol=1.5&connectionData=${encodeURIComponent(
-    '[{"name":"Streaming"}]'
+    '[{"name":"Streaming"}]',
   )}`;
 
   const response = await fetch(url, {
@@ -100,7 +100,7 @@ async function connectToF1() {
     const { token, cookie } = await negotiate();
 
     const wsUrl = `wss://${F1_BASE_URL}/signalr/connect?clientProtocol=1.5&transport=webSockets&connectionToken=${encodeURIComponent(
-      token
+      token,
     )}&connectionData=${encodeURIComponent('[{"name":"Streaming"}]')}`;
 
     console.log("[F1] Connecting to WebSocket...");
@@ -165,7 +165,7 @@ async function connectToF1() {
             !sessionData?.Meeting?.Name
           ) {
             console.log(
-              "[F1] No active session detected, switching to replay mode..."
+              "[F1] No active session detected, switching to replay mode...",
             );
             stopReplay();
             // Start replay BEFORE closing websocket so isReplayRunning() is true
@@ -288,7 +288,7 @@ const server = http.createServer((req, res) => {
         mqttAvailable: hasMQTTCredentials(),
         f1dashHasState: hasF1DashState(),
         openf1Connected: isOpenF1Connected(),
-      })
+      }),
     );
     return;
   }

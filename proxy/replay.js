@@ -86,11 +86,15 @@ async function fetchJSON(url, retries = 4) {
     } catch (error) {
       const isLastAttempt = attempt >= retries;
       if (isLastAttempt) {
-        console.error(`[Replay] Fetch failed after ${retries + 1} attempts: ${error.message} for ${url}`);
+        console.error(
+          `[Replay] Fetch failed after ${retries + 1} attempts: ${error.message} for ${url}`,
+        );
         return [];
       }
       const delay = 2000 * (attempt + 1);
-      console.warn(`[Replay] Transient error (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay / 1000}s: ${error.message}`);
+      console.warn(
+        `[Replay] Transient error (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay / 1000}s: ${error.message}`,
+      );
       await new Promise((r) => setTimeout(r, delay));
     }
   }
@@ -113,46 +117,194 @@ const STATIC_SESSION = {
 };
 
 const STATIC_DRIVERS = [
-  { driver_number: 1,  name_acronym: "VER", full_name: "Max Verstappen",      team_name: "Red Bull Racing",  team_colour: "3671C6" },
-  { driver_number: 11, name_acronym: "PER", full_name: "Sergio Perez",         team_name: "Red Bull Racing",  team_colour: "3671C6" },
-  { driver_number: 16, name_acronym: "LEC", full_name: "Charles Leclerc",      team_name: "Ferrari",          team_colour: "E8002D" },
-  { driver_number: 55, name_acronym: "SAI", full_name: "Carlos Sainz",         team_name: "Ferrari",          team_colour: "E8002D" },
-  { driver_number: 44, name_acronym: "HAM", full_name: "Lewis Hamilton",        team_name: "Mercedes",         team_colour: "27F4D2" },
-  { driver_number: 63, name_acronym: "RUS", full_name: "George Russell",        team_name: "Mercedes",         team_colour: "27F4D2" },
-  { driver_number: 4,  name_acronym: "NOR", full_name: "Lando Norris",          team_name: "McLaren",          team_colour: "FF8000" },
-  { driver_number: 81, name_acronym: "PIA", full_name: "Oscar Piastri",         team_name: "McLaren",          team_colour: "FF8000" },
-  { driver_number: 14, name_acronym: "ALO", full_name: "Fernando Alonso",       team_name: "Aston Martin",     team_colour: "229971" },
-  { driver_number: 18, name_acronym: "STR", full_name: "Lance Stroll",          team_name: "Aston Martin",     team_colour: "229971" },
-  { driver_number: 10, name_acronym: "GAS", full_name: "Pierre Gasly",          team_name: "Alpine",           team_colour: "FF87BC" },
-  { driver_number: 31, name_acronym: "OCO", full_name: "Esteban Ocon",          team_name: "Alpine",           team_colour: "FF87BC" },
-  { driver_number: 23, name_acronym: "ALB", full_name: "Alexander Albon",       team_name: "Williams",         team_colour: "64C4FF" },
-  { driver_number: 2,  name_acronym: "SAR", full_name: "Logan Sargeant",        team_name: "Williams",         team_colour: "64C4FF" },
-  { driver_number: 77, name_acronym: "BOT", full_name: "Valtteri Bottas",       team_name: "Kick Sauber",      team_colour: "52E252" },
-  { driver_number: 24, name_acronym: "ZHO", full_name: "Guanyu Zhou",           team_name: "Kick Sauber",      team_colour: "52E252" },
-  { driver_number: 20, name_acronym: "MAG", full_name: "Kevin Magnussen",       team_name: "Haas F1 Team",     team_colour: "B6BABD" },
-  { driver_number: 27, name_acronym: "HUL", full_name: "Nico Hulkenberg",       team_name: "Haas F1 Team",     team_colour: "B6BABD" },
-  { driver_number: 3,  name_acronym: "RIC", full_name: "Daniel Ricciardo",      team_name: "RB",               team_colour: "6692FF" },
-  { driver_number: 22, name_acronym: "TSU", full_name: "Yuki Tsunoda",          team_name: "RB",               team_colour: "6692FF" },
-  { driver_number: 43, name_acronym: "COL", full_name: "Franco Colapinto",      team_name: "Williams",         team_colour: "64C4FF" },
+  {
+    driver_number: 1,
+    name_acronym: "VER",
+    full_name: "Max Verstappen",
+    team_name: "Red Bull Racing",
+    team_colour: "3671C6",
+  },
+  {
+    driver_number: 11,
+    name_acronym: "PER",
+    full_name: "Sergio Perez",
+    team_name: "Red Bull Racing",
+    team_colour: "3671C6",
+  },
+  {
+    driver_number: 16,
+    name_acronym: "LEC",
+    full_name: "Charles Leclerc",
+    team_name: "Ferrari",
+    team_colour: "E8002D",
+  },
+  {
+    driver_number: 55,
+    name_acronym: "SAI",
+    full_name: "Carlos Sainz",
+    team_name: "Ferrari",
+    team_colour: "E8002D",
+  },
+  {
+    driver_number: 44,
+    name_acronym: "HAM",
+    full_name: "Lewis Hamilton",
+    team_name: "Mercedes",
+    team_colour: "27F4D2",
+  },
+  {
+    driver_number: 63,
+    name_acronym: "RUS",
+    full_name: "George Russell",
+    team_name: "Mercedes",
+    team_colour: "27F4D2",
+  },
+  {
+    driver_number: 4,
+    name_acronym: "NOR",
+    full_name: "Lando Norris",
+    team_name: "McLaren",
+    team_colour: "FF8000",
+  },
+  {
+    driver_number: 81,
+    name_acronym: "PIA",
+    full_name: "Oscar Piastri",
+    team_name: "McLaren",
+    team_colour: "FF8000",
+  },
+  {
+    driver_number: 14,
+    name_acronym: "ALO",
+    full_name: "Fernando Alonso",
+    team_name: "Aston Martin",
+    team_colour: "229971",
+  },
+  {
+    driver_number: 18,
+    name_acronym: "STR",
+    full_name: "Lance Stroll",
+    team_name: "Aston Martin",
+    team_colour: "229971",
+  },
+  {
+    driver_number: 10,
+    name_acronym: "GAS",
+    full_name: "Pierre Gasly",
+    team_name: "Alpine",
+    team_colour: "FF87BC",
+  },
+  {
+    driver_number: 31,
+    name_acronym: "OCO",
+    full_name: "Esteban Ocon",
+    team_name: "Alpine",
+    team_colour: "FF87BC",
+  },
+  {
+    driver_number: 23,
+    name_acronym: "ALB",
+    full_name: "Alexander Albon",
+    team_name: "Williams",
+    team_colour: "64C4FF",
+  },
+  {
+    driver_number: 2,
+    name_acronym: "SAR",
+    full_name: "Logan Sargeant",
+    team_name: "Williams",
+    team_colour: "64C4FF",
+  },
+  {
+    driver_number: 77,
+    name_acronym: "BOT",
+    full_name: "Valtteri Bottas",
+    team_name: "Kick Sauber",
+    team_colour: "52E252",
+  },
+  {
+    driver_number: 24,
+    name_acronym: "ZHO",
+    full_name: "Guanyu Zhou",
+    team_name: "Kick Sauber",
+    team_colour: "52E252",
+  },
+  {
+    driver_number: 20,
+    name_acronym: "MAG",
+    full_name: "Kevin Magnussen",
+    team_name: "Haas F1 Team",
+    team_colour: "B6BABD",
+  },
+  {
+    driver_number: 27,
+    name_acronym: "HUL",
+    full_name: "Nico Hulkenberg",
+    team_name: "Haas F1 Team",
+    team_colour: "B6BABD",
+  },
+  {
+    driver_number: 3,
+    name_acronym: "RIC",
+    full_name: "Daniel Ricciardo",
+    team_name: "RB",
+    team_colour: "6692FF",
+  },
+  {
+    driver_number: 22,
+    name_acronym: "TSU",
+    full_name: "Yuki Tsunoda",
+    team_name: "RB",
+    team_colour: "6692FF",
+  },
+  {
+    driver_number: 43,
+    name_acronym: "COL",
+    full_name: "Franco Colapinto",
+    team_name: "Williams",
+    team_colour: "64C4FF",
+  },
 ];
 
 // Starting grid for Baku 2024 Race
 const STATIC_STARTING_GRID = {
-  "16": 1, "55": 2, "44": 3, "63": 4, "1": 5, "81": 6,
-  "4": 7, "43": 8, "14": 9, "18": 10, "11": 11, "10": 12,
-  "31": 13, "23": 14, "77": 15, "24": 16, "20": 17, "27": 18,
-  "3": 19, "22": 20,
+  16: 1,
+  55: 2,
+  44: 3,
+  63: 4,
+  1: 5,
+  81: 6,
+  4: 7,
+  43: 8,
+  14: 9,
+  18: 10,
+  11: 11,
+  10: 12,
+  31: 13,
+  23: 14,
+  77: 15,
+  24: 16,
+  20: 17,
+  27: 18,
+  3: 19,
+  22: 20,
 };
 
 function fetchSessionInfo() {
-  console.log(`[Replay] Using static session data for ${STATIC_SESSION.location}...`);
-  console.log(`[Replay] Session: ${STATIC_SESSION.location} - ${STATIC_SESSION.session_name}`);
+  console.log(
+    `[Replay] Using static session data for ${STATIC_SESSION.location}...`,
+  );
+  console.log(
+    `[Replay] Session: ${STATIC_SESSION.location} - ${STATIC_SESSION.session_name}`,
+  );
   console.log(`[Replay] Drivers: ${STATIC_DRIVERS.length}`);
   return Promise.resolve({ session: STATIC_SESSION, drivers: STATIC_DRIVERS });
 }
 
 function fetchStartingGrid() {
-  console.log(`[Replay] Using static starting grid: ${Object.keys(STATIC_STARTING_GRID).length} drivers`);
+  console.log(
+    `[Replay] Using static starting grid: ${Object.keys(STATIC_STARTING_GRID).length} drivers`,
+  );
   return Promise.resolve(STATIC_STARTING_GRID);
 }
 
@@ -163,18 +315,31 @@ async function fetchTimeWindow(sessionKey, startTime, endTime) {
   const e = endTime.toISOString();
   const delay = () => new Promise((r) => setTimeout(r, 1500));
 
-  const positions   = await fetchJSON(`${API_BASE}/position?session_key=${sessionKey}&date>=${s}&date<${e}`);
+  const positions = await fetchJSON(
+    `${API_BASE}/position?session_key=${sessionKey}&date>=${s}&date<${e}`,
+  );
   await delay();
-  const intervals   = await fetchJSON(`${API_BASE}/intervals?session_key=${sessionKey}&date>=${s}&date<${e}`);
+  const intervals = await fetchJSON(
+    `${API_BASE}/intervals?session_key=${sessionKey}&date>=${s}&date<${e}`,
+  );
   await delay();
-  const laps        = await fetchJSON(`${API_BASE}/laps?session_key=${sessionKey}&date_start>=${s}&date_start<${e}`);
+  const laps = await fetchJSON(
+    `${API_BASE}/laps?session_key=${sessionKey}&date_start>=${s}&date_start<${e}`,
+  );
   await delay();
-  const raceControl = await fetchJSON(`${API_BASE}/race_control?session_key=${sessionKey}&date>=${s}&date<${e}`);
+  const raceControl = await fetchJSON(
+    `${API_BASE}/race_control?session_key=${sessionKey}&date>=${s}&date<${e}`,
+  );
 
-  return { positions, intervals, laps, locations: [], raceControl, teamRadio: [] };
+  return {
+    positions,
+    intervals,
+    laps,
+    locations: [],
+    raceControl,
+    teamRadio: [],
+  };
 }
-
-
 
 // Build initial state structure
 function buildInitialState(session, drivers, startingGrid) {
@@ -277,7 +442,7 @@ function processData(data, state) {
         state.TimingData.Lines[num].IntervalToPositionAhead = { Value: "" };
       } else {
         state.TimingData.Lines[num].GapToLeader = `+${int.gap_to_leader.toFixed(
-          3
+          3,
         )}`;
         state.TimingData.Lines[num].IntervalToPositionAhead = {
           Value: int.interval != null ? `+${int.interval.toFixed(3)}` : "",
@@ -366,7 +531,7 @@ function processData(data, state) {
       // Only add messages that haven't been added yet
       const msgId = `${msg.date}_${msg.message}`;
       const exists = state.RaceControlMessages.Messages.some(
-        (m) => `${m.Utc}_${m.Message}` === msgId
+        (m) => `${m.Utc}_${m.Message}` === msgId,
       );
       if (!exists) {
         state.RaceControlMessages.Messages.push({
@@ -437,10 +602,10 @@ function processData(data, state) {
           state.TeamRadio.Captures = state.TeamRadio.Captures.slice(-30);
         }
         const driver = driversData.find(
-          (d) => d.driver_number === radio.driver_number
+          (d) => d.driver_number === radio.driver_number,
         );
         console.log(
-          `[Replay] Team Radio: ${driver?.name_acronym || radio.driver_number}`
+          `[Replay] Team Radio: ${driver?.name_acronym || radio.driver_number}`,
         );
       }
     });
@@ -485,7 +650,7 @@ export async function startReplay(broadcast, stateRef) {
 
     console.log(`[Replay] Starting at ${REPLAY_SPEED}x speed`);
     console.log(
-      `[Replay] Polling every ${POLL_INTERVAL_MS}ms for ${POLL_WINDOW_SECONDS}s windows`
+      `[Replay] Polling every ${POLL_INTERVAL_MS}ms for ${POLL_WINDOW_SECONDS}s windows`,
     );
 
     replayInterval = setInterval(async () => {
@@ -543,7 +708,7 @@ async function pollAndBroadcast() {
         data.locations.length
       } loc, ${data.raceControl?.length || 0} rc, ${
         data.teamRadio?.length || 0
-      } radio`
+      } radio`,
     );
   }
 
@@ -556,7 +721,7 @@ async function pollAndBroadcast() {
   const seconds = raceSeconds % 60;
   currentStateRef.ExtrapolatedClock = {
     Remaining: `${hours}:${String(minutes).padStart(2, "0")}:${String(
-      seconds
+      seconds,
     ).padStart(2, "0")}`,
     Utc: new Date().toISOString(),
   };

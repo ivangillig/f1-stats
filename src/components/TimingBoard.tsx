@@ -42,7 +42,10 @@ export default function TimingBoard({
 
   const [pinnedPos, setPinnedPos] = useState<PinnedPos>("visible");
   const [cardBounds, setCardBounds] = useState<{
-    top: number; bottom: number; left: number; width: number;
+    top: number;
+    bottom: number;
+    left: number;
+    width: number;
   } | null>(null);
 
   const getPinnedEl = () =>
@@ -60,7 +63,12 @@ export default function TimingBoard({
     const update = () => {
       if (cardRef.current) {
         const r = cardRef.current.getBoundingClientRect();
-        setCardBounds({ top: r.top, bottom: r.bottom, left: r.left, width: r.width });
+        setCardBounds({
+          top: r.top,
+          bottom: r.bottom,
+          left: r.left,
+          width: r.width,
+        });
       }
       const el = getPinnedEl();
       if (!el) return;
@@ -134,7 +142,10 @@ export default function TimingBoard({
     }
     // below
     const cardVisibleBottom = Math.min(window.innerHeight, cardBounds.bottom);
-    return { ...base, bottom: Math.max(0, window.innerHeight - cardVisibleBottom) };
+    return {
+      ...base,
+      bottom: Math.max(0, window.innerHeight - cardVisibleBottom),
+    };
   };
 
   const stickyStyle = getStickyStyle();
@@ -205,12 +216,14 @@ export default function TimingBoard({
         <div
           style={{
             ...stickyStyle,
-            borderTop: pinnedPos === "below"
-              ? `2px solid ${pinnedDriver.teamColor || "#888"}`
-              : undefined,
-            borderBottom: pinnedPos === "above"
-              ? `2px solid ${pinnedDriver.teamColor || "#888"}`
-              : undefined,
+            borderTop:
+              pinnedPos === "below"
+                ? `2px solid ${pinnedDriver.teamColor || "#888"}`
+                : undefined,
+            borderBottom:
+              pinnedPos === "above"
+                ? `2px solid ${pinnedDriver.teamColor || "#888"}`
+                : undefined,
           }}
           className="bg-background shadow-lg"
         >

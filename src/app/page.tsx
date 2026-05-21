@@ -27,8 +27,12 @@ export default function Dashboard() {
 
   const timingBoardRef = useRef<HTMLDivElement>(null);
   const [timingBoardHeight, setTimingBoardHeight] = useState<number>(0);
-  const [hoveredDriverNumber, setHoveredDriverNumber] = useState<string | null>(null);
-  const [pinnedDriverNumber, setPinnedDriverNumber] = useState<string | null>(null);
+  const [hoveredDriverNumber, setHoveredDriverNumber] = useState<string | null>(
+    null,
+  );
+  const [pinnedDriverNumber, setPinnedDriverNumber] = useState<string | null>(
+    null,
+  );
   const [latestRaceControlMessage, setLatestRaceControlMessage] = useState<
     { category?: string; message: string } | undefined
   >();
@@ -123,7 +127,10 @@ export default function Dashboard() {
         <div className="text-center space-y-3">
           <p
             className="text-foreground text-2xl tracking-widest uppercase"
-            style={{ fontFamily: "'Formula1 Display', sans-serif", fontWeight: 700 }}
+            style={{
+              fontFamily: "'Formula1 Display', sans-serif",
+              fontWeight: 700,
+            }}
           >
             {t("error.offline")}
           </p>
@@ -195,7 +202,9 @@ export default function Dashboard() {
                   raceControlMessages={raceControlMessages}
                   isSessionActive={sessionInfo.isLive}
                   qualifyingPart={sessionInfo.qualifyingPart}
-                  hoveredDriverNumber={hoveredDriverNumber ?? pinnedDriverNumber}
+                  hoveredDriverNumber={
+                    hoveredDriverNumber ?? pinnedDriverNumber
+                  }
                 />
               </div>
 
@@ -222,7 +231,6 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
       </main>
 
       <Footer />

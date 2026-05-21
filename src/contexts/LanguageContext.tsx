@@ -11,7 +11,7 @@ interface LanguageContextType {
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(
-  undefined
+  undefined,
 );
 
 const translations = {
@@ -125,7 +125,8 @@ const translations = {
 
     // Error messages
     "error.offline": "Sistema temporalmente fuera de servicio",
-    "error.retrying": "Cuando el servicio esté operativo serás redirigido automáticamente",
+    "error.retrying":
+      "Cuando el servicio esté operativo serás redirigido automáticamente",
     "error.offlineBadge": "Fuera de línea",
     "error.connection": "Conectando al servidor...",
     "error.reconnecting": "Reconectando...",
@@ -272,7 +273,8 @@ const translations = {
 
     // Error messages
     "error.offline": "System temporarily unavailable",
-    "error.retrying": "You will be redirected automatically when the service is back online",
+    "error.retrying":
+      "You will be redirected automatically when the service is back online",
     "error.offlineBadge": "Offline",
     "error.connection": "Connecting to server...",
     "error.reconnecting": "Reconnecting...",
