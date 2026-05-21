@@ -159,10 +159,10 @@ export default function Dashboard() {
         <div className="flex-1 flex flex-col w-full gap-2 p-2">
           {/* Main row - Flex with items-start */}
           <div className="flex flex-col lg:flex-row gap-2 items-start">
-            {/* Column 1 - Timing Board */}
+            {/* Column 1 - Timing Board: takes its natural content width, doesn't shrink */}
             <div
               ref={timingBoardRef}
-              className="min-w-0 overflow-x-auto lg:w-[55%]"
+              className="w-full lg:w-fit lg:flex-none overflow-x-auto"
             >
               <TimingBoard
                 drivers={drivers}
@@ -171,10 +171,11 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Column 2 - Map + Race Control stacked - height matches TimingBoard */}
+            {/* Column 2 - Map + Race Control: fills remaining space, shrinks as needed */}
             <div
-              className="lg:w-[45%] flex flex-col gap-2"
+              className="w-full lg:flex-1 lg:min-w-0 flex flex-col gap-2"
               style={{
+                minWidth: 220,
                 height:
                   timingBoardHeight > 0 ? `${timingBoardHeight}px` : "auto",
               }}

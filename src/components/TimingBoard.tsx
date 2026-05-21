@@ -31,7 +31,7 @@ export default function TimingBoard({
       <div
         className="grid gap-3 px-3 py-2 bg-muted/30 text-xs text-muted-foreground uppercase tracking-wider font-medium border-b border-border"
         style={{
-          gridTemplateColumns: `105px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,
+          gridTemplateColumns: `105px 52px 110px 48px 80px 100px minmax(${s1Count * 22}px, max-content) minmax(${s2Count * 22}px, max-content) minmax(${s3Count * 22}px, max-content)`,
         }}
       >
         <div>{t("timing.driver")}</div>

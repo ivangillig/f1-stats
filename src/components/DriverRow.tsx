@@ -306,7 +306,7 @@ export default function DriverRow({
         !eliminated && inEliminationZone && "bg-red-900/30" // At risk of elimination
       )}
       style={{
-        gridTemplateColumns: `105px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,
+        gridTemplateColumns: `105px 52px 110px 48px 80px 100px minmax(${s1Count * 22}px, max-content) minmax(${s2Count * 22}px, max-content) minmax(${s3Count * 22}px, max-content)`,
       }}
     >
       {/* Position + Driver Tag - combined like f1-dash */}
