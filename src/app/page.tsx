@@ -27,6 +27,8 @@ export default function Dashboard() {
 
   const timingBoardRef = useRef<HTMLDivElement>(null);
   const [timingBoardHeight, setTimingBoardHeight] = useState<number>(0);
+  const [hoveredDriverNumber, setHoveredDriverNumber] = useState<string | null>(null);
+  const [pinnedDriverNumber, setPinnedDriverNumber] = useState<string | null>(null);
   const [latestRaceControlMessage, setLatestRaceControlMessage] = useState<
     { category?: string; message: string } | undefined
   >();
@@ -168,6 +170,10 @@ export default function Dashboard() {
                 drivers={drivers}
                 sessionName={sessionInfo.sessionName}
                 qualifyingPart={sessionInfo.qualifyingPart}
+                hoveredDriverNumber={hoveredDriverNumber}
+                onDriverHover={setHoveredDriverNumber}
+                pinnedDriverNumber={pinnedDriverNumber}
+                onDriverPin={setPinnedDriverNumber}
               />
             </div>
 
@@ -189,6 +195,7 @@ export default function Dashboard() {
                   raceControlMessages={raceControlMessages}
                   isSessionActive={sessionInfo.isLive}
                   qualifyingPart={sessionInfo.qualifyingPart}
+                  hoveredDriverNumber={hoveredDriverNumber ?? pinnedDriverNumber}
                 />
               </div>
 
@@ -215,6 +222,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
       </main>
 
       <Footer />

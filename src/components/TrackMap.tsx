@@ -23,7 +23,8 @@ interface TrackMapProps {
   trackStatus?: TrackStatusInfo;
   raceControlMessages?: RaceControlMessage[];
   isSessionActive?: boolean;
-  qualifyingPart?: number; // 1=Q1, 2=Q2, 3=Q3 - used to detect session changes
+  qualifyingPart?: number;
+  hoveredDriverNumber?: string | null;
 }
 
 const SPACE = 1000;
@@ -52,6 +53,7 @@ export default function TrackMap({
   raceControlMessages = [],
   isSessionActive = false,
   qualifyingPart,
+  hoveredDriverNumber,
 }: TrackMapProps) {
   const { t } = useLanguage();
   const [mapData, setMapData] = useState<MapData | null>(null);
@@ -652,28 +654,79 @@ export default function TrackMap({
           </text>
         ))}
 
-        {/* Car dots */}
-        {carPositions.map(({ driver, x, y }) => {
-          const teamColor = TEAM_COLORS[driver.team] || "#666666";
+        {/* Car dots — hovered driver rendered last so it appears on top */}
+        {[...carPositions]
+          .sort((a, b) =>
+            a.driver.driverNumber === hoveredDriverNumber ? 1 :
+            b.driver.driverNumber === hoveredDriverNumber ? -1 : 0
+          )
+          .map(({ driver, x, y }) => {
+            const teamColor = driver.teamColor || TEAM_COLORS[driver.team] || "#666666";
+            const isHovered = driver.driverNumber === hoveredDriverNumber;
 
-          return (
-            <g
-              key={`car.${driver.driverNumber}`}
-              transform={`translate(${x}, ${y})`}
-            >
-              <circle r={120} fill={teamColor} />
-              <text
-                fontWeight="bold"
-                fontSize={300}
-                fill={teamColor}
-                x={150}
-                y={-120}
-              >
-                {driver.code}
-              </text>
-            </g>
-          );
-        })}
+            return (
+              <g key={`car.${driver.driverNumber}`} transform={`translate(${x}, ${y})`}>
+
+                {/* Label outside dot — fuera del scale group para no desplazar el fill-box */}
+                <text
+                  fontWeight="bold"
+                  fontSize={300}
+                  fill={teamColor}
+                  x={150}
+                  y={-120}
+                  style={{
+                    opacity: isHovered ? 0 : 1,
+                    transition: "opacity 0.15s ease",
+                  }}
+                >
+                  {driver.code}
+                </text>
+
+                {/* Scale group — solo círculos simétricos, fill-box centrado en (0,0) */}
+                <g
+                  style={{
+                    transform: isHovered ? "scale(3.5)" : "scale(1)",
+                    transformBox: "fill-box",
+                    transformOrigin: "center",
+                    transition: "transform 0.2s ease",
+                  }}
+                >
+                  <circle
+                    r={200}
+                    fill="none"
+                    stroke={teamColor}
+                    strokeWidth={45}
+                    style={{
+                      opacity: isHovered ? 0.4 : 0,
+                      transition: "opacity 0.2s ease",
+                    }}
+                  />
+                  <circle r={120} fill={teamColor} />
+                  <circle
+                    r={90}
+                    fill="white"
+                    style={{
+                      opacity: isHovered ? 1 : 0,
+                      transition: "opacity 0.15s ease",
+                    }}
+                  />
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={95}
+                    fill={teamColor}
+                    fontWeight="bold"
+                    style={{
+                      opacity: isHovered ? 1 : 0,
+                      transition: "opacity 0.15s ease",
+                    }}
+                  >
+                    {driver.code}
+                  </text>
+                </g>
+              </g>
+            );
+          })}
       </svg>
     </div>
   );

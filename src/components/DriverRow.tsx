@@ -4,11 +4,16 @@ import { Driver, SectorStatus } from "@/types/f1";
 import { TEAM_COLORS, TIRE_COMPOUNDS, TEAM_LOGOS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Pin } from "lucide-react";
 
 interface DriverRowProps {
   driver: Driver;
   sessionName?: string;
-  qualifyingPart?: number; // 1 = Q1, 2 = Q2, 3 = Q3
+  qualifyingPart?: number;
+  isHovered?: boolean;
+  onHover?: (driverNumber: string | null) => void;
+  isPinned?: boolean;
+  onPin?: (driverNumber: string | null) => void;
 }
 
 // Empty time format placeholder
@@ -220,6 +225,10 @@ export default function DriverRow({
   driver,
   sessionName,
   qualifyingPart,
+  isHovered,
+  onHover,
+  isPinned,
+  onPin,
 }: DriverRowProps) {
   const { t } = useLanguage();
 
@@ -298,22 +307,31 @@ export default function DriverRow({
 
   return (
     <div
+      onMouseEnter={() => onHover?.(driver.driverNumber)}
+      onMouseLeave={() => onHover?.(null)}
+      data-pinned-row={isPinned ? "true" : undefined}
       className={cn(
-        "grid gap-3 px-3 py-1 items-center",
-        "border-b border-border/50 hover:bg-muted/30 transition-colors",
+        "grid gap-3 px-3 py-1 items-center cursor-default",
+        "border-b border-border/50 transition-colors",
+        (isHovered || isPinned) ? "bg-muted/50" : "hover:bg-muted/30",
         driver.retired && "opacity-40",
-        eliminated && "opacity-40 bg-zinc-900/50", // Knocked out in previous Q
-        !eliminated && inEliminationZone && "bg-red-900/30" // At risk of elimination
+        eliminated && "opacity-40 bg-zinc-900/50",
+        !eliminated && inEliminationZone && "bg-red-900/30"
       )}
       style={{
         gridTemplateColumns: `105px 52px 110px 48px 80px 100px minmax(${s1Count * 22}px, max-content) minmax(${s2Count * 22}px, max-content) minmax(${s3Count * 22}px, max-content)`,
+        borderLeft: isPinned ? `3px solid ${teamColor}` : "3px solid transparent",
       }}
     >
-      {/* Position + Driver Tag - combined like f1-dash */}
+      {/* Position + Driver Tag — click to pin/unpin, overlay on hover */}
       <div
-        className="flex items-center h-[42px] px-1 rounded-md overflow-hidden"
+        className="relative flex items-center h-[42px] px-1 rounded-md overflow-hidden cursor-pointer"
         style={{ backgroundColor: teamColor }}
-        title={driver.name}
+        title={isPinned ? "Click to unpin" : driver.name}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPin?.(isPinned ? null : driver.driverNumber);
+        }}
       >
         <span className="text-2xl mr-3 font-black font-mono tabular-nums leading-none w-10 text-center text-white">
           {driver.position}
@@ -323,6 +341,19 @@ export default function DriverRow({
           style={{ backgroundColor: "white", color: teamColor }}
         >
           {driver.code}
+        </div>
+        {/* Pin overlay — shown on row hover or when pinned */}
+        <div
+          className={cn(
+            "absolute inset-0 flex items-center justify-center rounded-md transition-opacity duration-150",
+            "bg-black/50",
+            (isHovered || isPinned) ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+        >
+          <Pin
+            size={18}
+            className={cn("text-white drop-shadow", isPinned && "fill-current")}
+          />
         </div>
       </div>
 
