@@ -182,11 +182,17 @@ class OpenF1Client extends EventEmitter {
     const update = {};
 
     if (Object.keys(this.locationBuffer).length > 0) {
-      update.CarLocations = { ...this.locationBuffer };
+      // Translate to canonical Position.Position shape expected by the frontend
+      const positionEntries = {};
+      for (const [num, loc] of Object.entries(this.locationBuffer)) {
+        positionEntries[num] = { X: loc.x, Y: loc.y };
+      }
+      update.Position = { Position: positionEntries };
       this.locationBuffer = {};
     }
 
     if (Object.keys(this.carDataBuffer).length > 0) {
+      // CarData is kept as-is under CarData key; frontend ignores unknown keys
       update.CarData = { ...this.carDataBuffer };
       this.carDataBuffer = {};
     }

@@ -286,6 +286,8 @@ const server = http.createServer((req, res) => {
         clients: sseClients.size,
         hasState: Object.keys(currentState).length > 0,
         mqttAvailable: hasMQTTCredentials(),
+        f1dashHasState: hasF1DashState(),
+        openf1Connected: isOpenF1Connected(),
       })
     );
     return;
@@ -340,6 +342,19 @@ const server = http.createServer((req, res) => {
   res.writeHead(404, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: "Not found" }));
 });
+
+// Graceful shutdown — stop all active clients before exiting
+function shutdown(signal) {
+  console.log(`[Server] ${signal} received — shutting down`);
+  stopF1DashClient();
+  stopOpenF1Client();
+  stopLivePolling();
+  stopMQTT();
+  stopReplay();
+  server.close(() => process.exit(0));
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 // Start server
 server.listen(PORT, async () => {

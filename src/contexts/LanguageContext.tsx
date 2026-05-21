@@ -55,6 +55,7 @@ const translations = {
     "driver.miniSectorRecord": "Récord de mini sector",
     "driver.miniSectorBest": "Mejor mini sector personal",
     "driver.miniSectorSlower": "Más lento que el mejor",
+    "driver.miniSectorPit": "Mini sector en pit",
     "driver.miniSectorNoData": "Sin datos",
     "driver.sectorBest": "Mejor sector general",
     "driver.sectorPersonalBest": "Mejor sector personal",
@@ -125,6 +126,7 @@ const translations = {
     // Error messages
     "error.offline": "Sistema temporalmente fuera de servicio",
     "error.retrying": "Cuando el servicio esté operativo serás redirigido automáticamente",
+    "error.offlineBadge": "Fuera de línea",
     "error.connection": "Conectando al servidor...",
     "error.reconnecting": "Reconectando...",
 
@@ -201,6 +203,8 @@ const translations = {
     "driver.miniSectorRecord": "Mini sector record",
     "driver.miniSectorBest": "Personal best mini sector",
     "driver.miniSectorSlower": "Slower than best",
+    "driver.miniSectorPit": "Pit lane mini sector",
+    "driver.miniSectorNoData": "No data",
     "driver.sectorBest": "Overall best sector",
     "driver.sectorPersonalBest": "Personal best sector",
     "driver.sectorSlower": "Slower than personal best",
@@ -269,6 +273,7 @@ const translations = {
     // Error messages
     "error.offline": "System temporarily unavailable",
     "error.retrying": "You will be redirected automatically when the service is back online",
+    "error.offlineBadge": "Offline",
     "error.connection": "Connecting to server...",
     "error.reconnecting": "Reconnecting...",
 

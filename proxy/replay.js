@@ -84,11 +84,16 @@ async function fetchJSON(url, retries = 4) {
       }
       return await response.json();
     } catch (error) {
-      console.error(`[Replay] Fetch error: ${error.message} for ${url}`);
-      return [];
+      const isLastAttempt = attempt >= retries;
+      if (isLastAttempt) {
+        console.error(`[Replay] Fetch failed after ${retries + 1} attempts: ${error.message} for ${url}`);
+        return [];
+      }
+      const delay = 2000 * (attempt + 1);
+      console.warn(`[Replay] Transient error (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay / 1000}s: ${error.message}`);
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
-  console.error(`[Replay] Failed after ${retries} retries: ${url}`);
   return [];
 }
 

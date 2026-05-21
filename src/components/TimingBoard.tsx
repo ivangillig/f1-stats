@@ -48,12 +48,14 @@ export default function TimingBoard({
   const getPinnedEl = () =>
     document.querySelector<HTMLElement>('[data-pinned-row="true"]');
 
-  // Poll pinned row position + card bounds every 200ms
+  // Update pinned row position + card bounds using event-driven observers
   useEffect(() => {
     if (!pinnedDriverNumber) {
       setPinnedPos("visible");
       return;
     }
+
+    let rafId: number | null = null;
 
     const update = () => {
       if (cardRef.current) {
@@ -72,9 +74,35 @@ export default function TimingBoard({
       }
     };
 
+    // Throttle updates to one per animation frame to avoid forced-layout thrashing
+    const scheduleUpdate = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        update();
+      });
+    };
+
+    // Scroll/resize move the card on screen — cheap passive listeners
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate, { passive: true });
+
+    // ResizeObserver fires when the list reorders or data changes cause layout shifts
+    let ro: ResizeObserver | null = null;
+    if (cardRef.current) {
+      ro = new ResizeObserver(scheduleUpdate);
+      ro.observe(cardRef.current);
+    }
+
+    // Initial measurement
     update();
-    const id = setInterval(update, 200);
-    return () => clearInterval(id);
+
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      ro?.disconnect();
+    };
   }, [pinnedDriverNumber]);
 
   // Scroll newly-pinned driver into view

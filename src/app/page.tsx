@@ -135,7 +135,7 @@ export default function Dashboard() {
         {/* Indicador animado */}
         <div className="flex items-center gap-2 text-muted-foreground/50 text-xs tracking-widest uppercase">
           <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-          Offline
+          {t("error.offlineBadge")}
         </div>
       </div>
     );
