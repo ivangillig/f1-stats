@@ -5,6 +5,7 @@
 /.pnp
 .pnp.js
 /proxy/node_modules
+/.claude/
 
 # testing
 /coverage
@@ -28,6 +29,7 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+proxy/.env
 
 # vercel
 .vercel
@@ -46,3 +48,16 @@ next-env.d.ts
 
 # OS
 Thumbs.db
+desktop.ini
+
+# Docker
+proxy/data/
+
+# Logs
+logs/
+*.log
+
+# Replay / test data recordings
+proxy/recordings/
+proxy/data/
+
