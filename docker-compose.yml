@@ -31,6 +31,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-http://localhost:4000}
     container_name: f1-dashboard
     restart: unless-stopped
     ports:
