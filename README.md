@@ -140,6 +140,14 @@ OPENF1_PASSWORD=tu_contraseña
 
 Los datos en vivo solo están disponibles durante sesiones oficiales (prácticas, clasificación, carrera). Fuera de sesión, el proxy sirve automáticamente una sesión grabada del GP de Azerbaiyán 2024.
 
+## Apoyar el proyecto
+
+Si te gusta este dashboard y querés ayudar a mantener el hosting y el dominio, podés invitarme un café a través de GitHub Sponsors:
+
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%99%A5-ea4aaa?style=flat-square&logo=github-sponsors)](https://github.com/sponsors/ivangillig)
+
+Cualquier contribución ayuda a mantener el proyecto en línea. ¡Gracias!
+
 ## Contribuir
 
 1. Fork el proyecto
