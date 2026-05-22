@@ -15,8 +15,8 @@ services:
       - PROXY_MODE=${PROXY_MODE:-auto}
       - F1_SSE_HOST=${F1_SSE_HOST}
       - F1_SSE_PATH=${F1_SSE_PATH}
-      - F1_SSE_USERNAME=${F1_SSE_USERNAME}
-      - F1_SSE_PASSWORD=${F1_SSE_PASSWORD}
+      - OPENF1_USERNAME=${OPENF1_USERNAME}
+      - OPENF1_PASSWORD=${OPENF1_PASSWORD}
       - F1_SSE_SECURE=${F1_SSE_SECURE:-true}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
