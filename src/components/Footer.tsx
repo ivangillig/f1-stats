@@ -31,7 +31,7 @@ export default function Footer() {
             ♥ Sponsor
           </a>
           <span className="text-zinc-700">•</span>
-          v1.0.0
+          v2.0.0
         </span>
         <span className="text-[10px] text-zinc-600">
           {t("footer.disclaimer")}
