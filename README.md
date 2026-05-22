@@ -6,6 +6,7 @@ Dashboard en tiempo real para telemetría de Fórmula 1, construido con Next.js 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-38B2AC?style=flat-square&logo=tailwind-css)
 ![Node.js](https://img.shields.io/badge/Node.js-20-339933?style=flat-square&logo=node.js)
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%99%A5-ea4aaa?style=flat-square&logo=github-sponsors)](https://github.com/sponsors/ivangillig)
 
 ## Características
 
