@@ -640,7 +640,9 @@ async function connect() {
           await fetchHistoricalData(sessionKey);
         }
         if (broadcastFn && currentStateRef) {
-          console.log("[openf1-mqtt] Initial state ready — broadcasting to SSE clients");
+          console.log(
+            "[openf1-mqtt] Initial state ready — broadcasting to SSE clients",
+          );
           broadcastFn("update", currentStateRef);
         }
       });
