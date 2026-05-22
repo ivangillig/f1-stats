@@ -30,6 +30,7 @@ interface F1DataState {
   raceControlMessages: RaceControlMessage[];
   isConnected: boolean;
   error: string | null;
+  proxyMode: string | null;
 }
 
 const defaultSessionInfo: SessionInfo = {
@@ -64,6 +65,7 @@ export function useF1DataSSE(): F1DataState {
   >([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [proxyMode, setProxyMode] = useState<string | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -99,26 +101,9 @@ export function useF1DataSSE(): F1DataState {
     if (!data) return;
 
     try {
-      // Debug: Log Position data structure on first receive
-      if (data.Position && Object.keys(carDataRef.current).length === 0) {
-        console.log(
-          "[F1 Data] Position data structure:",
-          Object.keys(data.Position)
-        );
-        const sample = Object.entries(data.Position)[0];
-        if (sample) {
-          console.log(
-            "[F1 Data] Position sample:",
-            sample[0],
-            JSON.stringify(sample[1]).substring(0, 300)
-          );
-        }
-      }
-
       // Process DriverList first - this has the real driver info from F1 API
       const driverListData = data.DriverList;
       if (driverListData) {
-        console.log("[F1 Data] DriverList received:", driverListData);
         Object.entries(driverListData).forEach(
           ([num, driverData]: [string, any]) => {
             if (driverData && typeof driverData === "object") {
@@ -133,10 +118,6 @@ export function useF1DataSSE(): F1DataState {
                   ? `#${driverData.TeamColour}`
                   : "",
               };
-              console.log(
-                `[F1 Data] Driver ${num}:`,
-                driverListRef.current[num]
-              );
             }
           }
         );
@@ -146,11 +127,6 @@ export function useF1DataSSE(): F1DataState {
       const timingData = data.TimingData?.Lines || {};
       const timingAppData = data.TimingAppData?.Lines || {};
       const timingStatsData = data.TimingStats?.Lines || {};
-
-      // Log timing data for debugging
-      if (Object.keys(timingData).length > 0) {
-        console.log("[F1 Data] TimingData drivers:", Object.keys(timingData));
-      }
 
       // Process SessionInfo
       const sessionData = data.SessionInfo || {};
@@ -193,9 +169,6 @@ export function useF1DataSSE(): F1DataState {
         qualifyingPart
       ) {
         const newCircuitKey = sessionData.Meeting?.Circuit?.Key;
-        if (newCircuitKey) {
-          console.log("[F1 Data] Circuit Key received:", newCircuitKey);
-        }
         // Store session path for building audio URLs
         if (sessionData.Path) {
           sessionPathRef.current = sessionData.Path;
@@ -211,7 +184,9 @@ export function useF1DataSSE(): F1DataState {
           currentLap: lapCount.CurrentLap || prev.currentLap,
           totalLaps: lapCount.TotalLaps || prev.totalLaps,
           circuitKey: newCircuitKey || prev.circuitKey,
-          isLive: true,
+          isLive: sessionData.EndDate
+            ? new Date(sessionData.EndDate) > new Date(Date.now() - 30 * 60 * 1000)
+            : true,
           qualifyingPart: qualifyingPart || prev.qualifyingPart,
         }));
       }
@@ -822,6 +797,7 @@ export function useF1DataSSE(): F1DataState {
           console.log(`[SSE] Health: status=${data.status} mode=${data.mode}`);
           if (data.status === "ok") {
             setError(null);
+            setProxyMode(data.mode ?? null);
             if (healthCheckIntervalRef.current) {
               clearInterval(healthCheckIntervalRef.current);
               healthCheckIntervalRef.current = null;
@@ -872,5 +848,6 @@ export function useF1DataSSE(): F1DataState {
     raceControlMessages,
     isConnected,
     error,
+    proxyMode,
   };
 }

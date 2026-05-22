@@ -9,6 +9,8 @@
  * Colapinto P8 - 4 points!
  */
 
+import { ensureValidToken, hasMQTTCredentials } from "./mqtt-client.js";
+
 // Azerbaijan 2024 GP - Session Key (Colapinto P8!)
 const SESSION_KEY = 9598;
 const CIRCUIT_KEY = 144; // Baku
@@ -17,12 +19,17 @@ const TOTAL_LAPS = 51; // Azerbaijan GP has 51 laps
 // Replay speed multiplier (1x = real-time, 10x = 10 seconds per real second)
 const REPLAY_SPEED = 1;
 
-// Polling interval in milliseconds (how often we fetch new data)
-// Poll every 8 seconds, covering 8s of race time per cycle.
-// Free tier limit: 30 req/min. We make 4 sequential requests per cycle
-// with 1.5s between each → 4 requests / 8s cycle = 30 req/min (at the limit).
-const POLL_INTERVAL_MS = 8000;
-const POLL_WINDOW_SECONDS = 8 * REPLAY_SPEED;
+// Paid tier doubles the rate limit (60 req/min, 6 req/s) vs free (30 req/min, 3 req/s).
+// 4 requests per cycle → paid: 4s interval, free: 8s interval.
+const PAID_POLL_INTERVAL_MS = 4000;
+const FREE_POLL_INTERVAL_MS = 8000;
+const PAID_REQUEST_DELAY_MS = 200;
+const FREE_REQUEST_DELAY_MS = 1500;
+
+// Set at startReplay() based on whether credentials are available
+let POLL_INTERVAL_MS = FREE_POLL_INTERVAL_MS;
+let REQUEST_DELAY_MS = FREE_REQUEST_DELAY_MS;
+let POLL_WINDOW_SECONDS = 8 * REPLAY_SPEED;
 
 // API base URL
 const API_BASE = "https://api.openf1.org/v1";
@@ -68,7 +75,16 @@ function getSegmentStatus(value) {
 async function fetchJSON(url, retries = 4) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const response = await fetch(url);
+      const headers = {};
+      if (hasMQTTCredentials()) {
+        try {
+          const token = await ensureValidToken();
+          headers["Authorization"] = `Bearer ${token}`;
+        } catch {
+          // Fall through to unauthenticated request
+        }
+      }
+      const response = await fetch(url, { headers });
       if (response.status === 429) {
         const delay = 2000 * (attempt + 1);
         console.warn(`[Replay] Rate limited, retrying in ${delay / 1000}s...`);
@@ -313,7 +329,7 @@ function fetchStartingGrid() {
 async function fetchTimeWindow(sessionKey, startTime, endTime) {
   const s = startTime.toISOString();
   const e = endTime.toISOString();
-  const delay = () => new Promise((r) => setTimeout(r, 1500));
+  const delay = () => new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
 
   const positions = await fetchJSON(
     `${API_BASE}/position?session_key=${sessionKey}&date>=${s}&date<${e}`,
@@ -441,11 +457,11 @@ function processData(data, state) {
         state.TimingData.Lines[num].GapToLeader = "";
         state.TimingData.Lines[num].IntervalToPositionAhead = { Value: "" };
       } else {
-        state.TimingData.Lines[num].GapToLeader = `+${int.gap_to_leader.toFixed(
-          3,
-        )}`;
+        const gap = parseFloat(int.gap_to_leader);
+        state.TimingData.Lines[num].GapToLeader = isNaN(gap) ? "" : `+${gap.toFixed(3)}`;
+        const ivl = parseFloat(int.interval);
         state.TimingData.Lines[num].IntervalToPositionAhead = {
-          Value: int.interval != null ? `+${int.interval.toFixed(3)}` : "",
+          Value: !isNaN(ivl) ? `+${ivl.toFixed(3)}` : "",
         };
       }
     }
@@ -624,6 +640,19 @@ export async function startReplay(broadcast, stateRef) {
   replayStarted = true;
   broadcastFn = broadcast;
   currentStateRef = stateRef;
+
+  // Use paid rate limits if credentials are available
+  if (hasMQTTCredentials()) {
+    POLL_INTERVAL_MS = PAID_POLL_INTERVAL_MS;
+    REQUEST_DELAY_MS = PAID_REQUEST_DELAY_MS;
+    POLL_WINDOW_SECONDS = PAID_POLL_INTERVAL_MS / 1000 * REPLAY_SPEED;
+    console.log(`[Replay] Paid tier detected — using ${POLL_INTERVAL_MS}ms interval`);
+  } else {
+    POLL_INTERVAL_MS = FREE_POLL_INTERVAL_MS;
+    REQUEST_DELAY_MS = FREE_REQUEST_DELAY_MS;
+    POLL_WINDOW_SECONDS = FREE_POLL_INTERVAL_MS / 1000 * REPLAY_SPEED;
+    console.log(`[Replay] Free tier — using ${POLL_INTERVAL_MS}ms interval`);
+  }
 
   try {
     // Sequential fetches to avoid rate limiting (free tier: 3 req/s, 30 req/min)

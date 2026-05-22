@@ -58,8 +58,6 @@ async function getAccessToken() {
     );
   }
 
-  console.log("[MQTT] Obtaining access token...");
-
   const params = new URLSearchParams();
   params.append("username", username);
   params.append("password", password);
@@ -82,14 +80,14 @@ async function getAccessToken() {
   // Set expiry 5 minutes before actual expiry for safety
   tokenExpiry = Date.now() + (parseInt(data.expires_in) - 300) * 1000;
 
-  console.log(`[MQTT] Access token obtained, expires in ${data.expires_in}s`);
+  console.log(`[openf1-mqtt] Auth token obtained (expires in ${data.expires_in}s)`);
   return accessToken;
 }
 
 /**
  * Check if token is still valid, refresh if needed
  */
-async function ensureValidToken() {
+export async function ensureValidToken() {
   if (!accessToken || !tokenExpiry || Date.now() >= tokenExpiry) {
     await getAccessToken();
   }
@@ -103,11 +101,6 @@ function processMessage(topic, message) {
   try {
     const data = JSON.parse(message.toString());
     const topicName = topic.replace("v1/", "");
-
-    // Log occasionally (not every message to avoid spam)
-    if (Math.random() < 0.01) {
-      console.log(`[MQTT] ${topicName}: received data`);
-    }
 
     // Update state based on topic
     switch (topicName) {
@@ -151,7 +144,7 @@ function processMessage(topic, message) {
       broadcastFn("update", currentStateRef);
     }
   } catch (err) {
-    console.error(`[MQTT] Error processing message on ${topic}:`, err.message);
+    console.error(`[openf1-mqtt] Error processing message on ${topic}:`, err.message);
   }
 }
 
@@ -296,7 +289,6 @@ function handleRaceControl(data) {
         currentStateRef.RaceControlMessages.Messages =
           currentStateRef.RaceControlMessages.Messages.slice(-50);
       }
-      console.log(`[MQTT] Race Control: ${data.message}`);
     }
 
     // Update track status based on flags
@@ -351,7 +343,7 @@ function handleTeamRadio(data) {
         currentStateRef.TeamRadio.Captures =
           currentStateRef.TeamRadio.Captures.slice(-30);
       }
-      console.log(`[MQTT] Team Radio: Driver ${data.driver_number}`);
+      console.log(`[openf1-mqtt] Team Radio: Driver ${data.driver_number}`);
     }
   }
 }
@@ -435,11 +427,10 @@ function formatLapTime(seconds) {
  */
 async function fetchHistoricalData(sessionKey) {
   if (!sessionKey) {
-    console.log("[MQTT] No session key yet, skipping historical fetch");
     return;
   }
 
-  console.log(`[MQTT] Fetching historical data for session ${sessionKey}...`);
+  console.log(`[openf1-mqtt] Fetching historical data for session ${sessionKey}...`);
 
   try {
     const token = await ensureValidToken();
@@ -448,50 +439,67 @@ async function fetchHistoricalData(sessionKey) {
       Authorization: `Bearer ${token}`,
     };
 
-    // Fetch race_control and team_radio in parallel
-    const [raceControlRes, teamRadioRes, driversRes] = await Promise.all([
-      fetch(`${API_BASE}/race_control?session_key=${sessionKey}`, { headers }),
-      fetch(`${API_BASE}/team_radio?session_key=${sessionKey}`, { headers }),
-      fetch(`${API_BASE}/drivers?session_key=${sessionKey}`, { headers }),
-    ]);
+    const [raceControlRes, teamRadioRes, driversRes, lapsRes, intervalsRes, stintsRes] =
+      await Promise.all([
+        fetch(`${API_BASE}/race_control?session_key=${sessionKey}`, { headers }),
+        fetch(`${API_BASE}/team_radio?session_key=${sessionKey}`, { headers }),
+        fetch(`${API_BASE}/drivers?session_key=${sessionKey}`, { headers }),
+        fetch(`${API_BASE}/laps?session_key=${sessionKey}`, { headers }),
+        fetch(`${API_BASE}/intervals?session_key=${sessionKey}`, { headers }),
+        fetch(`${API_BASE}/stints?session_key=${sessionKey}`, { headers }),
+      ]);
 
-    // Process race control messages
     if (raceControlRes.ok) {
       const raceControl = await raceControlRes.json();
-      console.log(
-        `[MQTT] Loaded ${raceControl.length} historical race control messages`
-      );
-
-      raceControl.forEach((msg) => {
-        // Use the existing handler which filters duplicates
-        handleRaceControl(msg);
-      });
+      console.log(`[openf1-mqtt] Loaded ${raceControl.length} historical race control messages`);
+      raceControl.forEach((msg) => handleRaceControl(msg));
     }
 
-    // Process team radios
     if (teamRadioRes.ok) {
       const teamRadio = await teamRadioRes.json();
-      console.log(`[MQTT] Loaded ${teamRadio.length} historical team radios`);
-
-      teamRadio.forEach((radio) => {
-        // Use the existing handler which filters duplicates
-        handleTeamRadio(radio);
-      });
+      console.log(`[openf1-mqtt] Loaded ${teamRadio.length} historical team radios`);
+      teamRadio.forEach((radio) => handleTeamRadio(radio));
     }
 
-    // Process drivers (for DriverList)
     if (driversRes.ok) {
       const drivers = await driversRes.json();
-      console.log(`[MQTT] Loaded ${drivers.length} drivers`);
-
-      drivers.forEach((driver) => {
-        handleDriver(driver);
-      });
+      console.log(`[openf1-mqtt] Loaded ${drivers.length} drivers`);
+      drivers.forEach((driver) => handleDriver(driver));
     }
 
-    console.log("[MQTT] Historical data loaded successfully");
+    // Build TimingData from last known lap/interval/stint per driver
+    if (lapsRes.ok) {
+      const laps = await lapsRes.json();
+      // Keep only the last lap per driver
+      const lastLap = {};
+      for (const lap of laps) {
+        const n = String(lap.driver_number);
+        if (!lastLap[n] || lap.lap_number > lastLap[n].lap_number) {
+          lastLap[n] = lap;
+        }
+      }
+      Object.values(lastLap).forEach((lap) => handleLap(lap));
+      console.log(`[openf1-mqtt] Loaded last laps for ${Object.keys(lastLap).length} drivers`);
+    }
+
+    if (intervalsRes.ok) {
+      const intervals = await intervalsRes.json();
+      // Keep only the last interval per driver
+      const lastInterval = {};
+      for (const entry of intervals) {
+        lastInterval[String(entry.driver_number)] = entry;
+      }
+      Object.values(lastInterval).forEach((entry) => handleInterval(entry));
+    }
+
+    if (stintsRes.ok) {
+      const stints = await stintsRes.json();
+      stints.forEach((stint) => handleStint(stint));
+    }
+
+    console.log("[openf1-mqtt] Historical data loaded");
   } catch (error) {
-    console.error("[MQTT] Error fetching historical data:", error.message);
+    console.error("[openf1-mqtt] Error fetching historical data:", error.message);
   }
 }
 
@@ -516,7 +524,7 @@ async function getCurrentSessionKey() {
       if (sessions && sessions.length > 0) {
         const session = sessions[0];
         console.log(
-          `[MQTT] Current session: ${session.session_name} at ${session.location}`
+          `[openf1-mqtt] Current session: ${session.session_name} at ${session.location}`
         );
 
         // Also update session info in state
@@ -532,13 +540,44 @@ async function getCurrentSessionKey() {
           };
         }
 
+        // Include EndDate in SessionInfo so frontend knows if session is live
+        if (currentStateRef?.SessionInfo) {
+          currentStateRef.SessionInfo.EndDate = session.date_end;
+        }
+
         return session.session_key;
       }
     }
   } catch (error) {
-    console.error("[MQTT] Error getting current session:", error.message);
+    console.error("[openf1-mqtt] Error getting current session:", error.message);
   }
   return null;
+}
+
+/**
+ * Check if there is an active F1 session right now.
+ * Returns true if session ended within the last 30 minutes (post-race window).
+ */
+export async function checkActiveSession() {
+  try {
+    const token = await ensureValidToken();
+    const response = await fetch(`${API_BASE}/sessions?session_key=latest`, {
+      headers: { accept: "application/json", Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return true; // can't check → assume active
+    const sessions = await response.json();
+    if (!sessions?.length) return false;
+    const session = sessions[0];
+    if (!session.date_end) return true; // no end date = session in progress
+    const endDate = new Date(session.date_end);
+    const isActive = endDate > new Date(Date.now() - 30 * 60 * 1000);
+    if (!isActive) {
+      console.log(`[openf1-mqtt] Last session ended at ${session.date_end} — no active session`);
+    }
+    return isActive;
+  } catch {
+    return true; // assume active on error
+  }
 }
 
 /**
@@ -549,7 +588,7 @@ async function connect() {
     const token = await ensureValidToken();
     const username = process.env.OPENF1_USERNAME;
 
-    console.log(`[MQTT] Connecting to ${MQTT_BROKER}:${MQTT_PORT}...`);
+    console.log(`[openf1-mqtt] Connecting to ${MQTT_BROKER}:${MQTT_PORT}...`);
 
     client = mqtt.connect(`mqtts://${MQTT_BROKER}:${MQTT_PORT}`, {
       username: username,
@@ -559,19 +598,11 @@ async function connect() {
     });
 
     client.on("connect", () => {
-      console.log("[MQTT] Connected to OpenF1!");
+      console.log(`[openf1-mqtt] Connected — subscribing to ${TOPICS.length} topics`);
 
-      // Subscribe to all topics
       TOPICS.forEach((topic) => {
         client.subscribe(topic, (err) => {
-          if (err) {
-            console.error(
-              `[MQTT] Failed to subscribe to ${topic}:`,
-              err.message
-            );
-          } else {
-            console.log(`[MQTT] Subscribed to ${topic}`);
-          }
+          if (err) console.error(`[openf1-mqtt] Subscribe failed for ${topic}:`, err.message);
         });
       });
 
@@ -588,31 +619,22 @@ async function connect() {
     client.on("message", processMessage);
 
     client.on("error", (error) => {
-      console.error("[MQTT] Connection error:", error.message);
+      console.error("[openf1-mqtt] Connection error:", error.message);
     });
 
     client.on("close", () => {
-      console.log("[MQTT] Connection closed");
-
       if (isRunning) {
-        // Schedule reconnection
-        console.log("[MQTT] Will attempt to reconnect in 5 seconds...");
+        console.log("[openf1-mqtt] Disconnected — reconnecting in 5s...");
         reconnectTimeout = setTimeout(async () => {
-          // Token might have expired, get new one
           accessToken = null;
           connect();
         }, 5000);
       }
     });
-
-    client.on("offline", () => {
-      console.log("[MQTT] Client went offline");
-    });
   } catch (error) {
-    console.error("[MQTT] Failed to connect:", error.message);
-
+    console.error("[openf1-mqtt] Failed to connect:", error.message);
     if (isRunning) {
-      console.log("[MQTT] Will retry in 10 seconds...");
+      console.log("[openf1-mqtt] Retrying in 10s...");
       reconnectTimeout = setTimeout(connect, 10000);
     }
   }
@@ -623,13 +645,17 @@ async function connect() {
  */
 export async function startMQTT(broadcast, stateRef) {
   if (isRunning) {
-    console.log("[MQTT] Already running");
     return true;
   }
 
-  // Check for credentials
   if (!process.env.OPENF1_USERNAME || !process.env.OPENF1_PASSWORD) {
-    console.log("[MQTT] No credentials configured, cannot start live mode");
+    console.log("[openf1-mqtt] No credentials configured");
+    return false;
+  }
+
+  // Check if there is an active session before connecting
+  const sessionActive = await checkActiveSession();
+  if (!sessionActive) {
     return false;
   }
 
@@ -655,7 +681,7 @@ export async function startMQTT(broadcast, stateRef) {
  * Stop MQTT client
  */
 export function stopMQTT() {
-  console.log("[MQTT] Stopping...");
+  console.log("[openf1-mqtt] Stopping...");
   isRunning = false;
 
   if (reconnectTimeout) {

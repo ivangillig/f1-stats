@@ -130,6 +130,8 @@ const translations = {
     "error.offlineBadge": "Fuera de línea",
     "error.connection": "Conectando al servidor...",
     "error.reconnecting": "Reconectando...",
+    "mode.replayLabel": "Modo Demo:",
+    "mode.replayDesc": "Datos en vivo no disponibles. Mostrando sesión grabada.",
 
     // Track status
     "status.allClear": "Despejado",
@@ -278,6 +280,8 @@ const translations = {
     "error.offlineBadge": "Offline",
     "error.connection": "Connecting to server...",
     "error.reconnecting": "Reconnecting...",
+    "mode.replayLabel": "Demo Mode:",
+    "mode.replayDesc": "Live data unavailable. Displaying recorded session.",
 
     // Track status
     "status.allClear": "All Clear",

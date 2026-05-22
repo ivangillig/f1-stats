@@ -23,6 +23,7 @@ export default function Dashboard() {
     raceControlMessages,
     isConnected,
     error,
+    proxyMode,
   } = useF1DataSSE();
 
   const timingBoardRef = useRef<HTMLDivElement>(null);
@@ -161,6 +162,14 @@ export default function Dashboard() {
         {error === "RECONNECTING" && (
           <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm">
             {t("error.reconnecting")}
+          </div>
+        )}
+
+        {proxyMode === "replay" && (
+          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
+            <span className="font-semibold">{t("mode.replayLabel")}</span>
+            <span className="text-yellow-200/70">{t("mode.replayDesc")}</span>
           </div>
         )}
 

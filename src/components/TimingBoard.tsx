@@ -19,7 +19,7 @@ interface TimingBoardProps {
 
 type PinnedPos = "visible" | "above" | "below";
 
-const HEADER_HEIGHT = 40; // timing board header row height in px
+const HEADER_HEIGHT = 36; // timing board header row height in px
 
 export default function TimingBoard({
   drivers,
@@ -150,7 +150,7 @@ export default function TimingBoard({
 
   const stickyStyle = getStickyStyle();
 
-  const gridCols = `105px 52px 110px 48px 80px 100px minmax(${s1Count * 22}px, max-content) minmax(${s2Count * 22}px, max-content) minmax(${s3Count * 22}px, max-content)`;
+  const gridCols = `95px 47px 99px 43px 72px 90px minmax(${s1Count * 20}px, max-content) minmax(${s2Count * 20}px, max-content) minmax(${s3Count * 20}px, max-content)`;
 
   return (
     <>
