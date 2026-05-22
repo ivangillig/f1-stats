@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
+import AlertStrip from "@/components/AlertStrip";
 import Image from "next/image";
 import TopBar from "@/components/TopBar";
 import TimingBoard from "@/components/TimingBoard";
@@ -37,7 +38,6 @@ export default function Dashboard() {
     { category?: string; message: string } | undefined
   >();
   const lastShownMessageRef = useRef<string | null>(null);
-  const bannerTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detect new race control messages and show banner for 5 seconds
   useEffect(() => {
@@ -56,37 +56,17 @@ export default function Dashboard() {
           !newestMessage.message.includes("TRACK SURFACE SLIPPERY");
 
         if (isInterestingMessage) {
-          // Mark this message as shown
           lastShownMessageRef.current = newestMessage.message;
-
-          // Clear any existing timer
-          if (bannerTimerRef.current) {
-            clearTimeout(bannerTimerRef.current);
-          }
-
           setLatestRaceControlMessage({
             category: newestMessage.category,
             message: newestMessage.message,
           });
-
-          // Set new timer to hide banner after 5 seconds
-          bannerTimerRef.current = setTimeout(() => {
-            setLatestRaceControlMessage(undefined);
-            bannerTimerRef.current = null;
-          }, 5000);
         }
       }
     }
   }, [raceControlMessages]);
 
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (bannerTimerRef.current) {
-        clearTimeout(bannerTimerRef.current);
-      }
-    };
-  }, []);
+  const hideBanner = useCallback(() => setLatestRaceControlMessage(undefined), []);
 
   // Compute latest alert across all three sources for the strip
   const latestAlert = (() => {
@@ -110,20 +90,10 @@ export default function Dashboard() {
 
     if (!msg) return null;
     const m = msg.message;
-    const label = m.includes("RED FLAG") ? "Bandera Roja"
-      : m.includes("SAFETY CAR") ? "Safety Car"
-      : m.includes("VSC") ? "VSC"
-      : m.includes("YELLOW") ? "Bandera"
-      : m.includes("GREEN") ? "Bandera"
-      : m.includes("TRACK LIMITS") ? "Violación"
-      : "Control";
-    const color = m.includes("RED FLAG") ? "text-red-400"
-      : m.includes("SAFETY CAR") || m.includes("VSC") || m.includes("TRACK LIMITS") ? "text-orange-400"
-      : m.includes("YELLOW") ? "text-yellow-400"
-      : m.includes("GREEN") ? "text-green-400"
-      : "text-zinc-400";
+    const isViolation = m.toUpperCase().includes("TRACK LIMITS");
     return {
-      label,
+      label: isViolation ? "Violaciones" : "Control de Carrera",
+      color: isViolation ? "text-orange-400" : "text-zinc-400",
       text: msg.message,
       time: msg.utc,
       icon: m.includes("CHEQUERED") ? "🏁"
@@ -136,7 +106,6 @@ export default function Dashboard() {
         : m.includes("SAFETY CAR") ? "🚗"
         : m.includes("VSC") ? "🟡"
         : null,
-      color,
     };
   })();
 
@@ -186,8 +155,8 @@ export default function Dashboard() {
       <TopBar
         session={sessionInfo}
         trackStatus={trackStatus}
-        weather={weather}
         latestRaceControlMessage={latestRaceControlMessage}
+        onBannerComplete={hideBanner}
       />
 
       <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -206,9 +175,9 @@ export default function Dashboard() {
         )}
 
         {/* Main content: fills viewport, no page scroll */}
-        <div className="flex-1 min-h-0 flex gap-2 p-2">
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 p-2">
           {/* Column 1 - Timing Board with internal scroll */}
-          <div className="flex-none overflow-x-auto min-h-0">
+          <div className="h-[42vh] lg:h-auto flex-none overflow-x-auto min-h-0">
             <TimingBoard
               drivers={drivers}
               sessionName={sessionInfo.sessionName}
@@ -266,6 +235,7 @@ export default function Dashboard() {
                     isSessionActive={sessionInfo.isLive}
                     qualifyingPart={sessionInfo.qualifyingPart}
                     hoveredDriverNumber={hoveredDriverNumber ?? pinnedDriverNumber}
+                    weather={weather}
                   />
                 )}
                 {activeTab === "control" && (
@@ -284,21 +254,7 @@ export default function Dashboard() {
             </div>
 
             {/* Alert strip — latest event across all sources */}
-            {latestAlert && (() => {
-              let time = latestAlert.time;
-              try { time = new Date(latestAlert.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
-              catch { /* keep raw */ }
-              return (
-                <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 border border-zinc-800 rounded-lg bg-zinc-900/50 text-xs">
-                  <span className={`px-1.5 py-0.5 rounded bg-zinc-800 text-[10px] uppercase tracking-wide font-medium shrink-0 ${latestAlert.color}`}>
-                    {latestAlert.label}
-                  </span>
-                  {latestAlert.icon && <span>{latestAlert.icon}</span>}
-                  <span className="text-zinc-300 truncate">{latestAlert.text}</span>
-                  <span className="ml-auto text-zinc-500 shrink-0">{time}</span>
-                </div>
-              );
-            })()}
+            {latestAlert && <AlertStrip alert={latestAlert} />}
           </div>
         </div>
       </main>

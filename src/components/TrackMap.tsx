@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { Driver, TrackStatusInfo, RaceControlMessage } from "@/types/f1";
+import { Driver, TrackStatusInfo, RaceControlMessage, WeatherData } from "@/types/f1";
 import { TEAM_COLORS } from "@/lib/constants";
 import { useLanguage } from "@/contexts/LanguageContext";
+import WeatherOverlay from "@/components/WeatherOverlay";
 
 interface MapData {
   x: number[];
@@ -25,10 +26,17 @@ interface TrackMapProps {
   isSessionActive?: boolean;
   qualifyingPart?: number;
   hoveredDriverNumber?: string | null;
+  weather?: WeatherData;
 }
 
 const SPACE = 1000;
 const ROTATION_FIX = 90;
+
+const DRIVER_PHOTO_CODES = new Set([
+  "VER", "HAM", "LEC", "NOR", "PIA", "RUS", "ALO", "STR", "SAI",
+  "GAS", "OCO", "HUL", "BOT", "ALB", "PER", "LAW", "HAD", "ANT",
+  "BEA", "BOR", "COL",
+]);
 
 // Helper functions
 const rad = (deg: number) => deg * (Math.PI / 180);
@@ -54,6 +62,7 @@ export default function TrackMap({
   isSessionActive = false,
   qualifyingPart,
   hoveredDriverNumber,
+  weather,
 }: TrackMapProps) {
   const { t } = useLanguage();
   const [mapData, setMapData] = useState<MapData | null>(null);
@@ -567,12 +576,22 @@ export default function TrackMap({
   };
 
   return (
-    <div className="h-full w-full flex items-center justify-center py-0 px-1">
+    <div className="relative h-full w-full flex items-center justify-center py-0 px-1">
+      {weather && <WeatherOverlay weather={weather} />}
       <svg
         viewBox={`${minX} ${minY} ${widthX} ${widthY}`}
         className="w-full h-full"
         xmlns="http://www.w3.org/2000/svg"
       >
+        {/* Clip paths for driver photos */}
+        <defs>
+          {carPositions.map(({ driver }) => (
+            <clipPath key={`cp-${driver.driverNumber}`} id={`clip-photo-${driver.driverNumber}`}>
+              <circle r={112} />
+            </clipPath>
+          ))}
+        </defs>
+
         {/* Track fill - changes color on red flag */}
         <path
           strokeWidth={0}
@@ -663,6 +682,7 @@ export default function TrackMap({
           .map(({ driver, x, y }) => {
             const teamColor = driver.teamColor || TEAM_COLORS[driver.team] || "#666666";
             const isHovered = driver.driverNumber === hoveredDriverNumber;
+            const hasPhoto = DRIVER_PHOTO_CODES.has(driver.code);
 
             return (
               <g key={`car.${driver.driverNumber}`} transform={`translate(${x}, ${y})`}>
@@ -685,44 +705,50 @@ export default function TrackMap({
                 {/* Scale group — solo círculos simétricos, fill-box centrado en (0,0) */}
                 <g
                   style={{
-                    transform: isHovered ? "scale(3.5)" : "scale(1)",
+                    transform: isHovered ? "scale(7.3)" : "scale(1)",
                     transformBox: "fill-box",
                     transformOrigin: "center",
                     transition: "transform 0.2s ease",
                   }}
                 >
-                  <circle
-                    r={200}
-                    fill="none"
-                    stroke={teamColor}
-                    strokeWidth={45}
-                    style={{
-                      opacity: isHovered ? 0.4 : 0,
-                      transition: "opacity 0.2s ease",
-                    }}
-                  />
                   <circle r={120} fill={teamColor} />
                   <circle
-                    r={90}
+                    r={112}
                     fill="white"
                     style={{
                       opacity: isHovered ? 1 : 0,
                       transition: "opacity 0.15s ease",
                     }}
                   />
-                  <text
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={95}
-                    fill={teamColor}
-                    fontWeight="bold"
-                    style={{
-                      opacity: isHovered ? 1 : 0,
-                      transition: "opacity 0.15s ease",
-                    }}
-                  >
-                    {driver.code}
-                  </text>
+                  {hasPhoto ? (
+                    <image
+                      href={`/drivers/${driver.code}.png`}
+                      x={-112}
+                      y={-112}
+                      width={224}
+                      height={224}
+                      clipPath={`url(#clip-photo-${driver.driverNumber})`}
+                      preserveAspectRatio="xMidYMin slice"
+                      style={{
+                        opacity: isHovered ? 1 : 0,
+                        transition: "opacity 0.15s ease",
+                      }}
+                    />
+                  ) : (
+                    <text
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={95}
+                      fill={teamColor}
+                      fontWeight="bold"
+                      style={{
+                        opacity: isHovered ? 1 : 0,
+                        transition: "opacity 0.15s ease",
+                      }}
+                    >
+                      {driver.code}
+                    </text>
+                  )}
                 </g>
               </g>
             );
