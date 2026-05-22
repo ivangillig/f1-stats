@@ -28,8 +28,9 @@ const CONNECTION_DATA = encodeURIComponent(
 const NEGOTIATE_URL = `https://${SIGNALR_HOST}/signalr/negotiate?clientProtocol=1.5&connectionData=${CONNECTION_DATA}`;
 const WS_BASE = `wss://${SIGNALR_HOST}/signalr/connect`;
 
-// Topics: TimingData for live segments/sector times, TrackStatus as fast override
-const SUBSCRIBE_TOPICS = ["TimingData", "TrackStatus"];
+// Topics: TimingData for live segments/sector times, TrackStatus and ExtrapolatedClock
+// as fast overrides (OpenF1 MQTT doesn't provide either of these live)
+const SUBSCRIBE_TOPICS = ["TimingData", "TrackStatus", "ExtrapolatedClock"];
 
 const COMMON_HEADERS = {
   "User-Agent": "BestHTTP",
@@ -153,9 +154,25 @@ function processTrackStatus(data) {
   }
 }
 
+/**
+ * ExtrapolatedClock — provides session remaining time.
+ * OpenF1 MQTT has no equivalent; this is the only live source.
+ * Format: { Utc: "2026-05-22T14:23:45Z", Remaining: "0:18:32", Extrapolating: true }
+ */
+function processExtrapolatedClock(data) {
+  if (!currentStateRef || !data) return;
+  const remaining = data.Remaining ?? data.remaining;
+  const utc = data.Utc ?? data.utc;
+  if (remaining && utc) {
+    currentStateRef.clock = { remaining, utc };
+    if (broadcastFn) broadcastFn("update", currentStateRef);
+  }
+}
+
 function handleFeedMessage(topic, data) {
   if (topic === "TimingData") processTimingData(data);
   else if (topic === "TrackStatus") processTrackStatus(data);
+  else if (topic === "ExtrapolatedClock") processExtrapolatedClock(data);
 }
 
 // ── Connection ───────────────────────────────────────────────────────────────

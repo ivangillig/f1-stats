@@ -632,10 +632,16 @@ async function connect() {
         });
       });
 
-      // Fetch historical data for the current session (runs once at startup)
-      getCurrentSessionKey().then((sessionKey) => {
+      // Fetch historical data for the current session (runs once at startup).
+      // After both calls complete, broadcast the full state so any clients
+      // that connected during the loading window get session info + circuit key.
+      getCurrentSessionKey().then(async (sessionKey) => {
         if (sessionKey) {
-          fetchHistoricalData(sessionKey);
+          await fetchHistoricalData(sessionKey);
+        }
+        if (broadcastFn && currentStateRef) {
+          console.log("[openf1-mqtt] Initial state ready — broadcasting to SSE clients");
+          broadcastFn("update", currentStateRef);
         }
       });
     });
