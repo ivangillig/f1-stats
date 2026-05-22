@@ -79,6 +79,16 @@ function processTimingData(data) {
 
   let changed = false;
 
+  // SessionPart — 1=Q1/SQ1, 2=Q2/SQ2, 3=Q3/SQ3
+  // SignalR sends this at the top level of TimingData when a new part starts.
+  if (data.SessionPart != null && currentStateRef.session) {
+    const part = parseInt(data.SessionPart, 10);
+    if (!isNaN(part)) {
+      currentStateRef.session.qualifying_part = part;
+      changed = true;
+    }
+  }
+
   for (const [driverNum, driverData] of Object.entries(data.Lines)) {
     if (!driverData || typeof driverData !== "object") continue;
 
@@ -94,6 +104,16 @@ function processTimingData(data) {
       changed = true;
     } else if (driverData.InPit === false || driverData.PitOut === true) {
       entry.in_pit = false;
+      changed = true;
+    }
+
+    // KnockedOut — driver eliminated from qualifying (Q1/Q2 cutoff).
+    // SignalR sets this to true once the segment ends and the driver didn't advance.
+    if (driverData.KnockedOut === true) {
+      entry.knocked_out = true;
+      changed = true;
+    } else if (driverData.KnockedOut === false) {
+      entry.knocked_out = false;
       changed = true;
     }
 

@@ -195,6 +195,7 @@ export function useF1DataSSE(): F1DataState {
           currentLap: lapCount?.current || prev.currentLap,
           totalLaps: lapCount?.total || prev.totalLaps,
           circuitKey: sessionData?.circuit_key || prev.circuitKey,
+          qualifyingPart: sessionData?.qualifying_part ?? prev.qualifyingPart,
           isLive: dateEnd
             ? new Date(dateEnd) > new Date(Date.now() - 30 * 60 * 1000)
             : true,

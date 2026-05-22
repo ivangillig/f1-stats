@@ -53,7 +53,7 @@ function MiniSectors({
             status === "green" && "bg-[oklch(.696_.17_162.48)]",
             status === "yellow" && "bg-[oklch(.795_.184_86.047)]",
             status === "blue" && "bg-[#2b7fff]",
-            status === "none" && "bg-zinc-700"
+            status === "none" && "bg-zinc-700",
           )}
           title={getTooltip(status)}
         />
@@ -116,37 +116,25 @@ function TireCompound({
   );
 }
 
-// DRS/PIT indicator - bordered tag that illuminates when active or shows PIT
-function DrsIndicator({
-  active,
+// PIT indicator - shows cyan PIT tag when car is in pit lane, dim otherwise
+function PitIndicator({
   inPit,
   t,
 }: {
-  active?: boolean;
   inPit?: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
-  if (inPit) {
-    return (
-      <div
-        className="text-base inline-flex h-9 w-full items-center justify-center rounded-md border-[3px] font-mono font-black border-cyan-500 text-cyan-500"
-        title={t("driver.inPit")}
-      >
-        PIT
-      </div>
-    );
-  }
   return (
     <div
       className={cn(
-        "text-base inline-flex h-9 w-full items-center justify-center rounded-md border-2 font-mono font-black",
-        active
-          ? "border-[oklch(.696_.17_162.48)] text-[oklch(.696_.17_162.48)]"
-          : "border-zinc-600 text-zinc-600"
+        "text-base inline-flex h-9 w-full items-center justify-center rounded-md font-mono font-black",
+        inPit
+          ? "border-[3px] border-cyan-500 text-cyan-500"
+          : "border-2 border-zinc-800 text-zinc-800",
       )}
-      title={active ? t("driver.drsActive") : t("driver.drsInactive")}
+      title={inPit ? t("driver.inPit") : undefined}
     >
-      DRS
+      PIT
     </div>
   );
 }
@@ -199,7 +187,7 @@ function SectorCell({
         <span
           className={cn(
             "text-base font-f1 font-medium leading-none tracking-tight",
-            getTimeColor()
+            getTimeColor(),
           )}
           title={getTooltip(status)}
         >
@@ -210,7 +198,7 @@ function SectorCell({
             "text-xs font-f1 leading-none tracking-tight",
             isBestOverall
               ? "text-[oklch(.541_.281_293.009)] font-medium"
-              : "text-zinc-500"
+              : "text-zinc-500",
           )}
           title={t("driver.bestSectorTime")}
         >
@@ -238,24 +226,24 @@ export default function DriverRow({
   // Check if driver is in elimination zone for Qualifying (at risk of being eliminated)
   const isInEliminationZone = (): boolean => {
     const pos = driver.position;
+    const session = sessionName?.toLowerCase() || "";
+    const isSprint =
+      session.includes("sprint") || session.includes("sq");
 
-    // Use qualifyingPart if available (1=Q1, 2=Q2, 3=Q3)
+    // Use qualifyingPart if available (1=Q1/SQ1, 2=Q2/SQ2, 3=Q3/SQ3)
     if (qualifyingPart) {
-      // Q1: positions 16-20 at risk of elimination
-      if (qualifyingPart === 1) return pos >= 16;
-      // Q2: positions 11-15 at risk of elimination
-      if (qualifyingPart === 2) return pos >= 11;
-      // Q3: no elimination zone (all remaining drivers compete)
+      if (qualifyingPart === 1) return isSprint ? pos >= 15 : pos >= 16;
+      if (qualifyingPart === 2) return isSprint ? pos >= 9 : pos >= 11;
+      // Q3/SQ3: no elimination zone
       return false;
     }
 
-    // Fallback: try to parse from sessionName
-    const session = sessionName?.toLowerCase() || "";
+    // Fallback: parse from sessionName
     if (session.includes("q1") || session === "qualifying 1") {
-      return pos >= 16;
+      return isSprint ? pos >= 15 : pos >= 16;
     }
     if (session.includes("q2") || session === "qualifying 2") {
-      return pos >= 11;
+      return isSprint ? pos >= 9 : pos >= 11;
     }
     return false;
   };
@@ -313,14 +301,18 @@ export default function DriverRow({
       className={cn(
         "grid gap-3 px-3 py-1 items-center cursor-default",
         "border-b border-border/50 transition-colors",
-        (isHovered || isPinned) ? "bg-muted/50" : "hover:bg-muted/30",
+        isHovered || isPinned ? "bg-muted/50" : "hover:bg-muted/30",
         driver.retired && "opacity-40",
         eliminated && "opacity-40 bg-zinc-900/50",
-        !eliminated && inEliminationZone && "bg-red-900/30"
+        !eliminated && inEliminationZone && "bg-red-950/60",
       )}
       style={{
         gridTemplateColumns: `95px 47px 99px 43px 72px 90px minmax(${s1Count * 20}px, max-content) minmax(${s2Count * 20}px, max-content) minmax(${s3Count * 20}px, max-content)`,
-        borderLeft: isPinned ? `3px solid ${teamColor}` : "3px solid transparent",
+        borderLeft: isPinned
+          ? `3px solid ${teamColor}`
+          : !eliminated && inEliminationZone
+          ? "3px solid rgb(239 68 68)"
+          : "3px solid transparent",
       }}
     >
       {/* Position + Driver Tag — click to pin/unpin, overlay on hover */}
@@ -347,7 +339,9 @@ export default function DriverRow({
           className={cn(
             "absolute inset-0 flex items-center justify-center rounded-md transition-opacity duration-150",
             "bg-black/50",
-            (isHovered || isPinned) ? "opacity-100" : "opacity-0 pointer-events-none"
+            isHovered || isPinned
+              ? "opacity-100"
+              : "opacity-0 pointer-events-none",
           )}
         >
           <Pin
@@ -370,8 +364,8 @@ export default function DriverRow({
       </div>
       */}
 
-      {/* DRS/PIT - bordered tag */}
-      <DrsIndicator active={driver.drsEnabled} inPit={driver.inPit} t={t} />
+      {/* PIT indicator */}
+      <PitIndicator inPit={driver.inPit} t={t} />
 
       {/* Tire with L and PIT */}
       <TireCompound
@@ -389,7 +383,7 @@ export default function DriverRow({
             driver.positionChange > 0 &&
             "text-[oklch(.696_.17_162.48)]",
           driver.positionChange && driver.positionChange < 0 && "text-red-400",
-          !driver.positionChange && "text-zinc-600"
+          !driver.positionChange && "text-zinc-600",
         )}
       >
         {driver.positionChange
@@ -423,15 +417,15 @@ export default function DriverRow({
             driver.lastLapOverallFastest
               ? "text-f1-purple" // Session fastest lap - purple
               : driver.lastLapPersonalBest
-              ? "text-[oklch(.696_.17_162.48)]" // Personal best - green
-              : "text-foreground"
+                ? "text-[oklch(.696_.17_162.48)]" // Personal best - green
+                : "text-foreground",
           )}
           title={
             driver.lastLapOverallFastest
               ? t("driver.sessionFastest")
               : driver.lastLapPersonalBest
-              ? t("driver.lastLapBest")
-              : t("driver.bestLap")
+                ? t("driver.lastLapBest")
+                : t("driver.bestLap")
           }
         >
           {driver.lastLap || EMPTY_TIME}
@@ -448,7 +442,7 @@ export default function DriverRow({
       <SectorCell
         miniSectors={driver.miniSectors?.slice(
           0,
-          driver.sector1SegmentCount || 6
+          driver.sector1SegmentCount || 6,
         )}
         time={driver.sector1}
         bestTime={driver.bestSector1}
@@ -462,7 +456,7 @@ export default function DriverRow({
       <SectorCell
         miniSectors={driver.miniSectors?.slice(
           driver.sector1SegmentCount || 6,
-          (driver.sector1SegmentCount || 6) + (driver.sector2SegmentCount || 6)
+          (driver.sector1SegmentCount || 6) + (driver.sector2SegmentCount || 6),
         )}
         time={driver.sector2}
         bestTime={driver.bestSector2}
@@ -475,7 +469,7 @@ export default function DriverRow({
       {/* S3 */}
       <SectorCell
         miniSectors={driver.miniSectors?.slice(
-          (driver.sector1SegmentCount || 6) + (driver.sector2SegmentCount || 6)
+          (driver.sector1SegmentCount || 6) + (driver.sector2SegmentCount || 6),
         )}
         time={driver.sector3}
         bestTime={driver.bestSector3}
