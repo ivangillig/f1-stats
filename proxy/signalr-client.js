@@ -85,6 +85,18 @@ function processTimingData(data) {
     const num = String(driverNum);
     const entry = ensureTimingEntry(currentStateRef, num);
 
+    // InPit / PitOut — real-time pit lane detection.
+    // This is the only reliable source: OpenF1 REST/MQTT only provides pit data
+    // after the stop is complete (lane_duration present), so cars currently in
+    // the pit lane (e.g. during a red flag) would never show in_pit=true there.
+    if (driverData.InPit === true) {
+      entry.in_pit = true;
+      changed = true;
+    } else if (driverData.InPit === false || driverData.PitOut === true) {
+      entry.in_pit = false;
+      changed = true;
+    }
+
     const sectors = driverData.Sectors;
     if (!sectors || typeof sectors !== "object") continue;
 
@@ -149,6 +161,8 @@ function processTrackStatus(data) {
   if (!currentStateRef || !data) return;
   const flag = STATUS_TO_FLAG[String(data.Status)];
   if (flag) {
+    // Mark as set by SignalR so MQTT historical data cannot overwrite it
+    currentStateRef._signalrTrackStatusSet = true;
     currentStateRef.track_status = { flag };
     if (broadcastFn) broadcastFn("update", currentStateRef);
   }
@@ -220,7 +234,20 @@ async function connect() {
     ws.on("message", (raw) => {
       try {
         const msg = JSON.parse(raw.toString());
-        // Feed messages: { M: [{ H: "streaming", M: "feed", A: ["Topic", {data}, "ts"] }] }
+
+        // Subscribe response snapshot: { I: "1", R: { TopicName: {data}, ... } }
+        // This is the initial state sent back when we call Subscribe().
+        // Must be processed BEFORE live incremental M[] messages arrive.
+        if (msg.R && typeof msg.R === "object" && !Array.isArray(msg.R)) {
+          for (const [topic, data] of Object.entries(msg.R)) {
+            if (data && typeof data === "object") {
+              console.log(`[signalr] Snapshot: ${topic}`);
+              handleFeedMessage(topic, data);
+            }
+          }
+        }
+
+        // Live broadcast messages: { M: [{ H: "streaming", M: "feed", A: ["Topic", {data}, "ts"] }] }
         if (Array.isArray(msg.M)) {
           for (const item of msg.M) {
             if (

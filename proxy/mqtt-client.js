@@ -293,7 +293,7 @@ function handleLocation(data) {
 /**
  * Handle race control messages
  */
-function handleRaceControl(data) {
+function handleRaceControl(data, opts = {}) {
   if (!currentStateRef) return;
   if (!Array.isArray(currentStateRef.race_control_messages)) {
     currentStateRef.race_control_messages = [];
@@ -323,18 +323,22 @@ function handleRaceControl(data) {
     }
   }
 
-  // Update track status from flag
-  if (data.flag && data.scope === "Track") {
-    const flagStatus = flagToTrackStatus(data.flag);
-    if (flagStatus) {
-      currentStateRef.track_status = { flag: flagStatus };
+  // skipTrackStatus = true when called during historical data loading.
+  // Historical messages must not overwrite the real-time status set by SignalR.
+  if (!opts.skipTrackStatus) {
+    // Update track status from flag
+    if (data.flag && data.scope === "Track") {
+      const flagStatus = flagToTrackStatus(data.flag);
+      if (flagStatus) {
+        currentStateRef.track_status = { flag: flagStatus };
+      }
     }
-  }
 
-  // Safety car overrides flag-based status
-  const scStatus = detectSafetyCar(data.message);
-  if (scStatus) {
-    currentStateRef.track_status = { flag: scStatus };
+    // Safety car overrides flag-based status
+    const scStatus = detectSafetyCar(data.message);
+    if (scStatus) {
+      currentStateRef.track_status = { flag: scStatus };
+    }
   }
 }
 
@@ -505,7 +509,31 @@ async function fetchHistoricalData(sessionKey) {
       console.log(
         `[openf1-mqtt] Loaded ${raceControl.length} historical race control messages`,
       );
-      raceControl.forEach((msg) => handleRaceControl(msg));
+      // Skip per-message track_status updates — we'll derive it once at the end
+      // from the most recent message, but only if SignalR hasn't already set it.
+      raceControl.forEach((msg) =>
+        handleRaceControl(msg, { skipTrackStatus: true }),
+      );
+
+      // Derive initial track status from the last relevant historical message,
+      // but defer to SignalR if it has already set the authoritative live status.
+      if (!currentStateRef._signalrTrackStatusSet) {
+        const msgs = raceControl;
+        // Safety car takes priority
+        const lastSC = [...msgs]
+          .reverse()
+          .find((m) => detectSafetyCar(m.message));
+        const lastFlag = [...msgs]
+          .reverse()
+          .find((m) => m.flag && m.scope === "Track");
+        if (lastSC) {
+          const sc = detectSafetyCar(lastSC.message);
+          if (sc) currentStateRef.track_status = { flag: sc };
+        } else if (lastFlag) {
+          const fs = flagToTrackStatus(lastFlag.flag);
+          if (fs) currentStateRef.track_status = { flag: fs };
+        }
+      }
     }
 
     if (teamRadioRes.ok) {
