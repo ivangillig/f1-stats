@@ -277,8 +277,8 @@ const STATIC_DRIVERS = [
     driver_number: 43,
     name_acronym: "COL",
     full_name: "Franco Colapinto",
-    team_name: "Williams",
-    team_colour: "64C4FF",
+    team_name: "Alpine",
+    team_colour: "FF87BC",
   },
 ];
 

@@ -217,11 +217,24 @@ function handleLap(data) {
   if (!driverData[num]) driverData[num] = {};
 
   driverData[num].lapNumber = data.lap_number;
-  driverData[num].lapDuration = data.lap_duration;
+  driverData[num].lapDuration = data.lap_duration; // null for current incomplete lap
   driverData[num].sector1 = data.duration_sector_1;
   driverData[num].sector2 = data.duration_sector_2;
   driverData[num].sector3 = data.duration_sector_3;
   driverData[num].isPitOutLap = data.is_pit_out_lap;
+  driverData[num].segments1 = data.segments_sector_1 || null;
+  driverData[num].segments2 = data.segments_sector_2 || null;
+  driverData[num].segments3 = data.segments_sector_3 || null;
+
+  // Only consider completed laps (lap_duration !== null, not a pit-out lap)
+  if (data.lap_duration && !data.is_pit_out_lap) {
+    // Best lap = minimum valid duration seen for this driver
+    if (!driverData[num].bestLap || data.lap_duration < driverData[num].bestLap) {
+      driverData[num].bestLap = data.lap_duration;
+    }
+    // Last completed lap (used for LastLapTime — current lap may be incomplete)
+    driverData[num].lastCompletedLap = data.lap_duration;
+  }
 
   updateTimingData(num);
 }
@@ -373,7 +386,8 @@ function handleStint(data) {
   if (!driverData[num]) driverData[num] = {};
 
   driverData[num].compound = data.compound;
-  driverData[num].tyreAge = data.tyre_age_at_start;
+  driverData[num].tyreAgeAtStart = data.tyre_age_at_start;
+  driverData[num].stintLapStart = data.lap_start;
   driverData[num].stintNumber = data.stint_number;
 
   updateTimingData(num);
@@ -396,12 +410,12 @@ function updateTimingData(driverNum) {
     Position: String(d.position || ""),
     GapToLeader: d.gapToLeader || "",
     IntervalToPositionAhead: { Value: d.interval || "" },
-    LastLapTime: { Value: d.lapDuration ? formatLapTime(d.lapDuration) : "" },
+    LastLapTime: { Value: d.lastCompletedLap ? formatLapTime(d.lastCompletedLap) : "" },
     BestLapTime: { Value: d.bestLap ? formatLapTime(d.bestLap) : "" },
     Sectors: {
-      0: { Value: d.sector1 ? d.sector1.toFixed(3) : "" },
-      1: { Value: d.sector2 ? d.sector2.toFixed(3) : "" },
-      2: { Value: d.sector3 ? d.sector3.toFixed(3) : "" },
+      0: { Value: d.sector1 ? d.sector1.toFixed(3) : "", ...(d.segments1 && { Segments: convertSegments(d.segments1) }) },
+      1: { Value: d.sector2 ? d.sector2.toFixed(3) : "", ...(d.segments2 && { Segments: convertSegments(d.segments2) }) },
+      2: { Value: d.sector3 ? d.sector3.toFixed(3) : "", ...(d.segments3 && { Segments: convertSegments(d.segments3) }) },
     },
     NumberOfLaps: d.lapNumber || 0,
     InPit: d.inPit || false,
@@ -409,6 +423,28 @@ function updateTimingData(driverNum) {
     NumberOfPitStops: d.pitStops || 0,
     Retired: d.retired || false,
   };
+
+  // Write tire data to TimingAppData so the frontend can read compound and age
+  if (d.compound) {
+    if (!currentStateRef.TimingAppData) currentStateRef.TimingAppData = { Lines: {} };
+    const currentLap = d.lapNumber || 0;
+    const stintLapStart = d.stintLapStart || currentLap;
+    const totalTyreLaps = (d.tyreAgeAtStart || 0) + Math.max(0, currentLap - stintLapStart);
+    currentStateRef.TimingAppData.Lines[driverNum] = {
+      Stints: [{ Compound: d.compound.toUpperCase(), TotalLaps: totalTyreLaps, New: d.tyreAgeAtStart === 0 ? "true" : "false" }],
+    };
+  }
+}
+
+/**
+ * Convert OpenF1 segments array [2049, 2048, 2051, ...] to
+ * F1 SignalR Segments object { "0": { Status: 2049 }, "1": { Status: 2048 }, ... }
+ */
+function convertSegments(arr) {
+  if (!arr || !Array.isArray(arr) || arr.length === 0) return undefined;
+  const obj = {};
+  arr.forEach((status, i) => { obj[String(i)] = { Status: status }; });
+  return obj;
 }
 
 /**
@@ -467,19 +503,12 @@ async function fetchHistoricalData(sessionKey) {
       drivers.forEach((driver) => handleDriver(driver));
     }
 
-    // Build TimingData from last known lap/interval/stint per driver
+    // Build TimingData from all historical laps per driver (sorted ascending so best/last are accumulated correctly)
     if (lapsRes.ok) {
       const laps = await lapsRes.json();
-      // Keep only the last lap per driver
-      const lastLap = {};
-      for (const lap of laps) {
-        const n = String(lap.driver_number);
-        if (!lastLap[n] || lap.lap_number > lastLap[n].lap_number) {
-          lastLap[n] = lap;
-        }
-      }
-      Object.values(lastLap).forEach((lap) => handleLap(lap));
-      console.log(`[openf1-mqtt] Loaded last laps for ${Object.keys(lastLap).length} drivers`);
+      laps.sort((a, b) => a.lap_number - b.lap_number);
+      laps.forEach((lap) => handleLap(lap));
+      console.log(`[openf1-mqtt] Loaded ${laps.length} historical laps`);
     }
 
     if (intervalsRes.ok) {

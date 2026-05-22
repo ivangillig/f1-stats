@@ -94,6 +94,9 @@ export function useF1DataSSE(): F1DataState {
   // Store car track positions from replay
   const carDataRef = useRef<Record<string, { x: number; y: number }>>({});
 
+  // Track session-wide max segment counts so all drivers show the same number of bars
+  const maxSegCounts = useRef<{ s1: number; s2: number; s3: number }>({ s1: 6, s2: 6, s3: 6 });
+
   // Store session type for sorting logic
   const sessionTypeRef = useRef<string>("Race");
 
@@ -468,26 +471,41 @@ export function useF1DataSSE(): F1DataState {
               };
 
               const sectors = driverData.Sectors || {};
-              const miniSectors = parseMiniSectors(sectors);
+              const rawMiniSectors = parseMiniSectors(sectors);
+
+              // Current segment counts from this update (0 if no Segments present)
+              const currentS1Count = getSegmentCount(sectors["0"]);
+              const currentS2Count = getSegmentCount(sectors["1"]);
+              const currentS3Count = getSegmentCount(sectors["2"]);
+
+              // Update session-wide max so all drivers always show the same bar count
+              if (currentS1Count > maxSegCounts.current.s1) maxSegCounts.current.s1 = currentS1Count;
+              if (currentS2Count > maxSegCounts.current.s2) maxSegCounts.current.s2 = currentS2Count;
+              if (currentS3Count > maxSegCounts.current.s3) maxSegCounts.current.s3 = currentS3Count;
+
+              const sector1SegmentCount = maxSegCounts.current.s1 || existing?.sector1SegmentCount || 6;
+              const sector2SegmentCount = maxSegCounts.current.s2 || existing?.sector2SegmentCount || 6;
+              const sector3SegmentCount = maxSegCounts.current.s3 || existing?.sector3SegmentCount || 6;
+
+              // Pad each sector's portion of the flat miniSectors array to the canonical count
+              // so all drivers display the same number of bars (gray = not yet driven)
+              const padNone = (arr: SectorStatus[], n: number): SectorStatus[] => {
+                const r = [...arr];
+                while (r.length < n) r.push("none" as SectorStatus);
+                return r.slice(0, n);
+              };
+              const miniSectors: SectorStatus[] = rawMiniSectors.length > 0
+                ? [
+                    ...padNone(rawMiniSectors.slice(0, currentS1Count), sector1SegmentCount),
+                    ...padNone(rawMiniSectors.slice(currentS1Count, currentS1Count + currentS2Count), sector2SegmentCount),
+                    ...padNone(rawMiniSectors.slice(currentS1Count + currentS2Count), sector3SegmentCount),
+                  ]
+                : (existing?.miniSectors || []);
 
               // Position can be a number (Line) or string (Position)
               const position = driverData.Position
                 ? parseInt(driverData.Position, 10)
                 : driverData.Line || existing?.position || 0;
-
-              // Get segment counts for each sector
-              const sector1SegmentCount =
-                getSegmentCount(sectors["0"]) ||
-                existing?.sector1SegmentCount ||
-                5;
-              const sector2SegmentCount =
-                getSegmentCount(sectors["1"]) ||
-                existing?.sector2SegmentCount ||
-                9;
-              const sector3SegmentCount =
-                getSegmentCount(sectors["2"]) ||
-                existing?.sector3SegmentCount ||
-                10;
 
               // Get best sector times from TimingStats.Lines[num].BestSectors
               const statsData = timingStatsData[num];
