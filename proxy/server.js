@@ -7,6 +7,7 @@ import {
   stopMQTT,
   isMQTTRunning,
   hasMQTTCredentials,
+  checkActiveSession,
 } from "./mqtt-client.js";
 import {
   startLivePolling,
@@ -22,16 +23,20 @@ import {
 const PORT = process.env.PORT || 4000;
 const F1_BASE_URL = "livetiming.formula1.com";
 
-// Mode: "f1dash" | "live-polling" | "mqtt" | "replay" | "signalr"
+// Mode: "f1dash" | "live-polling" | "mqtt" | "openf1" (alias for mqtt) | "replay" | "signalr"
 // Set via environment variable: PROXY_MODE=f1dash
 const PROXY_MODE = process.env.PROXY_MODE || "auto";
 
 // Track if f1dash client is running
 let isF1DashRunning = false;
 
+// Track first data received (for initial vs incremental broadcast)
+let hasReceivedInitialData = false;
+
 // Store current state
 let currentState = {};
-let sseClients = new Set();
+// Map<clientId, res> — deduplicates reconnects and StrictMode double-mounts
+let sseClients = new Map();
 
 // SignalR subscription message
 const SIGNALR_SUBSCRIBE = JSON.stringify({
@@ -65,7 +70,7 @@ const SIGNALR_SUBSCRIBE = JSON.stringify({
 // Negotiate SignalR connection
 async function negotiate() {
   const url = `https://${F1_BASE_URL}/signalr/negotiate?clientProtocol=1.5&connectionData=${encodeURIComponent(
-    '[{"name":"Streaming"}]'
+    '[{"name":"Streaming"}]',
   )}`;
 
   const response = await fetch(url, {
@@ -91,14 +96,14 @@ async function negotiate() {
 // Connect to F1 WebSocket
 async function connectToF1() {
   try {
-    console.log("[F1] Negotiating connection...");
+    console.log("[signalr] Negotiating connection...");
     const { token, cookie } = await negotiate();
 
     const wsUrl = `wss://${F1_BASE_URL}/signalr/connect?clientProtocol=1.5&transport=webSockets&connectionToken=${encodeURIComponent(
-      token
+      token,
     )}&connectionData=${encodeURIComponent('[{"name":"Streaming"}]')}`;
 
-    console.log("[F1] Connecting to WebSocket...");
+    console.log("[signalr] Connecting to WebSocket...");
 
     const ws = new WebSocket(wsUrl, {
       headers: {
@@ -109,7 +114,7 @@ async function connectToF1() {
     });
 
     ws.on("open", () => {
-      console.log("[F1] Connected! Subscribing to data streams...");
+      console.log("[signalr] Connected! Subscribing to data streams...");
       ws.send(SIGNALR_SUBSCRIBE);
     });
 
@@ -147,7 +152,7 @@ async function connectToF1() {
           Object.entries(message.R).forEach(([key, value]) => {
             currentState[key] = value;
           });
-          console.log("[F1] Received initial state");
+          console.log("[signalr] Received initial state");
 
           // Check if session is live
           const sessionData = currentState.SessionInfo;
@@ -160,7 +165,7 @@ async function connectToF1() {
             !sessionData?.Meeting?.Name
           ) {
             console.log(
-              "[F1] No active session detected, switching to replay mode..."
+              "[signalr] No active session detected, switching to replay mode...",
             );
             stopReplay();
             // Start replay BEFORE closing websocket so isReplayRunning() is true
@@ -175,11 +180,11 @@ async function connectToF1() {
     });
 
     ws.on("close", (code, reason) => {
-      console.log(`[F1] Connection closed: ${code} - ${reason}`);
+      console.log(`[signalr] Connection closed: ${code} - ${reason}`);
 
       // Don't reconnect if in replay mode
       if (isReplayRunning()) {
-        console.log("[F1] Replay is running, not reconnecting");
+        console.log("[signalr] Replay is running, not reconnecting");
         return;
       }
 
@@ -187,29 +192,29 @@ async function connectToF1() {
       Object.keys(currentState).forEach((key) => delete currentState[key]);
 
       setTimeout(() => {
-        console.log("[F1] Attempting to reconnect...");
+        console.log("[signalr] Attempting to reconnect...");
         connectToF1();
       }, 5000);
     });
 
     ws.on("error", (error) => {
-      console.error("[F1] WebSocket error:", error.message);
+      console.error("[signalr] WebSocket error:", error.message);
     });
 
     return ws;
   } catch (error) {
-    console.error("[F1] Connection error:", error.message);
+    console.error("[signalr] Connection error:", error.message);
 
     // If not already in replay mode, start it
     if (!isReplayRunning()) {
-      console.log("[F1] No live session available, starting replay mode...");
+      console.log("[signalr] No live session available, starting replay mode...");
       startReplay(broadcastSSE, currentState);
     }
 
     // Don't retry if in replay mode
     if (!isReplayRunning()) {
       setTimeout(() => {
-        console.log("[F1] Retrying connection...");
+        console.log("[signalr] Retrying connection...");
         connectToF1();
       }, 10000);
     }
@@ -235,15 +240,56 @@ function deepMerge(target, source) {
   return result;
 }
 
+// Handle data from f1dash client — merge into state and broadcast
+function handleF1DashData(state) {
+  for (const key of Object.keys(state)) {
+    if (typeof state[key] === "object" && state[key] !== null && !Array.isArray(state[key])) {
+      currentState[key] = deepMerge(currentState[key] || {}, state[key]);
+    } else {
+      currentState[key] = state[key];
+    }
+  }
+  if (!hasReceivedInitialData && state.SessionInfo) {
+    hasReceivedInitialData = true;
+    console.log("[proxy] Broadcasting initial state to all clients");
+    broadcastSSE("initial", currentState);
+  } else {
+    broadcastSSE("update", state);
+  }
+}
+
+// Start fallback source when there is no live session
+// Production → OpenF1 REST replay | Development → f1dash feed
+function startFallbackNoLive() {
+  if (process.env.NODE_ENV === "production") {
+    console.log("[proxy] No live session — production: starting OpenF1 replay...");
+    startReplay(broadcastSSE, currentState);
+  } else {
+    console.log("[proxy] No live session — dev: starting f1dash feed...");
+    isF1DashRunning = true;
+    hasReceivedInitialData = false;
+    startF1DashClient(handleF1DashData);
+    // If f1dash produces no data after 20s, fall back to OpenF1 replay
+    setTimeout(() => {
+      if (!hasF1DashState()) {
+        console.log("[proxy] f1dash unavailable — falling back to OpenF1 replay...");
+        stopF1DashClient();
+        isF1DashRunning = false;
+        startReplay(broadcastSSE, currentState);
+      }
+    }, 20000);
+  }
+}
+
 // Broadcast to all SSE clients
 function broadcastSSE(event, data) {
   const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 
-  sseClients.forEach((client) => {
+  sseClients.forEach((client, clientId) => {
     try {
       client.write(message);
     } catch (err) {
-      sseClients.delete(client);
+      sseClients.delete(clientId);
     }
   });
 }
@@ -281,13 +327,25 @@ const server = http.createServer((req, res) => {
         clients: sseClients.size,
         hasState: Object.keys(currentState).length > 0,
         mqttAvailable: hasMQTTCredentials(),
-      })
+        f1dashHasState: hasF1DashState(),
+        mqttRunning: isMQTTRunning(),
+      }),
     );
     return;
   }
 
   // SSE endpoint
-  if (req.url === "/api/sse") {
+  const reqUrl = new URL(req.url, "http://localhost");
+  if (reqUrl.pathname === "/api/sse") {
+    const clientId = reqUrl.searchParams.get("clientId") || `anon-${Date.now()}-${Math.random()}`;
+
+    // Close any existing connection for this clientId (handles reconnects / StrictMode double-mount)
+    const existing = sseClients.get(clientId);
+    if (existing) {
+      try { existing.end(); } catch (_) {}
+      sseClients.delete(clientId);
+    }
+
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -298,9 +356,8 @@ const server = http.createServer((req, res) => {
     // Send current state as initial (even if empty, so client knows connection is working)
     res.write(`event: initial\ndata: ${JSON.stringify(currentState)}\n\n`);
 
-    // Add client to set
-    sseClients.add(res);
-    console.log(`[SSE] Client connected. Total: ${sseClients.size}`);
+    sseClients.set(clientId, res);
+    console.log(`[proxy-sse] Client connected (${clientId}). Unique viewers: ${sseClients.size}`);
 
     // Keep alive
     const keepAlive = setInterval(() => {
@@ -310,8 +367,8 @@ const server = http.createServer((req, res) => {
     // Remove client on close
     req.on("close", () => {
       clearInterval(keepAlive);
-      sseClients.delete(res);
-      console.log(`[SSE] Client disconnected. Total: ${sseClients.size}`);
+      if (sseClients.get(clientId) === res) sseClients.delete(clientId);
+      console.log(`[proxy-sse] Client disconnected (${clientId}). Unique viewers: ${sseClients.size}`);
     });
 
     return;
@@ -336,85 +393,66 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ error: "Not found" }));
 });
 
+// Graceful shutdown — stop all active clients before exiting
+function shutdown(signal) {
+  console.log(`[proxy] ${signal} received — shutting down`);
+  stopF1DashClient();
+  stopLivePolling();
+  stopMQTT();
+  stopReplay();
+  server.close(() => process.exit(0));
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
 // Start server
 server.listen(PORT, async () => {
-  console.log(`[Server] F1 Proxy running on port ${PORT}`);
-  console.log(`[Server] SSE endpoint: http://localhost:${PORT}/api/sse`);
-  console.log(`[Server] Mode: ${PROXY_MODE}`);
+  const env = process.env.NODE_ENV === "production" ? "production" : "development";
+  console.log(`[proxy] ─────────────────────────────────────`);
+  console.log(`[proxy] F1 Proxy running on port ${PORT}`);
+  console.log(`[proxy] Environment: ${env}`);
+  console.log(`[proxy] Mode override: ${PROXY_MODE}`);
+  console.log(`[proxy] ─────────────────────────────────────`);
 
-  // Track if we've received initial data (for sending proper event type)
-  let hasReceivedInitialData = false;
-
-  // Determine which mode to use
+  // Explicit overrides (for debugging/testing only)
   if (PROXY_MODE === "f1dash") {
-    // Use f1-dash.com's processed feed (recommended for live sessions)
-    console.log("[Server] Using f1-dash.com realtime feed...");
+    console.log("[proxy] Override: f1dash feed...");
     isF1DashRunning = true;
-    startF1DashClient((state) => {
-      // Merge the state into currentState (preserving reference)
-      // The state from f1dash is already in F1 SignalR format
-      for (const key of Object.keys(state)) {
-        if (
-          typeof state[key] === "object" &&
-          state[key] !== null &&
-          !Array.isArray(state[key])
-        ) {
-          currentState[key] = deepMerge(currentState[key] || {}, state[key]);
-        } else {
-          currentState[key] = state[key];
-        }
-      }
-      // On first data with SessionInfo, send as "initial" to ensure all clients get full state
-      if (!hasReceivedInitialData && state.SessionInfo) {
-        hasReceivedInitialData = true;
-        console.log("[Server] Broadcasting initial state to all clients");
-        broadcastSSE("initial", currentState);
-      } else {
-        // Broadcast incremental updates
-        broadcastSSE("update", state);
-      }
-    });
+    startF1DashClient(handleF1DashData);
   } else if (PROXY_MODE === "live-polling") {
-    // Force live polling mode (free REST API)
-    console.log("[Server] Using live polling mode (REST API)...");
+    console.log("[proxy] Override: live-polling...");
     const success = await startLivePolling(broadcastSSE, currentState);
-    if (!success) {
-      console.log("[Server] No live session, falling back to replay...");
-      startReplay(broadcastSSE, currentState);
-    }
-  } else if (PROXY_MODE === "mqtt" && hasMQTTCredentials()) {
-    // Force MQTT mode
-    console.log("[Server] Using MQTT mode...");
-    startMQTT(broadcastSSE, currentState);
+    if (!success) startFallbackNoLive();
+  } else if (PROXY_MODE === "mqtt" || PROXY_MODE === "openf1") {
+    console.log("[proxy] Override: MQTT...");
+    const sessionLive = await startMQTT(broadcastSSE, currentState);
+    if (!sessionLive) startFallbackNoLive();
   } else if (PROXY_MODE === "replay") {
-    // Force replay mode
-    console.log("[Server] Using replay mode...");
+    console.log("[proxy] Override: replay...");
     startReplay(broadcastSSE, currentState);
+  } else if (PROXY_MODE === "signalr") {
+    console.log("[proxy] Override: direct F1 SignalR...");
+    connectToF1();
   } else {
-    // Auto mode: try f1dash > MQTT > SignalR > Replay
-    console.log("[Server] Auto mode: trying f1-dash.com feed...");
-    isF1DashRunning = true;
-    startF1DashClient((state) => {
-      // Merge the state into currentState
-      for (const key of Object.keys(state)) {
-        if (
-          typeof state[key] === "object" &&
-          state[key] !== null &&
-          !Array.isArray(state[key])
-        ) {
-          currentState[key] = deepMerge(currentState[key] || {}, state[key]);
-        } else {
-          currentState[key] = state[key];
-        }
+    // Auto mode — always detect live session first, then pick source by environment
+    console.log(`[proxy] Auto mode — checking for live session...`);
+    if (hasMQTTCredentials()) {
+      // startMQTT internally calls checkActiveSession and returns false if no live session
+      const sessionLive = await startMQTT(broadcastSSE, currentState);
+      if (!sessionLive) {
+        console.log("[proxy] No live session via MQTT — using fallback...");
+        startFallbackNoLive();
       }
-      // On first data with SessionInfo, send as "initial" to ensure all clients get full state
-      if (!hasReceivedInitialData && state.SessionInfo) {
-        hasReceivedInitialData = true;
-        console.log("[Server] Broadcasting initial state to all clients");
-        broadcastSSE("initial", currentState);
+    } else {
+      // No MQTT credentials: check session manually, then route
+      const sessionLive = await checkActiveSession();
+      if (sessionLive) {
+        console.log("[proxy] Live session detected — starting live-polling...");
+        const success = await startLivePolling(broadcastSSE, currentState);
+        if (!success) startFallbackNoLive();
       } else {
-        broadcastSSE("update", state);
+        startFallbackNoLive();
       }
-    });
+    }
   }
 });

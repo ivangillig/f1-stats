@@ -11,7 +11,7 @@ interface LanguageContextType {
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(
-  undefined
+  undefined,
 );
 
 const translations = {
@@ -55,6 +55,7 @@ const translations = {
     "driver.miniSectorRecord": "Récord de mini sector",
     "driver.miniSectorBest": "Mejor mini sector personal",
     "driver.miniSectorSlower": "Más lento que el mejor",
+    "driver.miniSectorPit": "Mini sector en pit",
     "driver.miniSectorNoData": "Sin datos",
     "driver.sectorBest": "Mejor sector general",
     "driver.sectorPersonalBest": "Mejor sector personal",
@@ -123,11 +124,14 @@ const translations = {
       "Este sitio no está afiliado, asociado, autorizado, respaldado por, o de ninguna manera oficialmente conectado con Formula 1, FIA, o cualquiera de sus subsidiarias o afiliados.",
 
     // Error messages
-    "error.demo": "Modo Demo:",
-    "error.demoData":
-      "Datos en vivo no disponibles. Mostrando datos de demostración.",
+    "error.offline": "Sistema temporalmente fuera de servicio",
+    "error.retrying":
+      "Cuando el servicio esté operativo serás redirigido automáticamente",
+    "error.offlineBadge": "Fuera de línea",
     "error.connection": "Conectando al servidor...",
     "error.reconnecting": "Reconectando...",
+    "mode.replayLabel": "Modo Demo:",
+    "mode.replayDesc": "Datos en vivo no disponibles. Mostrando sesión grabada.",
 
     // Track status
     "status.allClear": "Despejado",
@@ -161,6 +165,19 @@ const translations = {
     // Viewers
     "viewers.watching": "Viendo ahora",
     "viewers.count": "{{count}} espectadores",
+
+    // Landing page
+    "landing.nextRace": "Próxima Carrera",
+    "landing.startsIn": "Comienza En",
+    "landing.liveNow": "En Curso",
+    "landing.weekendSchedule": "Este Fin de Semana",
+    "landing.enterDemo": "Entrar al Modo Demo",
+    "landing.replayInfo": "Reproduciendo: Azerbaijan GP 2024 · Baku City Circuit",
+    "landing.scheduleUnavailable": "Calendario no disponible",
+    "landing.countdown.days": "Días",
+    "landing.countdown.hours": "Horas",
+    "landing.countdown.minutes": "Min",
+    "landing.countdown.seconds": "Seg",
   },
   en: {
     // TopBar
@@ -202,6 +219,8 @@ const translations = {
     "driver.miniSectorRecord": "Mini sector record",
     "driver.miniSectorBest": "Personal best mini sector",
     "driver.miniSectorSlower": "Slower than best",
+    "driver.miniSectorPit": "Pit lane mini sector",
+    "driver.miniSectorNoData": "No data",
     "driver.sectorBest": "Overall best sector",
     "driver.sectorPersonalBest": "Personal best sector",
     "driver.sectorSlower": "Slower than personal best",
@@ -268,10 +287,14 @@ const translations = {
       "This site is not affiliated, associated, authorized, endorsed by, or in any way officially connected with Formula 1, FIA, or any of its subsidiaries or affiliates.",
 
     // Error messages
-    "error.demo": "Demo Mode:",
-    "error.demoData": "Live data unavailable. Displaying demo data.",
+    "error.offline": "System temporarily unavailable",
+    "error.retrying":
+      "You will be redirected automatically when the service is back online",
+    "error.offlineBadge": "Offline",
     "error.connection": "Connecting to server...",
     "error.reconnecting": "Reconnecting...",
+    "mode.replayLabel": "Demo Mode:",
+    "mode.replayDesc": "Live data unavailable. Displaying recorded session.",
 
     // Track status
     "status.allClear": "All Clear",
@@ -305,6 +328,19 @@ const translations = {
     // Viewers
     "viewers.watching": "Watching now",
     "viewers.count": "{{count}} viewers",
+
+    // Landing page
+    "landing.nextRace": "Next Race",
+    "landing.startsIn": "Starts In",
+    "landing.liveNow": "Live Now",
+    "landing.weekendSchedule": "Weekend Schedule",
+    "landing.enterDemo": "Enter Demo Mode",
+    "landing.replayInfo": "Replaying: Azerbaijan GP 2024 · Baku City Circuit",
+    "landing.scheduleUnavailable": "Schedule unavailable",
+    "landing.countdown.days": "Days",
+    "landing.countdown.hours": "Hours",
+    "landing.countdown.minutes": "Min",
+    "landing.countdown.seconds": "Sec",
   },
 };
 

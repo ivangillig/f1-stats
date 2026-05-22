@@ -8,6 +8,12 @@ RUN npm ci
 
 COPY . .
 
+# NEXT_PUBLIC_ vars are baked into the JS bundle at build time.
+# Pass NEXT_PUBLIC_PROXY_URL so the browser connects directly to the proxy
+# instead of going through the Next.js rewrite (which doesn't stream SSE properly).
+ARG NEXT_PUBLIC_PROXY_URL=http://localhost:4000
+ENV NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL}
+
 # Build the Next.js app
 RUN npm run build
 

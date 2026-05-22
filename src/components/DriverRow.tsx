@@ -4,11 +4,16 @@ import { Driver, SectorStatus } from "@/types/f1";
 import { TEAM_COLORS, TIRE_COMPOUNDS, TEAM_LOGOS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Pin } from "lucide-react";
 
 interface DriverRowProps {
   driver: Driver;
   sessionName?: string;
-  qualifyingPart?: number; // 1 = Q1, 2 = Q2, 3 = Q3
+  qualifyingPart?: number;
+  isHovered?: boolean;
+  onHover?: (driverNumber: string | null) => void;
+  isPinned?: boolean;
+  onPin?: (driverNumber: string | null) => void;
 }
 
 // Empty time format placeholder
@@ -43,7 +48,7 @@ function MiniSectors({
         <div
           key={i}
           className={cn(
-            "w-[18px] h-[6px] rounded-[2px] cursor-default",
+            "w-[16px] h-[5px] rounded-[2px] cursor-default",
             status === "purple" && "bg-[oklch(.541_.281_293.009)]",
             status === "green" && "bg-[oklch(.696_.17_162.48)]",
             status === "yellow" && "bg-[oklch(.795_.184_86.047)]",
@@ -98,12 +103,12 @@ function TireCompound({
       className="flex items-center gap-1.5"
       title={`${compoundName} - ${t("driver.lapsOld", { laps })}`}
     >
-      <img src={imageSrc} alt={compoundName} className="w-[32px] h-[32px]" />
+      <img src={imageSrc} alt={compoundName} className="w-[28px] h-[28px]" />
       <div className="flex flex-col leading-none">
-        <span className="text-lg text-zinc-300 tabular-nums font-bold font-mono">
+        <span className="text-base text-zinc-300 tabular-nums font-bold font-mono">
           L {laps}
         </span>
-        <span className="text-base text-zinc-500 tabular-nums font-mono">
+        <span className="text-sm text-zinc-500 tabular-nums font-mono">
           PIT {pitCount}
         </span>
       </div>
@@ -124,7 +129,7 @@ function DrsIndicator({
   if (inPit) {
     return (
       <div
-        className="text-lg inline-flex h-10 w-full items-center justify-center rounded-md border-[3px] font-mono font-black border-cyan-500 text-cyan-500"
+        className="text-base inline-flex h-9 w-full items-center justify-center rounded-md border-[3px] font-mono font-black border-cyan-500 text-cyan-500"
         title={t("driver.inPit")}
       >
         PIT
@@ -134,7 +139,7 @@ function DrsIndicator({
   return (
     <div
       className={cn(
-        "text-lg inline-flex h-10 w-full items-center justify-center rounded-md border-2 font-mono font-black",
+        "text-base inline-flex h-9 w-full items-center justify-center rounded-md border-2 font-mono font-black",
         active
           ? "border-[oklch(.696_.17_162.48)] text-[oklch(.696_.17_162.48)]"
           : "border-zinc-600 text-zinc-600"
@@ -193,7 +198,7 @@ function SectorCell({
       <div className="flex items-center justify-center gap-2">
         <span
           className={cn(
-            "text-lg font-f1 font-medium leading-none tracking-tight",
+            "text-base font-f1 font-medium leading-none tracking-tight",
             getTimeColor()
           )}
           title={getTooltip(status)}
@@ -202,7 +207,7 @@ function SectorCell({
         </span>
         <span
           className={cn(
-            "text-sm font-f1 leading-none tracking-tight",
+            "text-xs font-f1 leading-none tracking-tight",
             isBestOverall
               ? "text-[oklch(.541_.281_293.009)] font-medium"
               : "text-zinc-500"
@@ -220,6 +225,10 @@ export default function DriverRow({
   driver,
   sessionName,
   qualifyingPart,
+  isHovered,
+  onHover,
+  isPinned,
+  onPin,
 }: DriverRowProps) {
   const { t } = useLanguage();
 
@@ -298,31 +307,53 @@ export default function DriverRow({
 
   return (
     <div
+      onMouseEnter={() => onHover?.(driver.driverNumber)}
+      onMouseLeave={() => onHover?.(null)}
+      data-pinned-row={isPinned ? "true" : undefined}
       className={cn(
-        "grid gap-3 px-3 py-1 items-center",
-        "border-b border-border/50 hover:bg-muted/30 transition-colors",
+        "grid gap-3 px-3 py-1 items-center cursor-default",
+        "border-b border-border/50 transition-colors",
+        (isHovered || isPinned) ? "bg-muted/50" : "hover:bg-muted/30",
         driver.retired && "opacity-40",
-        eliminated && "opacity-40 bg-zinc-900/50", // Knocked out in previous Q
-        !eliminated && inEliminationZone && "bg-red-900/30" // At risk of elimination
+        eliminated && "opacity-40 bg-zinc-900/50",
+        !eliminated && inEliminationZone && "bg-red-900/30"
       )}
       style={{
-        gridTemplateColumns: `105px 52px 110px 48px 80px 100px ${s1Count}fr ${s2Count}fr ${s3Count}fr`,
+        gridTemplateColumns: `95px 47px 99px 43px 72px 90px minmax(${s1Count * 20}px, max-content) minmax(${s2Count * 20}px, max-content) minmax(${s3Count * 20}px, max-content)`,
+        borderLeft: isPinned ? `3px solid ${teamColor}` : "3px solid transparent",
       }}
     >
-      {/* Position + Driver Tag - combined like f1-dash */}
+      {/* Position + Driver Tag — click to pin/unpin, overlay on hover */}
       <div
-        className="flex items-center h-[42px] px-1 rounded-md overflow-hidden"
+        className="relative flex items-center h-[38px] px-1 rounded-md overflow-hidden cursor-pointer"
         style={{ backgroundColor: teamColor }}
-        title={driver.name}
+        title={isPinned ? "Click to unpin" : driver.name}
+        onClick={(e) => {
+          e.stopPropagation();
+          onPin?.(isPinned ? null : driver.driverNumber);
+        }}
       >
-        <span className="text-2xl mr-3 font-black font-mono tabular-nums leading-none w-10 text-center text-white">
+        <span className="text-xl mr-2 font-black font-mono tabular-nums leading-none w-9 text-center text-white">
           {driver.position}
         </span>
         <div
-          className="flex items-center justify-center h-[34px] px-3 rounded-sm text-xl font-black font-mono my-[5px]"
+          className="flex items-center justify-center h-[30px] px-2 rounded-sm text-lg font-black font-mono my-[4px]"
           style={{ backgroundColor: "white", color: teamColor }}
         >
           {driver.code}
+        </div>
+        {/* Pin overlay — shown on row hover or when pinned */}
+        <div
+          className={cn(
+            "absolute inset-0 flex items-center justify-center rounded-md transition-opacity duration-150",
+            "bg-black/50",
+            (isHovered || isPinned) ? "opacity-100" : "opacity-0 pointer-events-none"
+          )}
+        >
+          <Pin
+            size={22}
+            className={cn("text-white drop-shadow", isPinned && "fill-current")}
+          />
         </div>
       </div>
 
@@ -353,7 +384,7 @@ export default function DriverRow({
       {/* Position change */}
       <span
         className={cn(
-          "text-base font-medium tabular-nums leading-none text-center",
+          "text-sm font-medium tabular-nums leading-none text-center",
           driver.positionChange &&
             driver.positionChange > 0 &&
             "text-[oklch(.696_.17_162.48)]",
@@ -371,13 +402,13 @@ export default function DriverRow({
       {/* Gap */}
       <div className="text-right leading-none">
         <div
-          className="text-xl text-foreground font-f1 font-medium leading-none tracking-tight"
+          className="text-lg text-foreground font-f1 font-medium leading-none tracking-tight"
           title={t("driver.gapToLeader")}
         >
           {driver.position === 1 ? "—" : driver.gap || "—"}
         </div>
         <div
-          className="text-sm text-zinc-500 font-f1 mt-0.5 tracking-tight"
+          className="text-xs text-zinc-500 font-f1 mt-0.5 tracking-tight"
           title={t("driver.intervalToAhead")}
         >
           {driver.interval || ""}
@@ -388,7 +419,7 @@ export default function DriverRow({
       <div className="text-right leading-none">
         <div
           className={cn(
-            "text-xl font-f1 font-medium leading-none tracking-tight",
+            "text-lg font-f1 font-medium leading-none tracking-tight",
             driver.lastLapOverallFastest
               ? "text-f1-purple" // Session fastest lap - purple
               : driver.lastLapPersonalBest
@@ -406,7 +437,7 @@ export default function DriverRow({
           {driver.lastLap || EMPTY_TIME}
         </div>
         <div
-          className="text-sm text-zinc-500 font-f1 mt-0.5 tracking-tight"
+          className="text-xs text-zinc-500 font-f1 mt-0.5 tracking-tight"
           title={t("driver.bestLapTime")}
         >
           {driver.bestLap || EMPTY_TIME}

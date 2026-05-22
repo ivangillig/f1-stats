@@ -30,7 +30,7 @@ async function fetchJSON(url) {
     if (!response.ok) return [];
     return await response.json();
   } catch (error) {
-    console.error(`[LivePoll] Fetch error: ${error.message}`);
+    console.error(`[live-polling] Fetch error: ${error.message}`);
     return [];
   }
 }
@@ -39,7 +39,7 @@ async function fetchJSON(url) {
  * Get the current live session
  */
 async function getCurrentSession() {
-  console.log("[LivePoll] Looking for live session...");
+  console.log("[live-polling] Looking for live session...");
 
   // Get latest session
   const sessions = await fetchJSON(`${API_BASE}/sessions?session_key=latest`);
@@ -47,9 +47,9 @@ async function getCurrentSession() {
   if (sessions && sessions.length > 0) {
     const session = sessions[0];
     console.log(
-      `[LivePoll] Found session: ${session.session_name} at ${session.location}`
+      `[live-polling] Found session: ${session.session_name} at ${session.location}`
     );
-    console.log(`[LivePoll] Session key: ${session.session_key}`);
+    console.log(`[live-polling] Session key: ${session.session_key}`);
     return session;
   }
 
@@ -88,7 +88,7 @@ async function fetchDrivers(sessionKey) {
     });
   }
 
-  console.log(`[LivePoll] Loaded ${drivers.length} drivers`);
+  console.log(`[live-polling] Loaded ${drivers.length} drivers`);
   return drivers;
 }
 
@@ -153,7 +153,7 @@ async function pollData() {
 
     lastPollTime = now;
   } catch (error) {
-    console.error("[LivePoll] Error polling data:", error.message);
+    console.error("[live-polling] Error polling data:", error.message);
   }
 }
 
@@ -329,7 +329,6 @@ function processRaceControl(messages) {
           currentStateRef.RaceControlMessages.Messages.slice(-50);
       }
 
-      console.log(`[LivePoll] Race Control: ${msg.message}`);
 
       // Update track status
       if (msg.flag && msg.scope === "Track") {
@@ -380,7 +379,7 @@ function processTeamRadio(radios) {
 
       const driver = driversCache[String(radio.driver_number)];
       console.log(
-        `[LivePoll] Team Radio: ${driver?.code || radio.driver_number}`
+        `[live-polling] Team Radio: ${driver?.code || radio.driver_number}`
       );
     }
   });
@@ -460,7 +459,7 @@ function formatLapTime(seconds) {
  */
 async function fetchHistoricalData(sessionKey) {
   console.log(
-    `[LivePoll] Fetching historical data for session ${sessionKey}...`
+    `[live-polling] Fetching historical data for session ${sessionKey}...`
   );
 
   try {
@@ -472,7 +471,7 @@ async function fetchHistoricalData(sessionKey) {
     // Process all historical race control
     if (raceControl.length > 0) {
       console.log(
-        `[LivePoll] Loaded ${raceControl.length} historical race control messages`
+        `[live-polling] Loaded ${raceControl.length} historical race control messages`
       );
       processRaceControl(raceControl);
     }
@@ -480,12 +479,12 @@ async function fetchHistoricalData(sessionKey) {
     // Process all historical team radio
     if (teamRadio.length > 0) {
       console.log(
-        `[LivePoll] Loaded ${teamRadio.length} historical team radios`
+        `[live-polling] Loaded ${teamRadio.length} historical team radios`
       );
       processTeamRadio(teamRadio);
     }
   } catch (error) {
-    console.error("[LivePoll] Error fetching historical data:", error.message);
+    console.error("[live-polling] Error fetching historical data:", error.message);
   }
 }
 
@@ -494,7 +493,7 @@ async function fetchHistoricalData(sessionKey) {
  */
 export async function startLivePolling(broadcast, stateRef) {
   if (isRunning) {
-    console.log("[LivePoll] Already running");
+    console.log("[live-polling] Already running");
     return true;
   }
 
@@ -514,7 +513,7 @@ export async function startLivePolling(broadcast, stateRef) {
   // Get current session
   const session = await getCurrentSession();
   if (!session) {
-    console.log("[LivePoll] No active session found");
+    console.log("[live-polling] No active session found");
     return false;
   }
 
@@ -539,7 +538,7 @@ export async function startLivePolling(broadcast, stateRef) {
 
   // Start polling
   isRunning = true;
-  console.log(`[LivePoll] Starting polling every ${POLL_INTERVAL_MS}ms...`);
+  console.log(`[live-polling] Starting polling every ${POLL_INTERVAL_MS}ms...`);
 
   // Initial poll
   await pollData();
@@ -554,7 +553,7 @@ export async function startLivePolling(broadcast, stateRef) {
  * Stop live polling
  */
 export function stopLivePolling() {
-  console.log("[LivePoll] Stopping...");
+  console.log("[live-polling] Stopping...");
   isRunning = false;
 
   if (pollInterval) {

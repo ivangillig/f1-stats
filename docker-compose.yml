@@ -15,7 +15,10 @@ services:
       - PROXY_MODE=${PROXY_MODE:-auto}
       - F1_SSE_HOST=${F1_SSE_HOST}
       - F1_SSE_PATH=${F1_SSE_PATH}
+      - OPENF1_USERNAME=${OPENF1_USERNAME}
+      - OPENF1_PASSWORD=${OPENF1_PASSWORD}
       - F1_SSE_SECURE=${F1_SSE_SECURE:-true}
+      - NODE_ENV=${NODE_ENV:-development}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
       interval: 30s
@@ -29,6 +32,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-http://localhost:4000}
     container_name: f1-dashboard
     restart: unless-stopped
     ports:
