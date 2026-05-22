@@ -52,12 +52,6 @@ export default function TrackViolations({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-900/80">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          {t("violations.title")}
-        </h3>
-      </div>
-
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {driversWithViolations.length > 0 ? (
           driversWithViolations.map(({ carNum, count, code, team }) => {

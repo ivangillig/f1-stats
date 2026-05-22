@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import Image from "next/image";
 import TopBar from "@/components/TopBar";
 import TimingBoard from "@/components/TimingBoard";
@@ -21,13 +22,11 @@ export default function Dashboard() {
     weather,
     teamRadios,
     raceControlMessages,
-    isConnected,
     error,
     proxyMode,
   } = useF1DataSSE();
 
-  const timingBoardRef = useRef<HTMLDivElement>(null);
-  const [timingBoardHeight, setTimingBoardHeight] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<"map" | "control" | "violations" | "radio">("map");
   const [hoveredDriverNumber, setHoveredDriverNumber] = useState<string | null>(
     null,
   );
@@ -39,25 +38,6 @@ export default function Dashboard() {
   >();
   const lastShownMessageRef = useRef<string | null>(null);
   const bannerTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    const updateHeight = () => {
-      if (timingBoardRef.current) {
-        setTimingBoardHeight(timingBoardRef.current.offsetHeight);
-      }
-    };
-
-    updateHeight();
-    window.addEventListener("resize", updateHeight);
-
-    // Update when drivers change
-    const timer = setTimeout(updateHeight, 100);
-
-    return () => {
-      window.removeEventListener("resize", updateHeight);
-      clearTimeout(timer);
-    };
-  }, [drivers]);
 
   // Detect new race control messages and show banner for 5 seconds
   useEffect(() => {
@@ -108,6 +88,58 @@ export default function Dashboard() {
     };
   }, []);
 
+  // Compute latest alert across all three sources for the strip
+  const latestAlert = (() => {
+    const msg = raceControlMessages[0];
+    const radio = teamRadios[0];
+    const msgTime = msg ? new Date(msg.utc).getTime() : 0;
+    const radioTime = radio ? new Date(radio.utc).getTime() : 0;
+
+    if (!msg && !radio) return null;
+
+    if (radio && radioTime > msgTime) {
+      const driver = drivers.find((d) => d.driverNumber === radio.racingNumber);
+      return {
+        label: "Radio",
+        text: driver ? driver.code : `#${radio.racingNumber}`,
+        time: radio.utc,
+        icon: "📻" as string | null,
+        color: "text-purple-400",
+      };
+    }
+
+    if (!msg) return null;
+    const m = msg.message;
+    const label = m.includes("RED FLAG") ? "Bandera Roja"
+      : m.includes("SAFETY CAR") ? "Safety Car"
+      : m.includes("VSC") ? "VSC"
+      : m.includes("YELLOW") ? "Bandera"
+      : m.includes("GREEN") ? "Bandera"
+      : m.includes("TRACK LIMITS") ? "Violación"
+      : "Control";
+    const color = m.includes("RED FLAG") ? "text-red-400"
+      : m.includes("SAFETY CAR") || m.includes("VSC") || m.includes("TRACK LIMITS") ? "text-orange-400"
+      : m.includes("YELLOW") ? "text-yellow-400"
+      : m.includes("GREEN") ? "text-green-400"
+      : "text-zinc-400";
+    return {
+      label,
+      text: msg.message,
+      time: msg.utc,
+      icon: m.includes("CHEQUERED") ? "🏁"
+        : m.includes("BLACK AND WHITE") ? "⚑"
+        : m.includes("DOUBLE YELLOW") ? "🟡"
+        : m.includes("YELLOW") ? "🟡"
+        : m.includes("RED FLAG") ? "🔴"
+        : m.includes("GREEN") ? "🟢"
+        : m.includes("BLUE FLAG") ? "🔵"
+        : m.includes("SAFETY CAR") ? "🚗"
+        : m.includes("VSC") ? "🟡"
+        : null,
+      color,
+    };
+  })();
+
   if (error === "OFFLINE") {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-10">
@@ -150,7 +182,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen overflow-hidden bg-background flex flex-col">
       <TopBar
         session={sessionInfo}
         trackStatus={trackStatus}
@@ -158,86 +190,115 @@ export default function Dashboard() {
         latestRaceControlMessage={latestRaceControlMessage}
       />
 
-      <main className="flex-1 flex flex-col w-full">
+      <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {error === "RECONNECTING" && (
-          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm">
+          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm shrink-0">
             {t("error.reconnecting")}
           </div>
         )}
 
         {proxyMode === "replay" && (
-          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm flex items-center gap-2">
+          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm flex items-center gap-2 shrink-0">
             <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
             <span className="font-semibold">{t("mode.replayLabel")}</span>
             <span className="text-yellow-200/70">{t("mode.replayDesc")}</span>
           </div>
         )}
 
-        {/* Main content area */}
-        <div className="flex-1 flex flex-col w-full gap-2 p-2">
-          {/* Main row - Flex with items-start */}
-          <div className="flex flex-col lg:flex-row gap-2 items-start">
-            {/* Column 1 - Timing Board: takes its natural content width, doesn't shrink */}
-            <div
-              ref={timingBoardRef}
-              className="w-full lg:w-fit lg:flex-none overflow-x-auto"
-            >
-              <TimingBoard
-                drivers={drivers}
-                sessionName={sessionInfo.sessionName}
-                qualifyingPart={sessionInfo.qualifyingPart}
-                hoveredDriverNumber={hoveredDriverNumber}
-                onDriverHover={setHoveredDriverNumber}
-                pinnedDriverNumber={pinnedDriverNumber}
-                onDriverPin={setPinnedDriverNumber}
-              />
-            </div>
-
-            {/* Column 2 - Map + Race Control: fills remaining space, shrinks as needed */}
-            <div
-              className="w-full lg:flex-1 lg:min-w-0 flex flex-col gap-2"
-              style={{
-                minWidth: 220,
-                height:
-                  timingBoardHeight > 0 ? `${timingBoardHeight}px` : "auto",
-              }}
-            >
-              {/* Track Map */}
-              <div className="flex-[3] min-h-0 border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
-                <TrackMap
-                  drivers={drivers}
-                  circuitKey={sessionInfo.circuitKey}
-                  trackStatus={trackStatus}
-                  raceControlMessages={raceControlMessages}
-                  isSessionActive={sessionInfo.isLive}
-                  qualifyingPart={sessionInfo.qualifyingPart}
-                  hoveredDriverNumber={
-                    hoveredDriverNumber ?? pinnedDriverNumber
-                  }
-                />
-              </div>
-
-              {/* Race Control */}
-              <div className="flex-[2] min-h-0 border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
-                <RaceControl messages={raceControlMessages} />
-              </div>
-            </div>
+        {/* Main content: fills viewport, no page scroll */}
+        <div className="flex-1 min-h-0 flex gap-2 p-2">
+          {/* Column 1 - Timing Board with internal scroll */}
+          <div className="flex-none overflow-x-auto min-h-0">
+            <TimingBoard
+              drivers={drivers}
+              sessionName={sessionInfo.sessionName}
+              qualifyingPart={sessionInfo.qualifyingPart}
+              hoveredDriverNumber={hoveredDriverNumber}
+              onDriverHover={setHoveredDriverNumber}
+              pinnedDriverNumber={pinnedDriverNumber}
+              onDriverPin={setPinnedDriverNumber}
+            />
           </div>
 
-          {/* Bottom row - Team Radios and Violations */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 h-[200px]">
-            {/* Team Radios */}
-            <div className="border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
-              <TeamRadios radios={teamRadios} drivers={drivers} />
+          {/* Column 2 - Integrated tabbed panel + alert strip */}
+          <div className="flex-1 min-h-0 flex flex-col gap-1" style={{ minWidth: 220 }}>
+            {/* Integrated panel: tab bar + content inside one bordered box */}
+            <div className="flex-1 min-h-0 border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden flex flex-col">
+              {/* Tab bar */}
+              <div className="flex shrink-0 border-b border-zinc-800 bg-zinc-950/40">
+                {(
+                  [
+                    { id: "map", label: "Mapa" },
+                    { id: "control", label: "Control de Carrera" },
+                    { id: "violations", label: "Violaciones" },
+                    { id: "radio", label: "Radio" },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                      activeTab === tab.id
+                        ? "text-zinc-100"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    {tab.label}
+                    {activeTab === tab.id && (
+                      <motion.div
+                        layoutId="tab-indicator"
+                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                        transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab content */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {activeTab === "map" && (
+                  <TrackMap
+                    drivers={drivers}
+                    circuitKey={sessionInfo.circuitKey}
+                    trackStatus={trackStatus}
+                    raceControlMessages={raceControlMessages}
+                    isSessionActive={sessionInfo.isLive}
+                    qualifyingPart={sessionInfo.qualifyingPart}
+                    hoveredDriverNumber={hoveredDriverNumber ?? pinnedDriverNumber}
+                  />
+                )}
+                {activeTab === "control" && (
+                  <RaceControl messages={raceControlMessages} />
+                )}
+                {activeTab === "violations" && (
+                  <TrackViolations
+                    messages={raceControlMessages}
+                    drivers={drivers}
+                  />
+                )}
+                {activeTab === "radio" && (
+                  <TeamRadios radios={teamRadios} drivers={drivers} />
+                )}
+              </div>
             </div>
 
-            {/* Track Violations */}
-            <div className="border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden">
-              <TrackViolations
-                messages={raceControlMessages}
-                drivers={drivers}
-              />
-            </div>
+            {/* Alert strip — latest event across all sources */}
+            {latestAlert && (() => {
+              let time = latestAlert.time;
+              try { time = new Date(latestAlert.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+              catch { /* keep raw */ }
+              return (
+                <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 border border-zinc-800 rounded-lg bg-zinc-900/50 text-xs">
+                  <span className={`px-1.5 py-0.5 rounded bg-zinc-800 text-[10px] uppercase tracking-wide font-medium shrink-0 ${latestAlert.color}`}>
+                    {latestAlert.label}
+                  </span>
+                  {latestAlert.icon && <span>{latestAlert.icon}</span>}
+                  <span className="text-zinc-300 truncate">{latestAlert.text}</span>
+                  <span className="ml-auto text-zinc-500 shrink-0">{time}</span>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </main>

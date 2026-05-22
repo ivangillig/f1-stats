@@ -263,6 +263,15 @@ export default function TopBar({
   latestRaceControlMessage,
 }: TopBarProps) {
   const statusInfo = TRACK_STATUS[trackStatus.status] || TRACK_STATUS[1];
+  // trackStatus.message is authoritative for the text but the numeric code can lag —
+  // use the message to override the color when they disagree
+  const effectiveColor = (() => {
+    const msg = (trackStatus.message || "").toUpperCase();
+    if (msg.includes("RED")) return "#FF0000";
+    if (msg.includes("GREEN") || msg === "ALLCLEAR" || msg === "ALL CLEAR") return "#00bc7d";
+    if (latestRaceControlMessage?.message.includes("RED FLAG")) return "#FF0000";
+    return statusInfo.color;
+  })();
   const isRace = session.type === "Race";
   const { t } = useLanguage();
   const viewers = useViewerCount();
@@ -465,9 +474,9 @@ export default function TopBar({
           <div
             className="flex items-center gap-2 px-4 py-2 rounded-lg border-2"
             style={{
-              backgroundColor: statusInfo.color,
-              borderColor: statusInfo.color,
-              boxShadow: `0 0 50px ${statusInfo.color}, 0 0 100px ${statusInfo.color}80, inset 0 0 20px ${statusInfo.color}40`,
+              backgroundColor: effectiveColor,
+              borderColor: effectiveColor,
+              boxShadow: `0 0 50px ${effectiveColor}, 0 0 100px ${effectiveColor}80, inset 0 0 20px ${effectiveColor}40`,
             }}
             title={statusInfo.name}
           >

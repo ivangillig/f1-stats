@@ -39,6 +39,7 @@ export default function TimingBoard({
 
   const prevPinnedRef = useRef<string | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   const [pinnedPos, setPinnedPos] = useState<PinnedPos>("visible");
   const [cardBounds, setCardBounds] = useState<{
@@ -73,9 +74,12 @@ export default function TimingBoard({
       const el = getPinnedEl();
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      if (rect.bottom < 0) {
+      const containerRect = cardRef.current?.getBoundingClientRect();
+      const containerTop = (containerRect?.top ?? 0) + HEADER_HEIGHT;
+      const containerBottom = containerRect?.bottom ?? window.innerHeight;
+      if (rect.bottom < containerTop) {
         setPinnedPos("above");
-      } else if (rect.top > window.innerHeight) {
+      } else if (rect.top > containerBottom) {
         setPinnedPos("below");
       } else {
         setPinnedPos("visible");
@@ -91,8 +95,9 @@ export default function TimingBoard({
       });
     };
 
-    // Scroll/resize move the card on screen — cheap passive listeners
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    // Scroll/resize — listen on the internal list scroller and window resize
+    const listEl = listRef.current;
+    if (listEl) listEl.addEventListener("scroll", scheduleUpdate, { passive: true });
     window.addEventListener("resize", scheduleUpdate, { passive: true });
 
     // ResizeObserver fires when the list reorders or data changes cause layout shifts
@@ -107,7 +112,7 @@ export default function TimingBoard({
 
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
-      window.removeEventListener("scroll", scheduleUpdate);
+      if (listEl) listEl.removeEventListener("scroll", scheduleUpdate);
       window.removeEventListener("resize", scheduleUpdate);
       ro?.disconnect();
     };
@@ -154,8 +159,8 @@ export default function TimingBoard({
 
   return (
     <>
-      <div ref={cardRef}>
-        <Card className="overflow-hidden h-fit">
+      <div ref={cardRef} className="h-full flex flex-col">
+        <Card className="overflow-hidden flex-1 flex flex-col">
           {/* Header */}
           <div
             className="grid gap-3 px-3 py-2 bg-muted/30 text-xs text-muted-foreground uppercase tracking-wider font-medium border-b border-border"
@@ -172,7 +177,7 @@ export default function TimingBoard({
             <div className="text-center">{t("timing.s3")}</div>
           </div>
 
-          <div className="relative">
+          <div ref={listRef} className="relative flex-1 overflow-y-auto">
             {drivers.length > 0 ? (
               <AnimatePresence mode="popLayout">
                 {drivers.map((driver) => {

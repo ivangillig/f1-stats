@@ -76,17 +76,21 @@ function translateMessage(
   return translated;
 }
 
+function getCategoryStyle(message: string, category?: string): { bg: string; text: string } {
+  if (message.includes("RED FLAG")) return { bg: "bg-red-500/20", text: "text-red-400" };
+  if (message.includes("DOUBLE YELLOW") || message.includes("YELLOW")) return { bg: "bg-yellow-500/20", text: "text-yellow-400" };
+  if (message.includes("GREEN")) return { bg: "bg-green-500/20", text: "text-green-400" };
+  if (message.includes("SAFETY CAR") || message.includes("VSC")) return { bg: "bg-orange-500/20", text: "text-orange-400" };
+  if (message.includes("BLUE FLAG")) return { bg: "bg-blue-500/20", text: "text-blue-400" };
+  if (category === "TrackLimits" || message.includes("TRACK LIMITS")) return { bg: "bg-orange-500/20", text: "text-orange-400" };
+  return { bg: "bg-zinc-700/50", text: "text-zinc-400" };
+}
+
 export default function RaceControl({ messages }: RaceControlProps) {
   const { t } = useLanguage();
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-3 py-2 border-b border-zinc-800 bg-zinc-900/80">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          {t("raceControl.title")}
-        </h3>
-      </div>
-
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
         {messages.length > 0 ? (
           messages.slice(0, 20).map((msg, index) => (
@@ -95,17 +99,20 @@ export default function RaceControl({ messages }: RaceControlProps) {
               className="flex flex-col gap-1 p-2 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
             >
               <div className="flex items-center gap-2 text-xs text-zinc-500">
-                {msg.category && (
-                  <>
-                    <span className="px-1.5 py-0.5 rounded bg-zinc-700/50 text-[10px] uppercase tracking-wide">
-                      {t(`raceControl.category.${msg.category}`) !==
-                      `raceControl.category.${msg.category}`
-                        ? t(`raceControl.category.${msg.category}`)
-                        : msg.category}
-                    </span>
-                    <span>•</span>
-                  </>
-                )}
+                {msg.category && (() => {
+                  const style = getCategoryStyle(msg.message, msg.category);
+                  return (
+                    <>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide font-medium ${style.bg} ${style.text}`}>
+                        {t(`raceControl.category.${msg.category}`) !==
+                        `raceControl.category.${msg.category}`
+                          ? t(`raceControl.category.${msg.category}`)
+                          : msg.category}
+                      </span>
+                      <span>•</span>
+                    </>
+                  );
+                })()}
                 {msg.lap && (
                   <span>{t("raceControl.lap", { lap: msg.lap })}</span>
                 )}
