@@ -227,8 +227,7 @@ export default function DriverRow({
   const isInEliminationZone = (): boolean => {
     const pos = driver.position;
     const session = sessionName?.toLowerCase() || "";
-    const isSprint =
-      session.includes("sprint") || session.includes("sq");
+    const isSprint = session.includes("sprint") || session.includes("sq");
 
     // Use qualifyingPart if available (1=Q1/SQ1, 2=Q2/SQ2, 3=Q3/SQ3)
     if (qualifyingPart) {
@@ -311,8 +310,8 @@ export default function DriverRow({
         borderLeft: isPinned
           ? `3px solid ${teamColor}`
           : !eliminated && inEliminationZone
-          ? "3px solid rgb(239 68 68)"
-          : "3px solid transparent",
+            ? "3px solid rgb(239 68 68)"
+            : "3px solid transparent",
       }}
     >
       {/* Position + Driver Tag — click to pin/unpin, overlay on hover */}

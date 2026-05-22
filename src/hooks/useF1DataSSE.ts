@@ -122,7 +122,10 @@ export function useF1DataSSE(): F1DataState {
 
   // Driver info cache populated from data.drivers
   const driverListRef = useRef<
-    Record<string, { name: string; team: string; code: string; teamColor: string }>
+    Record<
+      string,
+      { name: string; team: string; code: string; teamColor: string }
+    >
   >({});
 
   // Car location cache from data.location
@@ -205,7 +208,10 @@ export function useF1DataSSE(): F1DataState {
       // ── 4. Clock ────────────────────────────────────────────────────────
       const clockData = data.clock;
       if (clockData?.remaining && clockData?.utc) {
-        clockRef.current = { remaining: clockData.remaining, utc: clockData.utc };
+        clockRef.current = {
+          remaining: clockData.remaining,
+          utc: clockData.utc,
+        };
       }
 
       // ── 5. Track status ─────────────────────────────────────────────────
@@ -244,7 +250,7 @@ export function useF1DataSSE(): F1DataState {
             }));
           const merged = [...newCaptures, ...prev];
           const unique = merged.filter(
-            (c, i) => merged.findIndex((x) => x.path === c.path) === i
+            (c, i) => merged.findIndex((x) => x.path === c.path) === i,
           );
           return unique.slice(0, 20);
         });
@@ -262,18 +268,19 @@ export function useF1DataSSE(): F1DataState {
               category: m.category,
               flag: m.flag,
               lap: m.lap_number,
-              driverNumber: m.driver_number != null ? String(m.driver_number) : undefined,
+              driverNumber:
+                m.driver_number != null ? String(m.driver_number) : undefined,
               sector: m.sector,
             }));
           const merged = [...newMessages, ...prev];
           const unique = merged.filter(
             (m, i) =>
               merged.findIndex(
-                (x) => x.utc === m.utc && x.message === m.message
-              ) === i
+                (x) => x.utc === m.utc && x.message === m.message,
+              ) === i,
           );
           unique.sort(
-            (a, b) => new Date(b.utc).getTime() - new Date(a.utc).getTime()
+            (a, b) => new Date(b.utc).getTime() - new Date(a.utc).getTime(),
           );
           return unique.slice(0, 30);
         });
@@ -286,7 +293,11 @@ export function useF1DataSSE(): F1DataState {
       // Update session fastest lap tracking before building drivers
       Object.entries(timingData).forEach(([num, entry]: [string, any]) => {
         const lastLap = entry?.last_lap;
-        if (lastLap != null && lastLap > 0 && lastLap < sessionFastestLapRef.current) {
+        if (
+          lastLap != null &&
+          lastLap > 0 &&
+          lastLap < sessionFastestLapRef.current
+        ) {
           sessionFastestLapRef.current = lastLap;
           sessionFastestDriverRef.current = num;
         }
@@ -301,7 +312,9 @@ export function useF1DataSSE(): F1DataState {
           // Resolve driver identity: API cache → hardcoded fallback
           const apiInfo = driverListRef.current[num];
           const apiCode = apiInfo?.code || num;
-          const hardcodedByCode = Object.values(DRIVERS).find((d) => d.code === apiCode);
+          const hardcodedByCode = Object.values(DRIVERS).find(
+            (d) => d.code === apiCode,
+          );
           const hardcoded = hardcodedByCode || DRIVERS[num];
           const driverInfo = {
             name: apiInfo?.name || hardcoded?.name || `Driver ${num}`,
@@ -318,18 +331,30 @@ export function useF1DataSSE(): F1DataState {
           };
 
           // Segments (plain number arrays)
-          const segs1: number[] = Array.isArray(entry.segments_1) ? entry.segments_1 : [];
-          const segs2: number[] = Array.isArray(entry.segments_2) ? entry.segments_2 : [];
-          const segs3: number[] = Array.isArray(entry.segments_3) ? entry.segments_3 : [];
+          const segs1: number[] = Array.isArray(entry.segments_1)
+            ? entry.segments_1
+            : [];
+          const segs2: number[] = Array.isArray(entry.segments_2)
+            ? entry.segments_2
+            : [];
+          const segs3: number[] = Array.isArray(entry.segments_3)
+            ? entry.segments_3
+            : [];
 
           // Update session-wide max so all drivers show equal bar counts
-          if (segs1.length > maxSegCounts.current.s1) maxSegCounts.current.s1 = segs1.length;
-          if (segs2.length > maxSegCounts.current.s2) maxSegCounts.current.s2 = segs2.length;
-          if (segs3.length > maxSegCounts.current.s3) maxSegCounts.current.s3 = segs3.length;
+          if (segs1.length > maxSegCounts.current.s1)
+            maxSegCounts.current.s1 = segs1.length;
+          if (segs2.length > maxSegCounts.current.s2)
+            maxSegCounts.current.s2 = segs2.length;
+          if (segs3.length > maxSegCounts.current.s3)
+            maxSegCounts.current.s3 = segs3.length;
 
-          const s1Count = maxSegCounts.current.s1 || existing?.sector1SegmentCount || 6;
-          const s2Count = maxSegCounts.current.s2 || existing?.sector2SegmentCount || 6;
-          const s3Count = maxSegCounts.current.s3 || existing?.sector3SegmentCount || 6;
+          const s1Count =
+            maxSegCounts.current.s1 || existing?.sector1SegmentCount || 6;
+          const s2Count =
+            maxSegCounts.current.s2 || existing?.sector2SegmentCount || 6;
+          const s3Count =
+            maxSegCounts.current.s3 || existing?.sector3SegmentCount || 6;
 
           // Build padded mini-sector array
           const padNone = (arr: SectorStatus[], n: number): SectorStatus[] => {
@@ -337,7 +362,8 @@ export function useF1DataSSE(): F1DataState {
             while (r.length < n) r.push("none");
             return r;
           };
-          const hasSegs = segs1.length > 0 || segs2.length > 0 || segs3.length > 0;
+          const hasSegs =
+            segs1.length > 0 || segs2.length > 0 || segs3.length > 0;
           const miniSectors: SectorStatus[] = hasSegs
             ? [
                 ...padNone(segs1.map(segmentStatus), s1Count),
@@ -377,33 +403,33 @@ export function useF1DataSSE(): F1DataState {
             gap:
               entry.gap_to_leader !== undefined
                 ? formatGap(entry.gap_to_leader)
-                : existing?.gap ?? "",
+                : (existing?.gap ?? ""),
             interval:
               entry.interval !== undefined
                 ? formatGap(entry.interval)
-                : existing?.interval ?? "",
+                : (existing?.interval ?? ""),
             lastLap:
               entry.last_lap != null
                 ? formatLapTime(entry.last_lap)
-                : existing?.lastLap ?? "",
+                : (existing?.lastLap ?? ""),
             lastLapPersonalBest: entry.last_lap_is_pb || false,
             lastLapOverallFastest: num === sessionFastestDriverRef.current,
             bestLap:
               entry.best_lap != null
                 ? formatLapTime(entry.best_lap)
-                : existing?.bestLap ?? "",
+                : (existing?.bestLap ?? ""),
             sector1:
               entry.sector_1 != null
                 ? formatLapTime(entry.sector_1)
-                : existing?.sector1 ?? "",
+                : (existing?.sector1 ?? ""),
             sector2:
               entry.sector_2 != null
                 ? formatLapTime(entry.sector_2)
-                : existing?.sector2 ?? "",
+                : (existing?.sector2 ?? ""),
             sector3:
               entry.sector_3 != null
                 ? formatLapTime(entry.sector_3)
-                : existing?.sector3 ?? "",
+                : (existing?.sector3 ?? ""),
             // Best sectors not available from OpenF1 native format
             bestSector1: existing?.bestSector1 || "",
             bestSector2: existing?.bestSector2 || "",
@@ -420,14 +446,18 @@ export function useF1DataSSE(): F1DataState {
             sector3SegmentCount: s3Count,
             tire,
             inPit:
-              entry.in_pit !== undefined ? entry.in_pit : existing?.inPit ?? false,
+              entry.in_pit !== undefined
+                ? entry.in_pit
+                : (existing?.inPit ?? false),
             pitCount: entry.pit_count ?? existing?.pitCount ?? 0,
             retired:
-              entry.retired !== undefined ? entry.retired : existing?.retired ?? false,
+              entry.retired !== undefined
+                ? entry.retired
+                : (existing?.retired ?? false),
             knockedOut:
               entry.knocked_out !== undefined
                 ? entry.knocked_out
-                : existing?.knockedOut ?? false,
+                : (existing?.knockedOut ?? false),
             currentLap: entry.lap_number || existing?.currentLap,
             trackProgress,
             trackX: carDataRef.current[num]?.x ?? existing?.trackX,
@@ -441,7 +471,8 @@ export function useF1DataSSE(): F1DataState {
         const parseLapTime = (lapTime: string | undefined): number => {
           if (!lapTime || lapTime === "" || lapTime === "---") return Infinity;
           const parts = lapTime.split(/[:.]/).map(Number);
-          if (parts.length === 3) return parts[0] * 60000 + parts[1] * 1000 + parts[2];
+          if (parts.length === 3)
+            return parts[0] * 60000 + parts[1] * 1000 + parts[2];
           if (parts.length === 2) return parts[0] * 1000 + parts[1];
           return Infinity;
         };
@@ -493,7 +524,8 @@ export function useF1DataSSE(): F1DataState {
               const prevTime = parseLapTime(prevDriver?.bestLap);
               if (prevTime !== Infinity) {
                 const intervalMs = driverTime - prevTime;
-                interval = intervalMs > 0 ? `+${(intervalMs / 1000).toFixed(3)}` : "";
+                interval =
+                  intervalMs > 0 ? `+${(intervalMs / 1000).toFixed(3)}` : "";
               }
             }
           }
@@ -519,7 +551,9 @@ export function useF1DataSSE(): F1DataState {
       localStorage.setItem("f1_client_id", clientId);
     }
 
-    const eventSource = new EventSource(`${PROXY_URL}/api/sse?clientId=${clientId}`);
+    const eventSource = new EventSource(
+      `${PROXY_URL}/api/sse?clientId=${clientId}`,
+    );
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
@@ -538,7 +572,9 @@ export function useF1DataSSE(): F1DataState {
       const hasData = Object.keys(data).length > 0;
       console.log(
         "[SSE] Received initial state",
-        hasData ? `(${Object.keys(data).length} keys)` : "(empty - waiting for data)"
+        hasData
+          ? `(${Object.keys(data).length} keys)`
+          : "(empty - waiting for data)",
       );
       if (hasData) {
         processData(data);
@@ -580,7 +616,9 @@ export function useF1DataSSE(): F1DataState {
       }
 
       // Always extrapolate: subtract elapsed time since the UTC anchor
-      const elapsed = Math.floor((Date.now() - new Date(clock.utc).getTime()) / 1000);
+      const elapsed = Math.floor(
+        (Date.now() - new Date(clock.utc).getTime()) / 1000,
+      );
       totalSeconds = Math.max(0, totalSeconds - elapsed);
 
       const hours = Math.floor(totalSeconds / 3600);
@@ -646,7 +684,8 @@ export function useF1DataSSE(): F1DataState {
 
     return () => {
       if (eventSourceRef.current) eventSourceRef.current.close();
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (reconnectTimeoutRef.current)
+        clearTimeout(reconnectTimeoutRef.current);
       if (healthCheckIntervalRef.current)
         clearInterval(healthCheckIntervalRef.current);
     };
