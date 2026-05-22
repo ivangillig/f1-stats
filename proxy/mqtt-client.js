@@ -10,6 +10,13 @@
  */
 
 import mqtt from "mqtt";
+import {
+  ensureTimingEntry,
+  updateBestLap,
+  getPitWindowStatus,
+  flagToTrackStatus,
+  detectSafetyCar,
+} from "./state-utils.js";
 
 // MQTT Configuration
 const MQTT_BROKER = "mqtt.openf1.org";
@@ -42,10 +49,6 @@ let currentStateRef = null;
 let isRunning = false;
 let reconnectTimeout = null;
 
-// Store latest data by driver for aggregation
-const driverData = {};
-const sessionData = {};
-
 /**
  * Obtain OAuth2 access token from OpenF1
  */
@@ -55,7 +58,7 @@ async function getAccessToken() {
 
   if (!username || !password) {
     throw new Error(
-      "OPENF1_USERNAME and OPENF1_PASSWORD environment variables required"
+      "OPENF1_USERNAME and OPENF1_PASSWORD environment variables required",
     );
   }
 
@@ -81,7 +84,9 @@ async function getAccessToken() {
   // Set expiry 5 minutes before actual expiry for safety
   tokenExpiry = Date.now() + (parseInt(data.expires_in) - 300) * 1000;
 
-  console.log(`[openf1-mqtt] Auth token obtained (expires in ${data.expires_in}s)`);
+  console.log(
+    `[openf1-mqtt] Auth token obtained (expires in ${data.expires_in}s)`,
+  );
   return accessToken;
 }
 
@@ -124,7 +129,7 @@ function processMessage(topic, message) {
         handleLocation(data);
         break;
       case "car_data":
-        handleCarData(data);
+        // High-frequency, not needed for timing board — skip
         break;
       case "race_control":
         handleRaceControl(data);
@@ -148,7 +153,10 @@ function processMessage(topic, message) {
       broadcastFn("update", currentStateRef);
     }
   } catch (err) {
-    console.error(`[openf1-mqtt] Error processing message on ${topic}:`, err.message);
+    console.error(
+      `[openf1-mqtt] Error processing message on ${topic}:`,
+      err.message,
+    );
   }
 }
 
@@ -156,180 +164,177 @@ function processMessage(topic, message) {
  * Handle session info
  */
 function handleSession(data) {
-  sessionData.info = data;
-  if (currentStateRef) {
-    currentStateRef.SessionInfo = {
-      Meeting: {
-        Name: data.meeting_name || data.location,
-        Circuit: {
-          ShortName: data.circuit_short_name || data.location,
-        },
-      },
-      Name: data.session_name || data.session_type,
-    };
-  }
+  if (!currentStateRef) return;
+  currentStateRef.session = {
+    session_key: data.session_key,
+    session_name: data.session_name || data.session_type,
+    session_type: data.session_type,
+    circuit_key: data.circuit_key,
+    circuit_short_name: data.circuit_short_name || data.location,
+    country_name: data.country_name,
+    country_code: data.country_code,
+    date_start: data.date_start,
+    date_end: data.date_end || null,
+    location: data.location,
+    meeting_name: data.meeting_name || data.location,
+  };
 }
 
 /**
  * Handle driver info
  */
 function handleDriver(data) {
+  if (!currentStateRef) return;
   const num = String(data.driver_number);
-  if (currentStateRef) {
-    if (!currentStateRef.DriverList) {
-      currentStateRef.DriverList = {};
-    }
-    currentStateRef.DriverList[num] = {
-      RacingNumber: num,
-      Tla: data.name_acronym,
-      FullName: data.full_name,
-      TeamName: data.team_name,
-      TeamColour: data.team_colour,
-    };
-  }
+  if (!currentStateRef.drivers) currentStateRef.drivers = {};
+  currentStateRef.drivers[num] = {
+    driver_number: data.driver_number,
+    name_acronym: data.name_acronym,
+    full_name: data.full_name,
+    team_name: data.team_name,
+    team_colour: data.team_colour,
+  };
 }
 
 /**
  * Handle position updates
  */
 function handlePosition(data) {
+  if (!currentStateRef) return;
   const num = String(data.driver_number);
-  if (!driverData[num]) driverData[num] = {};
-  driverData[num].position = data.position;
-  driverData[num].positionDate = data.date;
-
-  updateTimingData(num);
+  const entry = ensureTimingEntry(currentStateRef, num);
+  entry.position = data.position ?? null;
 }
 
 /**
  * Handle interval updates
  */
 function handleInterval(data) {
+  if (!currentStateRef) return;
   const num = String(data.driver_number);
-  if (!driverData[num]) driverData[num] = {};
-  driverData[num].gapToLeader = data.gap_to_leader;
-  driverData[num].interval = data.interval;
-
-  updateTimingData(num);
+  const entry = ensureTimingEntry(currentStateRef, num);
+  entry.gap_to_leader =
+    data.gap_to_leader === 0 || data.gap_to_leader == null
+      ? null
+      : data.gap_to_leader;
+  entry.interval =
+    data.interval === 0 || data.interval == null ? null : data.interval;
 }
 
 /**
  * Handle lap updates
  */
 function handleLap(data) {
+  if (!currentStateRef) return;
   const num = String(data.driver_number);
-  if (!driverData[num]) driverData[num] = {};
+  const entry = ensureTimingEntry(currentStateRef, num);
 
-  driverData[num].lapNumber = data.lap_number;
-  driverData[num].lapDuration = data.lap_duration; // null for current incomplete lap
-  driverData[num].sector1 = data.duration_sector_1;
-  driverData[num].sector2 = data.duration_sector_2;
-  driverData[num].sector3 = data.duration_sector_3;
-  driverData[num].isPitOutLap = data.is_pit_out_lap;
-  driverData[num].segments1 = data.segments_sector_1 || null;
-  driverData[num].segments2 = data.segments_sector_2 || null;
-  driverData[num].segments3 = data.segments_sector_3 || null;
+  entry.lap_number = data.lap_number ?? entry.lap_number;
 
-  // Only consider completed laps (lap_duration !== null, not a pit-out lap)
-  if (data.lap_duration && !data.is_pit_out_lap) {
-    // Best lap = minimum valid duration seen for this driver
-    if (!driverData[num].bestLap || data.lap_duration < driverData[num].bestLap) {
-      driverData[num].bestLap = data.lap_duration;
-    }
-    // Last completed lap (used for LastLapTime — current lap may be incomplete)
-    driverData[num].lastCompletedLap = data.lap_duration;
+  // Only update sector times if present — avoids clearing live data from SignalR
+  if (data.duration_sector_1 != null) entry.sector_1 = data.duration_sector_1;
+  if (data.duration_sector_2 != null) entry.sector_2 = data.duration_sector_2;
+  if (data.duration_sector_3 != null) entry.sector_3 = data.duration_sector_3;
+
+  // Only overwrite segments if MQTT delivers a non-empty array (completed-lap data)
+  if (
+    Array.isArray(data.segments_sector_1) &&
+    data.segments_sector_1.length > 0
+  )
+    entry.segments_1 = data.segments_sector_1;
+  if (
+    Array.isArray(data.segments_sector_2) &&
+    data.segments_sector_2.length > 0
+  )
+    entry.segments_2 = data.segments_sector_2;
+  if (
+    Array.isArray(data.segments_sector_3) &&
+    data.segments_sector_3.length > 0
+  )
+    entry.segments_3 = data.segments_sector_3;
+
+  entry.is_pit_out_lap = data.is_pit_out_lap || false;
+
+  if (data.lap_duration != null) {
+    entry.last_lap = data.lap_duration;
+    const isPb = updateBestLap(entry, data.lap_duration, data.is_pit_out_lap);
+    entry.last_lap_is_pb = isPb;
+    // Lap is confirmed complete — clear live sector data so next lap starts clean
+    // (SignalR will repopulate segment-by-segment as the new lap progresses)
+    entry.segments_1 = [];
+    entry.segments_2 = [];
+    entry.segments_3 = [];
+    entry.sector_1 = null;
+    entry.sector_2 = null;
+    entry.sector_3 = null;
   }
 
-  updateTimingData(num);
+  // Advance the global lap counter
+  if (
+    data.lap_number &&
+    data.lap_number > (currentStateRef.lap_count?.current || 0)
+  ) {
+    if (!currentStateRef.lap_count)
+      currentStateRef.lap_count = { current: 0, total: 0 };
+    currentStateRef.lap_count.current = data.lap_number;
+  }
 }
 
 /**
  * Handle location updates (car position on track)
  */
 function handleLocation(data) {
+  if (!currentStateRef) return;
   const num = String(data.driver_number);
-  if (currentStateRef) {
-    if (!currentStateRef.Position) {
-      currentStateRef.Position = { Position: {} };
-    }
-    currentStateRef.Position.Position[num] = {
-      X: data.x,
-      Y: data.y,
-    };
-  }
-}
-
-/**
- * Handle car telemetry data
- */
-function handleCarData(data) {
-  const num = String(data.driver_number);
-  if (!driverData[num]) driverData[num] = {};
-
-  driverData[num].speed = data.speed;
-  driverData[num].rpm = data.rpm;
-  driverData[num].gear = data.gear;
-  driverData[num].throttle = data.throttle;
-  driverData[num].brake = data.brake;
-  driverData[num].drs = data.drs;
+  if (!currentStateRef.location) currentStateRef.location = {};
+  currentStateRef.location[num] = { x: data.x, y: data.y };
 }
 
 /**
  * Handle race control messages
  */
 function handleRaceControl(data) {
-  if (currentStateRef) {
-    if (!currentStateRef.RaceControlMessages) {
-      currentStateRef.RaceControlMessages = { Messages: [] };
+  if (!currentStateRef) return;
+  if (!Array.isArray(currentStateRef.race_control_messages)) {
+    currentStateRef.race_control_messages = [];
+  }
+
+  const msg = {
+    date: data.date,
+    message: data.message,
+    flag: data.flag || null,
+    category: data.category || "Other",
+    scope: data.scope || null,
+    sector: data.sector || null,
+    driver_number: data.driver_number || null,
+    lap_number: data.lap_number || null,
+  };
+
+  // Deduplicate
+  const exists = currentStateRef.race_control_messages.some(
+    (m) => m.date === msg.date && m.message === msg.message,
+  );
+
+  if (!exists) {
+    currentStateRef.race_control_messages.push(msg);
+    if (currentStateRef.race_control_messages.length > 50) {
+      currentStateRef.race_control_messages =
+        currentStateRef.race_control_messages.slice(-50);
     }
+  }
 
-    const msg = {
-      Utc: data.date,
-      Category: data.category || "Other",
-      Message: data.message,
-      Flag: data.flag || null,
-      Scope: data.scope || null,
-      Sector: data.sector || null,
-      DriverNumber: data.driver_number || null,
-      LapNumber: data.lap_number || null,
-    };
-
-    // Check if message already exists
-    const exists = currentStateRef.RaceControlMessages.Messages.some(
-      (m) => m.Utc === msg.Utc && m.Message === msg.Message
-    );
-
-    if (!exists) {
-      currentStateRef.RaceControlMessages.Messages.push(msg);
-      // Keep only last 50 messages
-      if (currentStateRef.RaceControlMessages.Messages.length > 50) {
-        currentStateRef.RaceControlMessages.Messages =
-          currentStateRef.RaceControlMessages.Messages.slice(-50);
-      }
+  // Update track status from flag
+  if (data.flag && data.scope === "Track") {
+    const flagStatus = flagToTrackStatus(data.flag);
+    if (flagStatus) {
+      currentStateRef.track_status = { flag: flagStatus };
     }
+  }
 
-    // Update track status based on flags
-    if (data.flag && data.scope === "Track") {
-      const flag = data.flag.toUpperCase();
-      if (flag === "GREEN") {
-        currentStateRef.TrackStatus = { Status: "1", Message: "AllClear" };
-      } else if (flag === "YELLOW" || flag === "DOUBLE YELLOW") {
-        currentStateRef.TrackStatus = { Status: "2", Message: "Yellow" };
-      } else if (flag === "RED") {
-        currentStateRef.TrackStatus = { Status: "5", Message: "Red" };
-      } else if (flag === "CHEQUERED") {
-        currentStateRef.TrackStatus = { Status: "7", Message: "Chequered" };
-      }
-    }
-
-    // Check for safety car
-    if (data.category === "SafetyCar") {
-      if (data.message.includes("VIRTUAL SAFETY CAR")) {
-        currentStateRef.TrackStatus = { Status: "6", Message: "VSC Deployed" };
-      } else if (data.message.includes("SAFETY CAR")) {
-        currentStateRef.TrackStatus = { Status: "4", Message: "SC Deployed" };
-      }
-    }
+  // Safety car overrides flag-based status
+  const scStatus = detectSafetyCar(data.message);
+  if (scStatus) {
+    currentStateRef.track_status = { flag: scStatus };
   }
 }
 
@@ -337,31 +342,28 @@ function handleRaceControl(data) {
  * Handle team radio
  */
 function handleTeamRadio(data) {
-  if (currentStateRef) {
-    if (!currentStateRef.TeamRadio) {
-      currentStateRef.TeamRadio = { Captures: [] };
+  if (!currentStateRef) return;
+  if (!Array.isArray(currentStateRef.team_radio)) {
+    currentStateRef.team_radio = [];
+  }
+
+  const radio = {
+    date: data.date,
+    driver_number: data.driver_number,
+    recording_url: data.recording_url,
+  };
+
+  // Deduplicate by URL
+  const exists = currentStateRef.team_radio.some(
+    (r) => r.recording_url === radio.recording_url,
+  );
+
+  if (!exists) {
+    currentStateRef.team_radio.push(radio);
+    if (currentStateRef.team_radio.length > 30) {
+      currentStateRef.team_radio = currentStateRef.team_radio.slice(-30);
     }
-
-    const radio = {
-      Utc: data.date,
-      RacingNumber: String(data.driver_number),
-      Path: data.recording_url,
-    };
-
-    // Check if already exists
-    const exists = currentStateRef.TeamRadio.Captures.some(
-      (r) => r.Path === radio.Path
-    );
-
-    if (!exists) {
-      currentStateRef.TeamRadio.Captures.push(radio);
-      // Keep only last 30 radios
-      if (currentStateRef.TeamRadio.Captures.length > 30) {
-        currentStateRef.TeamRadio.Captures =
-          currentStateRef.TeamRadio.Captures.slice(-30);
-      }
-      console.log(`[openf1-mqtt] Team Radio: Driver ${data.driver_number}`);
-    }
+    console.log(`[openf1-mqtt] Team Radio: Driver ${data.driver_number}`);
   }
 }
 
@@ -369,140 +371,109 @@ function handleTeamRadio(data) {
  * Handle weather data
  */
 function handleWeather(data) {
-  if (currentStateRef) {
-    currentStateRef.WeatherData = {
-      AirTemp: String(data.air_temperature),
-      Humidity: String(data.humidity),
-      Pressure: String(data.pressure),
-      Rainfall: data.rainfall ? "1" : "0",
-      TrackTemp: String(data.track_temperature),
-      WindDirection: String(data.wind_direction),
-      WindSpeed: String(data.wind_speed),
-    };
-  }
-}
-
-/**
- * Handle pit stop events.
- * Sets inPit=true if the car is still within its pit lane window (date to date+lane_duration),
- * and schedules a timer to clear it when the window closes.
- */
-function handlePit(data) {
-  const num = String(data.driver_number);
-  if (!driverData[num]) driverData[num] = {};
-
-  driverData[num].pitStops = (driverData[num].pitStops || 0) + 1;
-
-  if (data.date && data.lane_duration) {
-    const entryMs = new Date(data.date).getTime();
-    const exitMs = entryMs + data.lane_duration * 1000;
-    const now = Date.now();
-
-    if (now >= entryMs && now <= exitMs) {
-      driverData[num].inPit = true;
-      const remainingMs = exitMs - now;
-      setTimeout(() => {
-        if (driverData[num]) {
-          driverData[num].inPit = false;
-          updateTimingData(num);
-          if (broadcastFn && currentStateRef) broadcastFn("update", currentStateRef);
-        }
-      }, remainingMs + 1000);
-    }
-  }
-
-  updateTimingData(num);
+  if (!currentStateRef) return;
+  currentStateRef.weather = {
+    air_temperature: data.air_temperature,
+    track_temperature: data.track_temperature,
+    humidity: data.humidity,
+    pressure: data.pressure,
+    rainfall: data.rainfall,
+    wind_speed: data.wind_speed,
+    wind_direction: data.wind_direction,
+  };
 }
 
 /**
  * Handle stint data (tire info)
  */
 function handleStint(data) {
-  const num = String(data.driver_number);
-  if (!driverData[num]) driverData[num] = {};
-
-  driverData[num].compound = data.compound;
-  driverData[num].tyreAgeAtStart = data.tyre_age_at_start;
-  driverData[num].stintLapStart = data.lap_start;
-  driverData[num].stintNumber = data.stint_number;
-
-  updateTimingData(num);
-}
-
-/**
- * Update TimingData state from aggregated driver data
- */
-function updateTimingData(driverNum) {
   if (!currentStateRef) return;
+  const num = String(data.driver_number);
+  const entry = ensureTimingEntry(currentStateRef, num);
+  entry.compound = data.compound ? data.compound.toUpperCase() : entry.compound;
+  entry.tyre_age = data.tyre_age_at_start ?? entry.tyre_age;
+  entry.stint_number = data.stint_number ?? entry.stint_number;
+}
 
-  if (!currentStateRef.TimingData) {
-    currentStateRef.TimingData = { Lines: {} };
+/**
+ * Handle pit stop events.
+ * Sets in_pit=true if the car is still within its pit lane window,
+ * and schedules a timer to clear it when the window closes.
+ */
+function handlePit(data) {
+  if (!currentStateRef) return;
+  const num = String(data.driver_number);
+  const entry = ensureTimingEntry(currentStateRef, num);
+
+  entry.pit_count = (entry.pit_count || 0) + 1;
+
+  const { in_pit, remaining_ms } = getPitWindowStatus(
+    data.date,
+    data.lane_duration,
+  );
+  if (in_pit) {
+    entry.in_pit = true;
+    setTimeout(() => {
+      if (currentStateRef?.timing?.[num]) {
+        currentStateRef.timing[num].in_pit = false;
+        if (broadcastFn && currentStateRef)
+          broadcastFn("update", currentStateRef);
+      }
+    }, remaining_ms + 1000);
   }
+}
 
-  const d = driverData[driverNum];
-  if (!d) return;
-
-  currentStateRef.TimingData.Lines[driverNum] = {
-    Position: String(d.position || ""),
-    GapToLeader: d.gapToLeader || "",
-    IntervalToPositionAhead: { Value: d.interval || "" },
-    LastLapTime: { Value: d.lastCompletedLap ? formatLapTime(d.lastCompletedLap) : "" },
-    BestLapTime: { Value: d.bestLap ? formatLapTime(d.bestLap) : "" },
-    Sectors: {
-      0: { Value: d.sector1 ? d.sector1.toFixed(3) : "", ...(d.segments1 && { Segments: convertSegments(d.segments1) }) },
-      1: { Value: d.sector2 ? d.sector2.toFixed(3) : "", ...(d.segments2 && { Segments: convertSegments(d.segments2) }) },
-      2: { Value: d.sector3 ? d.sector3.toFixed(3) : "", ...(d.segments3 && { Segments: convertSegments(d.segments3) }) },
-    },
-    NumberOfLaps: d.lapNumber || 0,
-    InPit: d.inPit || false,
-    PitOut: d.isPitOutLap || false,
-    NumberOfPitStops: d.pitStops || 0,
-    Retired: d.retired || false,
-  };
-
-  // Write tire data to TimingAppData so the frontend can read compound and age
-  if (d.compound) {
-    if (!currentStateRef.TimingAppData) currentStateRef.TimingAppData = { Lines: {} };
-    const currentLap = d.lapNumber || 0;
-    const stintLapStart = d.stintLapStart || currentLap;
-    const totalTyreLaps = (d.tyreAgeAtStart || 0) + Math.max(0, currentLap - stintLapStart);
-    currentStateRef.TimingAppData.Lines[driverNum] = {
-      Stints: [{ Compound: d.compound.toUpperCase(), TotalLaps: totalTyreLaps, New: d.tyreAgeAtStart === 0 ? "true" : "false" }],
+/**
+ * Get current session key from latest data or API.
+ * Also writes session info to state.
+ */
+async function getCurrentSessionKey() {
+  try {
+    const token = await ensureValidToken();
+    const headers = {
+      accept: "application/json",
+      Authorization: `Bearer ${token}`,
     };
+
+    const response = await fetch(`${API_BASE}/sessions?session_key=latest`, {
+      headers,
+    });
+
+    if (response.ok) {
+      const sessions = await response.json();
+      if (sessions && sessions.length > 0) {
+        const session = sessions[0];
+        console.log(
+          `[openf1-mqtt] Current session: ${session.session_name} at ${session.location}`,
+        );
+
+        // Write session info to state using the new format
+        if (currentStateRef) {
+          handleSession(session);
+        }
+
+        return session.session_key;
+      }
+    }
+  } catch (error) {
+    console.error(
+      "[openf1-mqtt] Error getting current session:",
+      error.message,
+    );
   }
+  return null;
 }
 
 /**
- * Convert OpenF1 segments array [2049, 2048, 2051, ...] to
- * F1 SignalR Segments object { "0": { Status: 2049 }, "1": { Status: 2048 }, ... }
- */
-function convertSegments(arr) {
-  if (!arr || !Array.isArray(arr) || arr.length === 0) return undefined;
-  const obj = {};
-  arr.forEach((status, i) => { obj[String(i)] = { Status: status }; });
-  return obj;
-}
-
-/**
- * Format lap time from seconds to M:SS.mmm
- */
-function formatLapTime(seconds) {
-  if (!seconds) return "";
-  const mins = Math.floor(seconds / 60);
-  const secs = (seconds % 60).toFixed(3);
-  return mins > 0 ? `${mins}:${secs.padStart(6, "0")}` : secs;
-}
-
-/**
- * Fetch historical data for the current session
- * Called once at startup to fill in data that happened before we connected
+ * Fetch historical data for the current session.
+ * Called once at startup to fill in data that happened before we connected.
  */
 async function fetchHistoricalData(sessionKey) {
-  if (!sessionKey) {
-    return;
-  }
+  if (!sessionKey) return;
 
-  console.log(`[openf1-mqtt] Fetching historical data for session ${sessionKey}...`);
+  console.log(
+    `[openf1-mqtt] Fetching historical data for session ${sessionKey}...`,
+  );
 
   try {
     const token = await ensureValidToken();
@@ -511,26 +482,37 @@ async function fetchHistoricalData(sessionKey) {
       Authorization: `Bearer ${token}`,
     };
 
-    const [raceControlRes, teamRadioRes, driversRes, lapsRes, intervalsRes, stintsRes, pitRes] =
-      await Promise.all([
-        fetch(`${API_BASE}/race_control?session_key=${sessionKey}`, { headers }),
-        fetch(`${API_BASE}/team_radio?session_key=${sessionKey}`, { headers }),
-        fetch(`${API_BASE}/drivers?session_key=${sessionKey}`, { headers }),
-        fetch(`${API_BASE}/laps?session_key=${sessionKey}`, { headers }),
-        fetch(`${API_BASE}/intervals?session_key=${sessionKey}`, { headers }),
-        fetch(`${API_BASE}/stints?session_key=${sessionKey}`, { headers }),
-        fetch(`${API_BASE}/pit?session_key=${sessionKey}`, { headers }),
-      ]);
+    const [
+      raceControlRes,
+      teamRadioRes,
+      driversRes,
+      lapsRes,
+      intervalsRes,
+      stintsRes,
+      pitRes,
+    ] = await Promise.all([
+      fetch(`${API_BASE}/race_control?session_key=${sessionKey}`, { headers }),
+      fetch(`${API_BASE}/team_radio?session_key=${sessionKey}`, { headers }),
+      fetch(`${API_BASE}/drivers?session_key=${sessionKey}`, { headers }),
+      fetch(`${API_BASE}/laps?session_key=${sessionKey}`, { headers }),
+      fetch(`${API_BASE}/intervals?session_key=${sessionKey}`, { headers }),
+      fetch(`${API_BASE}/stints?session_key=${sessionKey}`, { headers }),
+      fetch(`${API_BASE}/pit?session_key=${sessionKey}`, { headers }),
+    ]);
 
     if (raceControlRes.ok) {
       const raceControl = await raceControlRes.json();
-      console.log(`[openf1-mqtt] Loaded ${raceControl.length} historical race control messages`);
+      console.log(
+        `[openf1-mqtt] Loaded ${raceControl.length} historical race control messages`,
+      );
       raceControl.forEach((msg) => handleRaceControl(msg));
     }
 
     if (teamRadioRes.ok) {
       const teamRadio = await teamRadioRes.json();
-      console.log(`[openf1-mqtt] Loaded ${teamRadio.length} historical team radios`);
+      console.log(
+        `[openf1-mqtt] Loaded ${teamRadio.length} historical team radios`,
+      );
       teamRadio.forEach((radio) => handleTeamRadio(radio));
     }
 
@@ -540,7 +522,7 @@ async function fetchHistoricalData(sessionKey) {
       drivers.forEach((driver) => handleDriver(driver));
     }
 
-    // Build TimingData from all historical laps per driver (sorted ascending so best/last are accumulated correctly)
+    // Sort ascending so best/last lap are accumulated correctly
     if (lapsRes.ok) {
       const laps = await lapsRes.json();
       laps.sort((a, b) => a.lap_number - b.lap_number);
@@ -565,19 +547,17 @@ async function fetchHistoricalData(sessionKey) {
 
     if (pitRes.ok) {
       const pits = await pitRes.json();
-      const now = Date.now();
       pits.forEach((p) => {
         if (!p.date || !p.lane_duration) return;
-        const num = String(p.driver_number);
-        if (!driverData[num]) driverData[num] = {};
-        const entryMs = new Date(p.date).getTime();
-        const exitMs = entryMs + p.lane_duration * 1000;
-        if (now >= entryMs && now <= exitMs) {
-          handlePit(p); // driver is currently in the pit lane
+        const { in_pit } = getPitWindowStatus(p.date, p.lane_duration);
+        if (in_pit) {
+          // Driver is currently in the pit lane — triggers timer too
+          handlePit(p);
         } else {
-          // Just accumulate stop count without triggering timers
-          driverData[num].pitStops = (driverData[num].pitStops || 0) + 1;
-          updateTimingData(num);
+          // Just accumulate stop count without setting in_pit or timers
+          const num = String(p.driver_number);
+          const entry = ensureTimingEntry(currentStateRef, num);
+          entry.pit_count = (entry.pit_count || 0) + 1;
         }
       });
       console.log(`[openf1-mqtt] Loaded ${pits.length} historical pit stops`);
@@ -585,59 +565,11 @@ async function fetchHistoricalData(sessionKey) {
 
     console.log("[openf1-mqtt] Historical data loaded");
   } catch (error) {
-    console.error("[openf1-mqtt] Error fetching historical data:", error.message);
+    console.error(
+      "[openf1-mqtt] Error fetching historical data:",
+      error.message,
+    );
   }
-}
-
-/**
- * Get current session key from latest data or API
- */
-async function getCurrentSessionKey() {
-  try {
-    const token = await ensureValidToken();
-    const headers = {
-      accept: "application/json",
-      Authorization: `Bearer ${token}`,
-    };
-
-    // Get the latest session
-    const response = await fetch(`${API_BASE}/sessions?session_key=latest`, {
-      headers,
-    });
-
-    if (response.ok) {
-      const sessions = await response.json();
-      if (sessions && sessions.length > 0) {
-        const session = sessions[0];
-        console.log(
-          `[openf1-mqtt] Current session: ${session.session_name} at ${session.location}`
-        );
-
-        // Also update session info in state
-        if (currentStateRef) {
-          currentStateRef.SessionInfo = {
-            Meeting: {
-              Name: session.meeting_name || session.location,
-              Circuit: {
-                ShortName: session.circuit_short_name || session.location,
-              },
-            },
-            Name: session.session_name || session.session_type,
-          };
-        }
-
-        // Include EndDate in SessionInfo so frontend knows if session is live
-        if (currentStateRef?.SessionInfo) {
-          currentStateRef.SessionInfo.EndDate = session.date_end;
-        }
-
-        return session.session_key;
-      }
-    }
-  } catch (error) {
-    console.error("[openf1-mqtt] Error getting current session:", error.message);
-  }
-  return null;
 }
 
 /**
@@ -658,7 +590,9 @@ export async function checkActiveSession() {
     const endDate = new Date(session.date_end);
     const isActive = endDate > new Date(Date.now() - 30 * 60 * 1000);
     if (!isActive) {
-      console.log(`[openf1-mqtt] Last session ended at ${session.date_end} — no active session`);
+      console.log(
+        `[openf1-mqtt] Last session ended at ${session.date_end} — no active session`,
+      );
     }
     return isActive;
   } catch {
@@ -684,17 +618,21 @@ async function connect() {
     });
 
     client.on("connect", () => {
-      console.log(`[openf1-mqtt] Connected — subscribing to ${TOPICS.length} topics`);
+      console.log(
+        `[openf1-mqtt] Connected — subscribing to ${TOPICS.length} topics`,
+      );
 
       TOPICS.forEach((topic) => {
         client.subscribe(topic, (err) => {
-          if (err) console.error(`[openf1-mqtt] Subscribe failed for ${topic}:`, err.message);
+          if (err)
+            console.error(
+              `[openf1-mqtt] Subscribe failed for ${topic}:`,
+              err.message,
+            );
         });
       });
 
       // Fetch historical data for the current session (runs once at startup)
-      // This fills in race_control, team_radio, and driver info that happened
-      // before we connected to MQTT
       getCurrentSessionKey().then((sessionKey) => {
         if (sessionKey) {
           fetchHistoricalData(sessionKey);
@@ -750,14 +688,18 @@ export async function startMQTT(broadcast, stateRef) {
   currentStateRef = stateRef;
 
   // Initialize state structure
-  if (!currentStateRef.TimingData) currentStateRef.TimingData = { Lines: {} };
-  if (!currentStateRef.DriverList) currentStateRef.DriverList = {};
-  if (!currentStateRef.Position) currentStateRef.Position = { Position: {} };
-  if (!currentStateRef.RaceControlMessages)
-    currentStateRef.RaceControlMessages = { Messages: [] };
-  if (!currentStateRef.TeamRadio) currentStateRef.TeamRadio = { Captures: [] };
-  if (!currentStateRef.TrackStatus)
-    currentStateRef.TrackStatus = { Status: "1", Message: "AllClear" };
+  if (!currentStateRef.session) currentStateRef.session = null;
+  if (!currentStateRef.drivers) currentStateRef.drivers = {};
+  if (!currentStateRef.timing) currentStateRef.timing = {};
+  if (!currentStateRef.location) currentStateRef.location = {};
+  if (!currentStateRef.lap_count)
+    currentStateRef.lap_count = { current: 0, total: 0 };
+  if (!currentStateRef.track_status)
+    currentStateRef.track_status = { flag: "GREEN" };
+  if (!currentStateRef.weather) currentStateRef.weather = null;
+  if (!currentStateRef.race_control_messages)
+    currentStateRef.race_control_messages = [];
+  if (!currentStateRef.team_radio) currentStateRef.team_radio = [];
 
   await connect();
   return true;
@@ -780,9 +722,6 @@ export function stopMQTT() {
     client = null;
   }
 
-  // Clear data
-  Object.keys(driverData).forEach((key) => delete driverData[key]);
-  Object.keys(sessionData).forEach((key) => delete sessionData[key]);
   accessToken = null;
   tokenExpiry = null;
 }

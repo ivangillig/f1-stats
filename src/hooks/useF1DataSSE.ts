@@ -52,6 +52,50 @@ const defaultTrackStatus: TrackStatusInfo = {
   message: "",
 };
 
+// Map OpenF1 track flag string to numeric status used by the UI
+const FLAG_TO_STATUS: Record<string, number> = {
+  GREEN: 1,
+  YELLOW: 2,
+  SC: 4,
+  RED: 5,
+  VSC: 6,
+  CHEQUERED: 7,
+};
+
+// Format raw seconds to "M:SS.mmm" lap time string
+function formatLapTime(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || seconds <= 0) return "";
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  const secsStr = secs.toFixed(3).padStart(6, "0");
+  return mins > 0 ? `${mins}:${secsStr}` : secsStr;
+}
+
+// Format raw gap/interval (number in seconds) to "+X.XXX" string
+function formatGap(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === 0) return "";
+  if (typeof value === "string") return value; // e.g. "LAP" for lapped cars
+  return `+${value.toFixed(3)}`;
+}
+
+// Segment status code → SectorStatus
+function segmentStatus(code: number): SectorStatus {
+  if (code === 2051) return "purple";
+  if (code === 2049) return "green";
+  if (code === 2064) return "blue";
+  if (code === 2048) return "yellow";
+  return "none";
+}
+
+// Derive overall sector colour from its segment array
+function sectorStatusFromSegments(segs: number[]): SectorStatus {
+  if (segs.length === 0) return "none";
+  if (segs.some((s) => s === 2051)) return "purple";
+  if (segs.some((s) => s === 2049)) return "green";
+  if (segs.some((s) => s !== 0)) return "yellow";
+  return "none";
+}
+
 export function useF1DataSSE(): F1DataState {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [sessionInfo, setSessionInfo] =
@@ -71,646 +115,391 @@ export function useF1DataSSE(): F1DataState {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const clockIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isConnectedRef = useRef(false); // Ref to avoid dependency issues
+  const isConnectedRef = useRef(false);
 
-  // Store extrapolated clock data for local time calculation
-  const extrapolatedClockRef = useRef<{
-    utc: string;
-    remaining: string;
-    extrapolating: boolean;
-  } | null>(null);
+  // Clock data received from the proxy (data.clock)
+  const clockRef = useRef<{ utc: string; remaining: string } | null>(null);
 
-  // Fallback: session end date from SessionInfo.EndDate
-  const sessionEndDateRef = useRef<Date | null>(null);
-
-  // Store driver list from API (updated in real-time)
+  // Driver info cache populated from data.drivers
   const driverListRef = useRef<
-    Record<
-      string,
-      { name: string; team: string; code: string; teamColor: string }
-    >
+    Record<string, { name: string; team: string; code: string; teamColor: string }>
   >({});
 
-  // Store car track positions from replay
+  // Car location cache from data.location
   const carDataRef = useRef<Record<string, { x: number; y: number }>>({});
 
-  // Track session-wide max segment counts so all drivers show the same number of bars
-  const maxSegCounts = useRef<{ s1: number; s2: number; s3: number }>({ s1: 6, s2: 6, s3: 6 });
+  // Session-wide max segment counts so all drivers show the same bar count
+  const maxSegCounts = useRef<{ s1: number; s2: number; s3: number }>({
+    s1: 6,
+    s2: 6,
+    s3: 6,
+  });
 
-  // Store session type for sorting logic
+  // Session type drives the sort order (Race vs Practice/Qualifying)
   const sessionTypeRef = useRef<string>("Race");
 
-  // Store session path for building audio URLs
-  const sessionPathRef = useRef<string>("");
+  // Fastest lap seen in this session (raw seconds), used to set lastLapOverallFastest
+  const sessionFastestLapRef = useRef<number>(Infinity);
+  const sessionFastestDriverRef = useRef<string | null>(null);
 
   const processData = useCallback((data: any) => {
     if (!data) return;
 
     try {
-      // Process DriverList first - this has the real driver info from F1 API
-      const driverListData = data.DriverList;
-      if (driverListData) {
-        Object.entries(driverListData).forEach(
-          ([num, driverData]: [string, any]) => {
-            if (driverData && typeof driverData === "object") {
-              driverListRef.current[num] = {
-                name:
-                  driverData.FullName ||
-                  driverData.BroadcastName ||
-                  `Driver ${num}`,
-                team: driverData.TeamName || null,
-                code: driverData.Tla || num,
-                teamColor: driverData.TeamColour
-                  ? `#${driverData.TeamColour}`
-                  : "",
-              };
-            }
+      // ── 1. Driver info cache ─────────────────────────────────────────────
+      const driversData = data.drivers;
+      if (driversData && typeof driversData === "object") {
+        Object.entries(driversData).forEach(([num, d]: [string, any]) => {
+          if (d && typeof d === "object") {
+            driverListRef.current[num] = {
+              name: d.full_name || `Driver ${num}`,
+              team: d.team_name || null,
+              code: d.name_acronym || num,
+              teamColor: d.team_colour ? `#${d.team_colour}` : "",
+            };
           }
-        );
+        });
       }
 
-      // Process TimingData
-      const timingData = data.TimingData?.Lines || {};
-      const timingAppData = data.TimingAppData?.Lines || {};
-      const timingStatsData = data.TimingStats?.Lines || {};
-
-      // Process SessionInfo
-      const sessionData = data.SessionInfo || {};
-      const lapCount = data.LapCount || {};
-      const extrapolatedClock = data.ExtrapolatedClock;
-
-      // Get qualifying part from SessionData.Series (Q1=1, Q2=2, Q3=3)
-      let qualifyingPart: number | undefined;
-      if (data.SessionData?.Series) {
-        const series = data.SessionData.Series;
-        // Get the latest entry (highest key)
-        const keys = Object.keys(series)
-          .map(Number)
-          .sort((a, b) => b - a);
-        if (keys.length > 0) {
-          const latestEntry = series[String(keys[0])];
-          if (latestEntry?.QualifyingPart) {
-            qualifyingPart = latestEntry.QualifyingPart;
+      // ── 2. Location cache ───────────────────────────────────────────────
+      const locationData = data.location;
+      if (locationData && typeof locationData === "object") {
+        Object.entries(locationData).forEach(([num, loc]: [string, any]) => {
+          if (loc?.x !== undefined && loc?.y !== undefined) {
+            carDataRef.current[num] = { x: loc.x, y: loc.y };
           }
-        }
+        });
       }
 
-      if (sessionData.Type) {
-        sessionTypeRef.current = sessionData.Type;
-      }
+      // ── 3. Session info ─────────────────────────────────────────────────
+      const sessionData = data.session;
+      const lapCount = data.lap_count;
 
-      // Store extrapolated clock data for local calculation
-      if (extrapolatedClock?.Utc && extrapolatedClock?.Remaining) {
-        extrapolatedClockRef.current = {
-          utc: extrapolatedClock.Utc,
-          remaining: extrapolatedClock.Remaining,
-          extrapolating: extrapolatedClock.Extrapolating === true,
-        };
-      }
+      if (sessionData || lapCount) {
+        const sessionType = sessionData?.session_type;
+        if (sessionType) sessionTypeRef.current = sessionType;
 
-      // Store session EndDate as fallback clock source
-      if (sessionData.EndDate) {
-        const endDate = new Date(sessionData.EndDate);
-        if (!isNaN(endDate.getTime())) {
-          sessionEndDateRef.current = endDate;
-        }
-      }
-
-      if (
-        sessionData.Meeting ||
-        extrapolatedClock?.Remaining ||
-        sessionData.Name ||
-        qualifyingPart
-      ) {
-        const newCircuitKey = sessionData.Meeting?.Circuit?.Key;
-        // Store session path for building audio URLs
-        if (sessionData.Path) {
-          sessionPathRef.current = sessionData.Path;
-        }
-        const circuitShortName = sessionData.Meeting?.Circuit?.ShortName;
-        const derivedType = sessionData.Type ||
-          (/^Practice/i.test(sessionData.Name) ? "Practice" :
-           sessionData.Name === "Race" ? "Race" :
-           /qualifying/i.test(sessionData.Name) ? "Qualifying" :
-           /sprint/i.test(sessionData.Name) ? "Sprint" : undefined);
-        const derivedCountry = sessionData.Meeting?.Country?.Name ||
+        const circuitShortName = sessionData?.circuit_short_name;
+        const countryName =
+          sessionData?.country_name ||
           (circuitShortName ? CIRCUIT_TO_COUNTRY[circuitShortName] : undefined);
+        const dateEnd = sessionData?.date_end;
 
         setSessionInfo((prev) => ({
           ...prev,
-          type: derivedType || prev.type,
-          name: sessionData.Meeting?.Name || prev.name,
-          sessionName: sessionData.Name || prev.sessionName, // "Practice 3", "Qualifying", etc.
+          type: sessionType || prev.type,
+          name: sessionData?.meeting_name || prev.name,
+          sessionName: sessionData?.session_name || prev.sessionName,
           track: circuitShortName || prev.track,
-          country: derivedCountry || prev.country,
-          // Don't set remainingTime here, let the interval handle it
-          currentLap: lapCount.CurrentLap || prev.currentLap,
-          totalLaps: lapCount.TotalLaps || prev.totalLaps,
-          circuitKey: newCircuitKey || prev.circuitKey,
-          isLive: sessionData.EndDate
-            ? new Date(sessionData.EndDate) > new Date(Date.now() - 30 * 60 * 1000)
+          country: countryName || prev.country,
+          currentLap: lapCount?.current || prev.currentLap,
+          totalLaps: lapCount?.total || prev.totalLaps,
+          circuitKey: sessionData?.circuit_key || prev.circuitKey,
+          isLive: dateEnd
+            ? new Date(dateEnd) > new Date(Date.now() - 30 * 60 * 1000)
             : true,
-          qualifyingPart: qualifyingPart || prev.qualifyingPart,
         }));
       }
 
-      // Process TrackStatus
-      const trackStatusData = data.TrackStatus;
-      if (trackStatusData?.Status) {
+      // ── 4. Clock ────────────────────────────────────────────────────────
+      const clockData = data.clock;
+      if (clockData?.remaining && clockData?.utc) {
+        clockRef.current = { remaining: clockData.remaining, utc: clockData.utc };
+      }
+
+      // ── 5. Track status ─────────────────────────────────────────────────
+      const trackStatusData = data.track_status;
+      if (trackStatusData?.flag) {
         setTrackStatus({
-          status: parseInt(trackStatusData.Status) || 1,
-          message: trackStatusData.Message || "",
+          status: FLAG_TO_STATUS[trackStatusData.flag] ?? 1,
+          message: trackStatusData.flag,
         });
       }
 
-      // Process WeatherData
-      const weatherData = data.WeatherData;
+      // ── 6. Weather ──────────────────────────────────────────────────────
+      const weatherData = data.weather;
       if (weatherData) {
         setWeather({
-          airTemp: parseFloat(weatherData.AirTemp) || 0,
-          humidity: parseFloat(weatherData.Humidity) || 0,
-          pressure: parseFloat(weatherData.Pressure) || 0,
-          rainfall:
-            weatherData.Rainfall === "1" || weatherData.Rainfall === true,
-          trackTemp: parseFloat(weatherData.TrackTemp) || 0,
-          windDirection: parseFloat(weatherData.WindDirection) || 0,
-          windSpeed: parseFloat(weatherData.WindSpeed) || 0,
+          airTemp: weatherData.air_temperature ?? 0,
+          humidity: weatherData.humidity ?? 0,
+          pressure: weatherData.pressure ?? 0,
+          rainfall: weatherData.rainfall === true,
+          trackTemp: weatherData.track_temperature ?? 0,
+          windDirection: weatherData.wind_direction ?? 0,
+          windSpeed: weatherData.wind_speed ?? 0,
         });
       }
 
-      // Process TeamRadio
-      const teamRadioData = data.TeamRadio;
-      if (teamRadioData?.Captures) {
-        const baseUrl = "https://livetiming.formula1.com/static/";
-        const sessionPath = sessionPathRef.current;
-
+      // ── 7. Team radio ────────────────────────────────────────────────────
+      const teamRadioData = data.team_radio;
+      if (Array.isArray(teamRadioData) && teamRadioData.length > 0) {
         setTeamRadios((prev) => {
-          const newCaptures = Object.values(teamRadioData.Captures)
-            .filter((c: any) => c !== null && c?.Utc && c?.Path)
-            .map((c: any) => ({
-              utc: c.Utc,
-              racingNumber: c.RacingNumber,
-              // Build full URL: baseUrl + sessionPath + relative path
-              path: sessionPath ? `${baseUrl}${sessionPath}${c.Path}` : c.Path,
+          const newCaptures: RadioCapture[] = teamRadioData
+            .filter((r: any) => r?.recording_url)
+            .map((r: any) => ({
+              utc: r.date,
+              racingNumber: String(r.driver_number),
+              path: r.recording_url, // already a full URL from OpenF1
             }));
-          const allCaptures = [...newCaptures, ...prev];
-          const uniqueCaptures = allCaptures.filter(
-            (c, i) => allCaptures.findIndex((x) => x.path === c.path) === i
+          const merged = [...newCaptures, ...prev];
+          const unique = merged.filter(
+            (c, i) => merged.findIndex((x) => x.path === c.path) === i
           );
-          return uniqueCaptures.slice(0, 20);
+          return unique.slice(0, 20);
         });
       }
 
-      // Process RaceControlMessages
-      const raceControlData = data.RaceControlMessages;
-      if (raceControlData?.Messages) {
+      // ── 8. Race control messages ─────────────────────────────────────────
+      const raceControlData = data.race_control_messages;
+      if (Array.isArray(raceControlData) && raceControlData.length > 0) {
         setRaceControlMessages((prev) => {
-          const newMessages = Object.values(raceControlData.Messages)
-            .filter((m: any) => m !== null && m?.Utc && m?.Message)
+          const newMessages: RaceControlMessage[] = raceControlData
+            .filter((m: any) => m?.message)
             .map((m: any) => ({
-              utc: m.Utc,
-              message: m.Message,
-              category: m.Category,
-              flag: m.Flag,
-              lap: m.Lap,
-              driverNumber: m.RacingNumber,
-              sector: m.Sector, // Sector number for yellow flags
+              utc: m.date,
+              message: m.message,
+              category: m.category,
+              flag: m.flag,
+              lap: m.lap_number,
+              driverNumber: m.driver_number != null ? String(m.driver_number) : undefined,
+              sector: m.sector,
             }));
-          const allMessages = [...newMessages, ...prev];
-          const uniqueMessages = allMessages.filter(
+          const merged = [...newMessages, ...prev];
+          const unique = merged.filter(
             (m, i) =>
-              allMessages.findIndex(
+              merged.findIndex(
                 (x) => x.utc === m.utc && x.message === m.message
               ) === i
           );
-          // Sort by date descending (newest first)
-          uniqueMessages.sort(
+          unique.sort(
             (a, b) => new Date(b.utc).getTime() - new Date(a.utc).getTime()
           );
-          return uniqueMessages.slice(0, 30);
+          return unique.slice(0, 30);
         });
       }
 
-      // Process Position data (X, Y coordinates)
-      // Format can vary: Position.Position (entries with driver numbers)
-      // or Position with timestamp entries like {"0": {Entries: {"1": {X, Y}, ...}}}
-      const positionData = data.Position;
-      if (positionData) {
-        // Check for direct Position.Position format
-        if (positionData.Position) {
-          Object.entries(positionData.Position).forEach(
-            ([num, posData]: [string, any]) => {
-              if (posData?.X !== undefined && posData?.Y !== undefined) {
-                carDataRef.current[num] = {
-                  x: posData.X,
-                  y: posData.Y,
-                };
+      // ── 9. Timing data → drivers ─────────────────────────────────────────
+      const timingData = data.timing;
+      if (!timingData || Object.keys(timingData).length === 0) return;
+
+      // Update session fastest lap tracking before building drivers
+      Object.entries(timingData).forEach(([num, entry]: [string, any]) => {
+        const lastLap = entry?.last_lap;
+        if (lastLap != null && lastLap > 0 && lastLap < sessionFastestLapRef.current) {
+          sessionFastestLapRef.current = lastLap;
+          sessionFastestDriverRef.current = num;
+        }
+      });
+
+      setDrivers((prev) => {
+        const driversMap = new Map(prev.map((d) => [d.driverNumber, d]));
+
+        Object.entries(timingData).forEach(([num, entry]: [string, any]) => {
+          const existing = driversMap.get(num);
+
+          // Resolve driver identity: API cache → hardcoded fallback
+          const apiInfo = driverListRef.current[num];
+          const apiCode = apiInfo?.code || num;
+          const hardcodedByCode = Object.values(DRIVERS).find((d) => d.code === apiCode);
+          const hardcoded = hardcodedByCode || DRIVERS[num];
+          const driverInfo = {
+            name: apiInfo?.name || hardcoded?.name || `Driver ${num}`,
+            team: apiInfo?.team || hardcoded?.team || "Unknown",
+            code: apiInfo?.code || hardcoded?.code || num,
+            teamColor: apiInfo?.teamColor || "",
+          };
+
+          // Tire info comes from timing entry directly
+          const tire: TireInfo = {
+            compound: entry.compound || existing?.tire?.compound || "UNKNOWN",
+            age: entry.tyre_age ?? existing?.tire?.age ?? 0,
+            isNew: false,
+          };
+
+          // Segments (plain number arrays)
+          const segs1: number[] = Array.isArray(entry.segments_1) ? entry.segments_1 : [];
+          const segs2: number[] = Array.isArray(entry.segments_2) ? entry.segments_2 : [];
+          const segs3: number[] = Array.isArray(entry.segments_3) ? entry.segments_3 : [];
+
+          // Update session-wide max so all drivers show equal bar counts
+          if (segs1.length > maxSegCounts.current.s1) maxSegCounts.current.s1 = segs1.length;
+          if (segs2.length > maxSegCounts.current.s2) maxSegCounts.current.s2 = segs2.length;
+          if (segs3.length > maxSegCounts.current.s3) maxSegCounts.current.s3 = segs3.length;
+
+          const s1Count = maxSegCounts.current.s1 || existing?.sector1SegmentCount || 6;
+          const s2Count = maxSegCounts.current.s2 || existing?.sector2SegmentCount || 6;
+          const s3Count = maxSegCounts.current.s3 || existing?.sector3SegmentCount || 6;
+
+          // Build padded mini-sector array
+          const padNone = (arr: SectorStatus[], n: number): SectorStatus[] => {
+            const r = arr.slice(0, n);
+            while (r.length < n) r.push("none");
+            return r;
+          };
+          const hasSegs = segs1.length > 0 || segs2.length > 0 || segs3.length > 0;
+          const miniSectors: SectorStatus[] = hasSegs
+            ? [
+                ...padNone(segs1.map(segmentStatus), s1Count),
+                ...padNone(segs2.map(segmentStatus), s2Count),
+                ...padNone(segs3.map(segmentStatus), s3Count),
+              ]
+            : existing?.miniSectors || [];
+
+          // Track progress: fraction of non-zero segments
+          const allSegs = [...segs1, ...segs2, ...segs3];
+          const trackProgress =
+            allSegs.length > 0
+              ? allSegs.filter((s) => s !== 0).length / allSegs.length
+              : 0;
+
+          // Sector-level status from segments, falling back to existing
+          const s1Status =
+            hasSegs && segs1.length > 0
+              ? sectorStatusFromSegments(segs1)
+              : existing?.sector1Status || "none";
+          const s2Status =
+            hasSegs && segs2.length > 0
+              ? sectorStatusFromSegments(segs2)
+              : existing?.sector2Status || "none";
+          const s3Status =
+            hasSegs && segs3.length > 0
+              ? sectorStatusFromSegments(segs3)
+              : existing?.sector3Status || "none";
+
+          const driver: Driver = {
+            position: entry.position ?? existing?.position ?? 0,
+            driverNumber: num,
+            code: driverInfo.code,
+            name: driverInfo.name,
+            team: driverInfo.team,
+            teamColor: driverInfo.teamColor || existing?.teamColor,
+            gap:
+              entry.gap_to_leader !== undefined
+                ? formatGap(entry.gap_to_leader)
+                : existing?.gap ?? "",
+            interval:
+              entry.interval !== undefined
+                ? formatGap(entry.interval)
+                : existing?.interval ?? "",
+            lastLap:
+              entry.last_lap != null
+                ? formatLapTime(entry.last_lap)
+                : existing?.lastLap ?? "",
+            lastLapPersonalBest: entry.last_lap_is_pb || false,
+            lastLapOverallFastest: num === sessionFastestDriverRef.current,
+            bestLap:
+              entry.best_lap != null
+                ? formatLapTime(entry.best_lap)
+                : existing?.bestLap ?? "",
+            sector1:
+              entry.sector_1 != null
+                ? formatLapTime(entry.sector_1)
+                : existing?.sector1 ?? "",
+            sector2:
+              entry.sector_2 != null
+                ? formatLapTime(entry.sector_2)
+                : existing?.sector2 ?? "",
+            sector3:
+              entry.sector_3 != null
+                ? formatLapTime(entry.sector_3)
+                : existing?.sector3 ?? "",
+            // Best sectors not available from OpenF1 native format
+            bestSector1: existing?.bestSector1 || "",
+            bestSector2: existing?.bestSector2 || "",
+            bestSector3: existing?.bestSector3 || "",
+            hasSector1Record: false,
+            hasSector2Record: false,
+            hasSector3Record: false,
+            sector1Status: s1Status,
+            sector2Status: s2Status,
+            sector3Status: s3Status,
+            miniSectors,
+            sector1SegmentCount: s1Count,
+            sector2SegmentCount: s2Count,
+            sector3SegmentCount: s3Count,
+            tire,
+            inPit:
+              entry.in_pit !== undefined ? entry.in_pit : existing?.inPit ?? false,
+            pitCount: entry.pit_count ?? existing?.pitCount ?? 0,
+            retired:
+              entry.retired !== undefined ? entry.retired : existing?.retired ?? false,
+            knockedOut:
+              entry.knocked_out !== undefined
+                ? entry.knocked_out
+                : existing?.knockedOut ?? false,
+            currentLap: entry.lap_number || existing?.currentLap,
+            trackProgress,
+            trackX: carDataRef.current[num]?.x ?? existing?.trackX,
+            trackY: carDataRef.current[num]?.y ?? existing?.trackY,
+          };
+
+          driversMap.set(num, driver);
+        });
+
+        // Parse lap time string to milliseconds for sorting
+        const parseLapTime = (lapTime: string | undefined): number => {
+          if (!lapTime || lapTime === "" || lapTime === "---") return Infinity;
+          const parts = lapTime.split(/[:.]/).map(Number);
+          if (parts.length === 3) return parts[0] * 60000 + parts[1] * 1000 + parts[2];
+          if (parts.length === 2) return parts[0] * 1000 + parts[1];
+          return Infinity;
+        };
+
+        const isPracticeOrQualy =
+          sessionTypeRef.current === "Practice" ||
+          sessionTypeRef.current === "Qualifying" ||
+          sessionTypeRef.current?.includes("Practice") ||
+          sessionTypeRef.current?.includes("Qualifying");
+
+        const sortedDrivers = Array.from(driversMap.values())
+          .filter((d) => d.driverNumber)
+          .sort((a, b) => {
+            if (a.knockedOut && !b.knockedOut) return 1;
+            if (!a.knockedOut && b.knockedOut) return -1;
+
+            if (isPracticeOrQualy) {
+              const timeA = parseLapTime(a.bestLap);
+              const timeB = parseLapTime(b.bestLap);
+              if (timeA === Infinity && timeB === Infinity) {
+                return (a.position || 99) - (b.position || 99);
               }
+              if (timeA === Infinity) return 1;
+              if (timeB === Infinity) return -1;
+              return timeA - timeB;
+            } else {
+              return (a.position || 99) - (b.position || 99);
             }
-          );
-        } else {
-          // Check for timestamp-based format: {"0": {Entries: {...}}, "1": {Entries: {...}}}
-          // Take the most recent entry
-          const timestamps = Object.keys(positionData).filter(
-            (k) => !isNaN(Number(k))
-          );
-          if (timestamps.length > 0) {
-            const latestTimestamp = Math.max(...timestamps.map(Number));
-            const latestData = positionData[String(latestTimestamp)];
-            if (latestData?.Entries) {
-              Object.entries(latestData.Entries).forEach(
-                ([num, posData]: [string, any]) => {
-                  if (posData?.X !== undefined && posData?.Y !== undefined) {
-                    carDataRef.current[num] = {
-                      x: posData.X,
-                      y: posData.Y,
-                    };
-                  }
-                }
-              );
+          });
+
+        const fastestTime = isPracticeOrQualy
+          ? Math.min(...sortedDrivers.map((d) => parseLapTime(d.bestLap)))
+          : 0;
+
+        return sortedDrivers.map((driver, index) => {
+          let gap = driver.gap;
+          let interval = driver.interval;
+
+          if (isPracticeOrQualy && driver.bestLap) {
+            const driverTime = parseLapTime(driver.bestLap);
+            if (index === 0) {
+              gap = "";
+              interval = "";
+            } else if (driverTime !== Infinity) {
+              const gapMs = driverTime - fastestTime;
+              gap = gapMs > 0 ? `+${(gapMs / 1000).toFixed(3)}` : "";
+
+              const prevDriver = sortedDrivers[index - 1];
+              const prevTime = parseLapTime(prevDriver?.bestLap);
+              if (prevTime !== Infinity) {
+                const intervalMs = driverTime - prevTime;
+                interval = intervalMs > 0 ? `+${(intervalMs / 1000).toFixed(3)}` : "";
+              }
             }
           }
-        }
-      }
 
-      // Process Drivers
-      if (Object.keys(timingData).length > 0) {
-        setDrivers((prev) => {
-          const driversMap = new Map(prev.map((d) => [d.driverNumber, d]));
-
-          Object.entries(timingData).forEach(
-            ([num, driverData]: [string, any]) => {
-              const existing = driversMap.get(num);
-
-              // Use API DriverList first, then fallback to hardcoded DRIVERS, then defaults.
-              // When TeamName/TeamColour are null, look up by driver code (Tla) since
-              // racing numbers can change year-to-year (e.g. champion takes #1).
-              const apiDriverInfo = driverListRef.current[num];
-              const apiCode = apiDriverInfo?.code || num;
-              const hardcodedByCode = Object.values(DRIVERS).find(d => d.code === apiCode);
-              const hardcodedByNum = DRIVERS[num];
-              const hardcodedInfo = hardcodedByCode || hardcodedByNum;
-              const driverInfo = {
-                name:
-                  apiDriverInfo?.name || hardcodedInfo?.name || `Driver ${num}`,
-                team: apiDriverInfo?.team || hardcodedInfo?.team || "Unknown",
-                code: apiDriverInfo?.code || hardcodedInfo?.code || num,
-                teamColor: apiDriverInfo?.teamColor || "",
-              };
-
-              const appData = timingAppData[num];
-
-              // Get tire info from stints
-              let tireInfo: TireInfo = existing?.tire || {
-                compound: "UNKNOWN",
-                age: 0,
-                isNew: false,
-              };
-              // Stints can be object with numeric keys or array
-              const stintsData = appData?.Stints;
-              if (stintsData) {
-                const stintsArray = Array.isArray(stintsData)
-                  ? stintsData
-                  : Object.values(stintsData);
-                if (stintsArray.length > 0) {
-                  const currentStint = stintsArray[stintsArray.length - 1];
-                  tireInfo = {
-                    compound: currentStint.Compound || "UNKNOWN",
-                    age: currentStint.TotalLaps || 0,
-                    isNew:
-                      currentStint.New === "true" || currentStint.New === true,
-                  };
-                }
-              }
-
-              // Parse sector statuses
-              const getSectorStatus = (sector: any): SectorStatus => {
-                if (!sector) return "none";
-                if (sector.OverallFastest) return "purple";
-                if (sector.PersonalFastest) return "green";
-                if (sector.Value) return "yellow";
-                return "none";
-              };
-
-              // Parse mini sectors (segments) from each sector
-              // Segments can be object with numeric keys or array
-              // Status codes: 2048=yellow, 2049=green, 2051=purple, 2064=blue(pit), 0=none
-              const getSegmentStatusFromCode = (
-                status: number
-              ): SectorStatus => {
-                if (status === 2051) return "purple";
-                if (status === 2049) return "green";
-                if (status === 2064) return "blue"; // Pit lane
-                if (status === 2048) return "yellow";
-                return "none";
-              };
-
-              // Count segments per sector
-              const getSegmentCount = (sector: any): number => {
-                if (!sector?.Segments) return 0;
-                return Array.isArray(sector.Segments)
-                  ? sector.Segments.length
-                  : Object.keys(sector.Segments).length;
-              };
-
-              const parseMiniSectors = (sectors: any): SectorStatus[] => {
-                const allSegments: SectorStatus[] = [];
-                // Combine segments from all 3 sectors
-                ["0", "1", "2"].forEach((sectorNum) => {
-                  const sector = sectors?.[sectorNum];
-                  const segmentsData = sector?.Segments;
-                  if (segmentsData) {
-                    // Segments is an object with numeric keys like {"0": {Status: 2049}, "1": {Status: 2048}}
-                    const segmentsArray = Array.isArray(segmentsData)
-                      ? segmentsData
-                      : Object.values(segmentsData);
-                    segmentsArray.forEach((seg: any) => {
-                      if (seg && typeof seg === "object" && "Status" in seg) {
-                        allSegments.push(getSegmentStatusFromCode(seg.Status));
-                      } else if (typeof seg === "string") {
-                        // Legacy format: string values
-                        if (seg === "OverallFastest")
-                          allSegments.push("purple");
-                        else if (seg === "PersonalFastest")
-                          allSegments.push("green");
-                        else allSegments.push("yellow");
-                      } else {
-                        allSegments.push("none");
-                      }
-                    });
-                  }
-                });
-                // If no segments, return empty array (will be handled in component)
-                return allSegments.length > 0 ? allSegments : [];
-              };
-
-              // Calculate track progress (0-1) based on completed segments
-              const calculateTrackProgress = (sectors: any): number => {
-                let completedSegments = 0;
-                let totalSegments = 0;
-
-                ["0", "1", "2"].forEach((sectorNum) => {
-                  const sector = sectors?.[sectorNum];
-                  const segmentsData = sector?.Segments;
-                  if (segmentsData) {
-                    const segmentsArray = Array.isArray(segmentsData)
-                      ? segmentsData
-                      : Object.values(segmentsData);
-                    totalSegments += segmentsArray.length;
-                    segmentsArray.forEach((seg: any) => {
-                      // Status != 0 means segment is completed
-                      if (seg && typeof seg === "object" && seg.Status !== 0) {
-                        completedSegments++;
-                      }
-                    });
-                  }
-                });
-
-                if (totalSegments === 0) return 0;
-                return completedSegments / totalSegments;
-              };
-
-              const sectors = driverData.Sectors || {};
-              const rawMiniSectors = parseMiniSectors(sectors);
-
-              // Current segment counts from this update (0 if no Segments present)
-              const currentS1Count = getSegmentCount(sectors["0"]);
-              const currentS2Count = getSegmentCount(sectors["1"]);
-              const currentS3Count = getSegmentCount(sectors["2"]);
-
-              // Update session-wide max so all drivers always show the same bar count
-              if (currentS1Count > maxSegCounts.current.s1) maxSegCounts.current.s1 = currentS1Count;
-              if (currentS2Count > maxSegCounts.current.s2) maxSegCounts.current.s2 = currentS2Count;
-              if (currentS3Count > maxSegCounts.current.s3) maxSegCounts.current.s3 = currentS3Count;
-
-              const sector1SegmentCount = maxSegCounts.current.s1 || existing?.sector1SegmentCount || 6;
-              const sector2SegmentCount = maxSegCounts.current.s2 || existing?.sector2SegmentCount || 6;
-              const sector3SegmentCount = maxSegCounts.current.s3 || existing?.sector3SegmentCount || 6;
-
-              // Pad each sector's portion of the flat miniSectors array to the canonical count
-              // so all drivers display the same number of bars (gray = not yet driven)
-              const padNone = (arr: SectorStatus[], n: number): SectorStatus[] => {
-                const r = [...arr];
-                while (r.length < n) r.push("none" as SectorStatus);
-                return r.slice(0, n);
-              };
-              const miniSectors: SectorStatus[] = rawMiniSectors.length > 0
-                ? [
-                    ...padNone(rawMiniSectors.slice(0, currentS1Count), sector1SegmentCount),
-                    ...padNone(rawMiniSectors.slice(currentS1Count, currentS1Count + currentS2Count), sector2SegmentCount),
-                    ...padNone(rawMiniSectors.slice(currentS1Count + currentS2Count), sector3SegmentCount),
-                  ]
-                : (existing?.miniSectors || []);
-
-              // Position can be a number (Line) or string (Position)
-              const position = driverData.Position
-                ? parseInt(driverData.Position, 10)
-                : driverData.Line || existing?.position || 0;
-
-              // Get best sector times from TimingStats.Lines[num].BestSectors
-              const statsData = timingStatsData[num];
-              const bestSectors = statsData?.BestSectors || {};
-              const bestSector1 =
-                bestSectors["0"]?.Value || existing?.bestSector1 || "";
-              const bestSector2 =
-                bestSectors["1"]?.Value || existing?.bestSector2 || "";
-              const bestSector3 =
-                bestSectors["2"]?.Value || existing?.bestSector3 || "";
-
-              // Check if this driver has the overall best (record) for each sector
-              // Position 1 means this is the fastest sector time of the session
-              // Don't persist old records - only true if currently Position === 1
-              const hasSector1Record = bestSectors["0"]?.Position === 1;
-              const hasSector2Record = bestSectors["1"]?.Position === 1;
-              const hasSector3Record = bestSectors["2"]?.Position === 1;
-
-              // Check if last lap was a personal best or overall fastest
-              const lastLapPersonalBest =
-                driverData.LastLapTime?.PersonalFastest === true;
-              const lastLapOverallFastest =
-                driverData.LastLapTime?.OverallFastest === true;
-
-              const driver: Driver = {
-                position: position,
-                driverNumber: num,
-                code: driverInfo.code,
-                name: driverInfo.name,
-                team: driverInfo.team,
-                teamColor: driverInfo.teamColor || existing?.teamColor,
-                // Gap can be GapToLeader or TimeDiffToFastest depending on source
-                gap:
-                  driverData.GapToLeader ||
-                  driverData.TimeDiffToFastest ||
-                  existing?.gap ||
-                  "",
-                // Interval can be IntervalToPositionAhead.Value or TimeDiffToPositionAhead
-                interval:
-                  driverData.IntervalToPositionAhead?.Value ||
-                  driverData.TimeDiffToPositionAhead ||
-                  existing?.interval ||
-                  "",
-                lastLap:
-                  driverData.LastLapTime?.Value || existing?.lastLap || "",
-                lastLapPersonalBest,
-                lastLapOverallFastest,
-                bestLap:
-                  driverData.BestLapTime?.Value || existing?.bestLap || "",
-                sector1: sectors["0"]?.Value || existing?.sector1 || "",
-                sector2: sectors["1"]?.Value || existing?.sector2 || "",
-                sector3: sectors["2"]?.Value || existing?.sector3 || "",
-                bestSector1,
-                bestSector2,
-                bestSector3,
-                sector1Status:
-                  getSectorStatus(sectors["0"]) ||
-                  existing?.sector1Status ||
-                  "none",
-                sector2Status:
-                  getSectorStatus(sectors["1"]) ||
-                  existing?.sector2Status ||
-                  "none",
-                sector3Status:
-                  getSectorStatus(sectors["2"]) ||
-                  existing?.sector3Status ||
-                  "none",
-                miniSectors:
-                  miniSectors.length > 0
-                    ? miniSectors
-                    : existing?.miniSectors || [],
-                sector1SegmentCount,
-                sector2SegmentCount,
-                sector3SegmentCount,
-                hasSector1Record,
-                hasSector2Record,
-                hasSector3Record,
-                tire: tireInfo,
-                // Use explicit check for boolean fields to allow false to override true
-                inPit:
-                  driverData.InPit !== undefined
-                    ? driverData.InPit
-                    : existing?.inPit ?? false,
-                pitCount:
-                  driverData.NumberOfPitStops ?? existing?.pitCount ?? 0,
-                retired:
-                  driverData.Retired !== undefined
-                    ? driverData.Retired
-                    : existing?.retired ?? false,
-                knockedOut:
-                  driverData.KnockedOut !== undefined
-                    ? driverData.KnockedOut
-                    : existing?.knockedOut ?? false,
-                trackProgress: calculateTrackProgress(sectors),
-                trackX: carDataRef.current[num]?.x ?? existing?.trackX,
-                trackY: carDataRef.current[num]?.y ?? existing?.trackY,
-              };
-
-              driversMap.set(num, driver);
-            }
-          );
-
-          // Parse lap time string to milliseconds for comparison
-          const parseLapTime = (lapTime: string | undefined): number => {
-            if (!lapTime || lapTime === "" || lapTime === "---")
-              return Infinity;
-            // Format: "1:23.456" or "1:23:456" or just "23.456"
-            const parts = lapTime.split(/[:.]/).map(Number);
-            if (parts.length === 3) {
-              // M:SS.mmm
-              return parts[0] * 60000 + parts[1] * 1000 + parts[2];
-            } else if (parts.length === 2) {
-              // SS.mmm
-              return parts[0] * 1000 + parts[1];
-            }
-            return Infinity;
-          };
-
-          // Parse gap string to number
-          const parseGap = (gap: string | undefined): number => {
-            if (!gap || gap === "" || gap === "---") return 0; // Leader
-            // Remove "+" and parse as float
-            const numericGap = parseFloat(gap.replace("+", ""));
-            return isNaN(numericGap) ? Infinity : numericGap;
-          };
-
-          // Determine sort method based on session type
-          const sessionType = sessionTypeRef.current;
-          const isPracticeOrQualy =
-            sessionType === "Practice" ||
-            sessionType === "Qualifying" ||
-            sessionType?.includes("Practice") ||
-            sessionType?.includes("Qualifying");
-
-          const sortedDrivers = Array.from(driversMap.values())
-            .filter((d) => d.driverNumber) // Include all drivers that have a number
-            .sort((a, b) => {
-              // Knocked out drivers always go to the bottom
-              if (a.knockedOut && !b.knockedOut) return 1;
-              if (!a.knockedOut && b.knockedOut) return -1;
-
-              if (isPracticeOrQualy) {
-                // In Practice/Qualifying: sort by best lap time (fastest first)
-                const timeA = parseLapTime(a.bestLap);
-                const timeB = parseLapTime(b.bestLap);
-
-                // If neither has a time, sort by their original position/line
-                if (timeA === Infinity && timeB === Infinity) {
-                  const posA = a.position || parseInt(a.driverNumber) || 99;
-                  const posB = b.position || parseInt(b.driverNumber) || 99;
-                  return posA - posB;
-                }
-                // If only one has a time, that one comes first
-                if (timeA === Infinity) return 1;
-                if (timeB === Infinity) return -1;
-
-                return timeA - timeB;
-              } else {
-                // In Race: sort by position (which reflects current race position or grid position pre-race)
-                const posA = a.position || parseInt(a.driverNumber) || 99;
-                const posB = b.position || parseInt(b.driverNumber) || 99;
-                return posA - posB;
-              }
-            });
-
-          // Update positions and calculate gaps based on sorted order
-          // Find the fastest lap time for gap calculation in practice/qualy
-          const fastestTime = isPracticeOrQualy
-            ? Math.min(...sortedDrivers.map((d) => parseLapTime(d.bestLap)))
-            : 0;
-
-          return sortedDrivers.map((driver, index) => {
-            let gap = driver.gap;
-            let interval = driver.interval;
-
-            if (isPracticeOrQualy && driver.bestLap) {
-              const driverTime = parseLapTime(driver.bestLap);
-              if (index === 0) {
-                gap = "";
-                interval = "";
-              } else if (driverTime !== Infinity) {
-                // Gap to leader (fastest)
-                const gapMs = driverTime - fastestTime;
-                gap = gapMs > 0 ? `+${(gapMs / 1000).toFixed(3)}` : "";
-
-                // Interval to position ahead
-                const prevDriver = sortedDrivers[index - 1];
-                const prevTime = parseLapTime(prevDriver?.bestLap);
-                if (prevTime !== Infinity) {
-                  const intervalMs = driverTime - prevTime;
-                  interval =
-                    intervalMs > 0 ? `+${(intervalMs / 1000).toFixed(3)}` : "";
-                }
-              }
-            }
-
-            return {
-              ...driver,
-              position: index + 1,
-              gap,
-              interval,
-            };
-          });
+          return { ...driver, position: index + 1, gap, interval };
         });
-      }
+      });
     } catch (err) {
       console.error("Error processing data:", err);
     }
@@ -737,7 +526,6 @@ export function useF1DataSSE(): F1DataState {
       setIsConnected(true);
       isConnectedRef.current = true;
       setError(null);
-      // Stop health checks since we're connected
       if (healthCheckIntervalRef.current) {
         clearInterval(healthCheckIntervalRef.current);
         healthCheckIntervalRef.current = null;
@@ -749,9 +537,7 @@ export function useF1DataSSE(): F1DataState {
       const hasData = Object.keys(data).length > 0;
       console.log(
         "[SSE] Received initial state",
-        hasData
-          ? `(${Object.keys(data).length} keys)`
-          : "(empty - waiting for data)"
+        hasData ? `(${Object.keys(data).length} keys)` : "(empty - waiting for data)"
       );
       if (hasData) {
         processData(data);
@@ -775,81 +561,43 @@ export function useF1DataSSE(): F1DataState {
     };
   }, [processData]);
 
-  // Generate demo data when not connected
-  // Extrapolated clock interval - update time every second
+  // Clock extrapolation — ticks every second
   useEffect(() => {
     const updateClock = () => {
-      const clockData = extrapolatedClockRef.current;
+      const clock = clockRef.current;
+      if (!clock) return;
 
-      // Fallback: derive remaining time from SessionInfo.EndDate when ExtrapolatedClock is absent
-      if (!clockData) {
-        const endDate = sessionEndDateRef.current;
-        if (!endDate) return;
-        const diffMs = endDate.getTime() - Date.now();
-        const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-        const formatted = hours > 0
-          ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-          : `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-        setSessionInfo((prev) => ({ ...prev, remainingTime: formatted }));
-        return;
-      }
-
-      // Parse the remaining time (format: HH:MM:SS or MM:SS)
-      const remainingParts = clockData.remaining.split(":").map(Number);
+      const remainingParts = clock.remaining.split(":").map(Number);
       let totalSeconds: number;
-
       if (remainingParts.length === 3) {
-        // HH:MM:SS
         totalSeconds =
           remainingParts[0] * 3600 + remainingParts[1] * 60 + remainingParts[2];
       } else if (remainingParts.length === 2) {
-        // MM:SS
         totalSeconds = remainingParts[0] * 60 + remainingParts[1];
       } else {
         return;
       }
 
-      if (clockData.extrapolating) {
-        // Calculate elapsed time since UTC timestamp
-        const utcTime = new Date(clockData.utc).getTime();
-        const now = Date.now();
-        const elapsedSeconds = Math.floor((now - utcTime) / 1000);
-        totalSeconds = Math.max(0, totalSeconds - elapsedSeconds);
-      }
+      // Always extrapolate: subtract elapsed time since the UTC anchor
+      const elapsed = Math.floor((Date.now() - new Date(clock.utc).getTime()) / 1000);
+      totalSeconds = Math.max(0, totalSeconds - elapsed);
 
-      // Format the remaining time
       const hours = Math.floor(totalSeconds / 3600);
       const minutes = Math.floor((totalSeconds % 3600) / 60);
       const seconds = totalSeconds % 60;
+      const formatted =
+        hours > 0
+          ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+          : `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 
-      let formatted: string;
-      if (hours > 0) {
-        formatted = `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
-          .toString()
-          .padStart(2, "0")}`;
-      } else {
-        formatted = `${minutes.toString().padStart(2, "0")}:${seconds
-          .toString()
-          .padStart(2, "0")}`;
-      }
-
-      setSessionInfo((prev) => ({
-        ...prev,
-        remainingTime: formatted,
-      }));
+      setSessionInfo((prev) => ({ ...prev, remainingTime: formatted }));
     };
 
-    // Update immediately and then every second
     updateClock();
     clockIntervalRef.current = setInterval(updateClock, 1000);
 
     return () => {
-      if (clockIntervalRef.current) {
-        clearInterval(clockIntervalRef.current);
-      }
+      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
     };
   }, []);
 
@@ -898,7 +646,8 @@ export function useF1DataSSE(): F1DataState {
     return () => {
       if (eventSourceRef.current) eventSourceRef.current.close();
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (healthCheckIntervalRef.current) clearInterval(healthCheckIntervalRef.current);
+      if (healthCheckIntervalRef.current)
+        clearInterval(healthCheckIntervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

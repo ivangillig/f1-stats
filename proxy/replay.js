@@ -10,6 +10,7 @@
  */
 
 import { ensureValidToken, hasMQTTCredentials } from "./mqtt-client.js";
+import { ensureTimingEntry, updateBestLap, flagToTrackStatus, detectSafetyCar } from "./state-utils.js";
 
 // Azerbaijan 2024 GP - Session Key (Colapinto P8!)
 const SESSION_KEY = 9598;
@@ -45,34 +46,8 @@ let raceStartTime = null; // Actual race start time (UTC)
 let replayStartRealTime = null; // When we started the replay (local time)
 let lastPollTime = null; // Last race time we polled up to
 
-// Track best laps per driver
-const driverBestLaps = {};
-const driverBestSectors = {};
-
 // Pit stop windows loaded at startup: { "driverNum": [{ entryMs, exitMs }] }
 const pitData = {};
-
-// Helper: format sector time
-function formatSectorTime(seconds) {
-  if (!seconds || seconds > 60) return null;
-  return seconds.toFixed(3);
-}
-
-// Helper: format lap time (seconds to M:SS.sss)
-function formatLapTime(seconds) {
-  if (!seconds || seconds > 300) return null;
-  const mins = Math.floor(seconds / 60);
-  const secs = (seconds % 60).toFixed(3).padStart(6, "0");
-  return `${mins}:${secs}`;
-}
-
-// Helper: convert OpenF1 segment value to status
-function getSegmentStatus(value) {
-  if (value === 2051) return "OverallFastest";
-  if (value === 2049) return "PersonalFastest";
-  if (value === 2048) return "Completed";
-  return null;
-}
 
 // Fetch with error handling and 429 retry backoff
 async function fetchJSON(url, retries = 4) {
@@ -388,76 +363,49 @@ async function fetchTimeWindow(sessionKey, startTime, endTime) {
 // Build initial state structure
 function buildInitialState(session, drivers, startingGrid) {
   const state = {
-    SessionInfo: {
-      Meeting: {
-        Name: session.meeting_name || "Grand Prix",
-        Circuit: {
-          ShortName: session.circuit_short_name || "Baku",
-          Key: CIRCUIT_KEY, // Use constant from top of file
-        },
-        Country: {
-          Name: session.country_name || "Azerbaijan",
-          Code: session.country_code || "AZE",
-        },
-      },
-      Type: session.session_name,
+    session: {
+      session_key: SESSION_KEY,
+      session_name: session.session_name || session.session_type || "Race",
+      session_type: "Race",
+      circuit_key: CIRCUIT_KEY,
+      circuit_short_name: session.circuit_short_name || session.location || "Baku",
+      country_name: session.country_name || "Azerbaijan",
+      country_code: session.country_code || "AZE",
+      date_start: session.date_start,
+      date_end: null,
+      location: session.location || "Baku",
+      meeting_name: session.meeting_name || "Azerbaijan Grand Prix",
     },
-    LapCount: { CurrentLap: 1, TotalLaps: TOTAL_LAPS },
-    TrackStatus: { Status: "1", Message: "AllClear" },
-    WeatherData: {
-      AirTemp: "28",
-      Humidity: "45",
-      Pressure: "1015",
-      Rainfall: "0",
-      TrackTemp: "35",
-      WindDirection: "180",
-      WindSpeed: "4.2",
+    drivers: {},
+    timing: {},
+    location: {},
+    lap_count: { current: 1, total: TOTAL_LAPS },
+    track_status: { flag: "GREEN" },
+    weather: {
+      air_temperature: 28,
+      track_temperature: 35,
+      humidity: 45,
+      pressure: 1015,
+      rainfall: false,
+      wind_speed: 4.2,
+      wind_direction: 180,
     },
-    ExtrapolatedClock: { Remaining: "0:00:00", Utc: new Date().toISOString() },
-    DriverList: {},
-    TimingData: { Lines: {} },
-    TimingAppData: { Lines: {} },
-    Position: { Position: {} },
-    RaceControlMessages: { Messages: [] },
-    TeamRadio: { Captures: [] },
+    race_control_messages: [],
+    team_radio: [],
+    clock: { remaining: "0:00:00", utc: new Date().toISOString() },
   };
 
-  // Initialize drivers with starting grid positions
-  drivers.forEach((driver, index) => {
+  drivers.forEach((driver) => {
     const num = String(driver.driver_number);
-
-    // Use starting grid position if available, otherwise use index + 1
-    const gridPosition = startingGrid[num] || index + 1;
-
-    state.DriverList[num] = {
-      Tla: driver.name_acronym,
-      FullName: driver.full_name,
-      TeamName: driver.team_name,
-      TeamColour: driver.team_colour || "FFFFFF",
-      RacingNumber: num,
+    state.drivers[num] = {
+      driver_number: driver.driver_number,
+      name_acronym: driver.name_acronym,
+      full_name: driver.full_name,
+      team_name: driver.team_name,
+      team_colour: driver.team_colour || "FFFFFF",
     };
-
-    state.TimingData.Lines[num] = {
-      Line: gridPosition,
-      Position: String(gridPosition),
-      GapToLeader: gridPosition === 1 ? "" : "---",
-      IntervalToPositionAhead: { Value: gridPosition === 1 ? "" : "---" },
-      LastLapTime: { Value: "" },
-      BestLapTime: { Value: "" },
-      NumberOfLaps: 0,
-      Sectors: {
-        0: { Value: "", Segments: [] },
-        1: { Value: "", Segments: [] },
-        2: { Value: "", Segments: [] },
-      },
-      InPit: false,
-      PitOut: false,
-      Retired: false,
-    };
-
-    state.TimingAppData.Lines[num] = {
-      Stints: [{ Compound: "MEDIUM", TotalLaps: 0, New: "true", StartLaps: 0 }],
-    };
+    const entry = ensureTimingEntry(state, num);
+    entry.position = startingGrid[num] || (Object.keys(state.drivers).length);
   });
 
   return state;
@@ -465,191 +413,110 @@ function buildInitialState(session, drivers, startingGrid) {
 
 // Process fetched data and update state
 function processData(data, state) {
-  const { positions, intervals, laps, locations, raceControl, teamRadio } =
-    data;
+  const { positions, intervals, laps, locations, raceControl, teamRadio } = data;
 
-  // Process positions
   positions.forEach((pos) => {
     const num = String(pos.driver_number);
-    if (state.TimingData.Lines[num]) {
-      state.TimingData.Lines[num].Line = pos.position;
-      state.TimingData.Lines[num].Position = String(pos.position);
-    }
+    const entry = ensureTimingEntry(state, num);
+    entry.position = pos.position;
   });
 
-  // Process intervals
   intervals.forEach((int) => {
     const num = String(int.driver_number);
-    if (state.TimingData.Lines[num]) {
-      if (int.gap_to_leader === 0 || int.gap_to_leader == null) {
-        state.TimingData.Lines[num].GapToLeader = "";
-        state.TimingData.Lines[num].IntervalToPositionAhead = { Value: "" };
-      } else {
-        const gap = parseFloat(int.gap_to_leader);
-        state.TimingData.Lines[num].GapToLeader = isNaN(gap) ? "" : `+${gap.toFixed(3)}`;
-        const ivl = parseFloat(int.interval);
-        state.TimingData.Lines[num].IntervalToPositionAhead = {
-          Value: !isNaN(ivl) ? `+${ivl.toFixed(3)}` : "",
-        };
-      }
-    }
+    const entry = ensureTimingEntry(state, num);
+    const gap = parseFloat(int.gap_to_leader);
+    entry.gap_to_leader = (int.gap_to_leader === 0 || int.gap_to_leader == null) ? null : (!isNaN(gap) ? gap : null);
+    const ivl = parseFloat(int.interval);
+    entry.interval = (!isNaN(ivl) && int.interval !== 0) ? ivl : null;
   });
 
-  // Process laps
   laps.forEach((lap) => {
     const num = String(lap.driver_number);
-    if (!state.TimingData.Lines[num]) return;
-
-    const line = state.TimingData.Lines[num];
-
-    // Update lap count
-    if (lap.lap_number > line.NumberOfLaps) {
-      line.NumberOfLaps = lap.lap_number;
-
-      // Update global lap count
-      if (lap.lap_number > state.LapCount.CurrentLap) {
-        state.LapCount.CurrentLap = lap.lap_number;
+    const entry = ensureTimingEntry(state, num);
+    if (lap.lap_number > entry.lap_number) {
+      entry.lap_number = lap.lap_number;
+      if (lap.lap_number > state.lap_count.current) {
+        state.lap_count.current = lap.lap_number;
       }
     }
-
-    // Update lap time
     if (lap.lap_duration && lap.lap_duration < 150) {
-      line.LastLapTime = { Value: formatLapTime(lap.lap_duration) };
-
-      // Track best lap
-      if (!driverBestLaps[num] || lap.lap_duration < driverBestLaps[num]) {
-        driverBestLaps[num] = lap.lap_duration;
-        line.BestLapTime = { Value: formatLapTime(lap.lap_duration) };
-      }
+      entry.last_lap = lap.lap_duration;
+      entry.last_lap_is_pb = updateBestLap(entry, lap.lap_duration, lap.is_pit_out_lap);
     }
-
-    // Update sectors
-    if (lap.duration_sector_1) {
-      line.Sectors["0"] = {
-        Value: formatSectorTime(lap.duration_sector_1),
-        Segments: (lap.segments_sector_1 || [])
-          .map(getSegmentStatus)
-          .filter(Boolean),
-      };
-    }
-    if (lap.duration_sector_2) {
-      line.Sectors["1"] = {
-        Value: formatSectorTime(lap.duration_sector_2),
-        Segments: (lap.segments_sector_2 || [])
-          .map(getSegmentStatus)
-          .filter(Boolean),
-      };
-    }
-    if (lap.duration_sector_3) {
-      line.Sectors["2"] = {
-        Value: formatSectorTime(lap.duration_sector_3),
-        Segments: (lap.segments_sector_3 || [])
-          .map(getSegmentStatus)
-          .filter(Boolean),
-      };
-    }
-
-    // PitOut: driver is on the outlap after a stop. InPit is computed from /v1/pit data.
-    line.PitOut = lap.is_pit_out_lap || false;
+    if (lap.duration_sector_1) entry.sector_1 = lap.duration_sector_1;
+    if (lap.duration_sector_2) entry.sector_2 = lap.duration_sector_2;
+    if (lap.duration_sector_3) entry.sector_3 = lap.duration_sector_3;
+    if (lap.segments_sector_1) entry.segments_1 = lap.segments_sector_1;
+    if (lap.segments_sector_2) entry.segments_2 = lap.segments_sector_2;
+    if (lap.segments_sector_3) entry.segments_3 = lap.segments_sector_3;
+    entry.is_pit_out_lap = lap.is_pit_out_lap || false;
   });
 
-  // Process locations - get latest position per driver
+  // locations
   const latestLocations = {};
   locations.forEach((loc) => {
     const num = String(loc.driver_number);
-    const time = new Date(loc.date).getTime();
-    if (!latestLocations[num] || time > latestLocations[num].time) {
-      latestLocations[num] = { time, x: loc.x, y: loc.y };
+    const t = new Date(loc.date).getTime();
+    if (!latestLocations[num] || t > latestLocations[num].t) {
+      latestLocations[num] = { t, x: loc.x, y: loc.y };
     }
   });
-
-  // Update car positions
   Object.entries(latestLocations).forEach(([num, loc]) => {
-    state.Position.Position[num] = { X: loc.x, Y: loc.y };
+    state.location[num] = { x: loc.x, y: loc.y };
   });
 
-  // Process race control messages
+  // race control
   if (raceControl && raceControl.length > 0) {
     raceControl.forEach((msg) => {
-      // Only add messages that haven't been added yet
       const msgId = `${msg.date}_${msg.message}`;
-      const exists = state.RaceControlMessages.Messages.some(
-        (m) => `${m.Utc}_${m.Message}` === msgId,
-      );
+      const exists = state.race_control_messages.some((m) => `${m.date}_${m.message}` === msgId);
       if (!exists) {
-        state.RaceControlMessages.Messages.push({
-          Utc: msg.date,
-          Category: msg.category || "Other",
-          Message: msg.message,
-          Flag: msg.flag || null,
-          Scope: msg.scope || null,
-          Sector: msg.sector || null,
-          DriverNumber: msg.driver_number || null,
-          LapNumber: msg.lap_number || null,
+        state.race_control_messages.push({
+          date: msg.date,
+          message: msg.message,
+          flag: msg.flag || null,
+          category: msg.category || "Other",
+          scope: msg.scope || null,
+          sector: msg.sector || null,
+          driver_number: msg.driver_number || null,
+          lap_number: msg.lap_number || null,
         });
-        // Keep only last 50 messages
-        if (state.RaceControlMessages.Messages.length > 50) {
-          state.RaceControlMessages.Messages =
-            state.RaceControlMessages.Messages.slice(-50);
+        if (state.race_control_messages.length > 50) {
+          state.race_control_messages = state.race_control_messages.slice(-50);
         }
         console.log(`[Replay] Race Control: ${msg.message}`);
       }
     });
 
-    // Update track status based on latest race control flag
-    const lastFlagMsg = [...raceControl]
-      .reverse()
-      .find((m) => m.flag && m.scope === "Track");
+    // Update track status from latest track-scope flag
+    const lastFlagMsg = [...raceControl].reverse().find((m) => m.flag && m.scope === "Track");
     if (lastFlagMsg) {
-      const flag = lastFlagMsg.flag.toUpperCase();
-      if (flag === "GREEN") {
-        state.TrackStatus = { Status: "1", Message: "AllClear" };
-      } else if (flag === "YELLOW") {
-        state.TrackStatus = { Status: "2", Message: "Yellow" };
-      } else if (flag === "DOUBLE YELLOW") {
-        state.TrackStatus = { Status: "2", Message: "Yellow" };
-      } else if (flag === "RED") {
-        state.TrackStatus = { Status: "5", Message: "Red" };
-      } else if (flag === "CHEQUERED") {
-        state.TrackStatus = { Status: "7", Message: "Chequered" };
-      }
+      const flagStatus = flagToTrackStatus(lastFlagMsg.flag);
+      if (flagStatus) state.track_status.flag = flagStatus;
     }
-
-    // Check for safety car
-    const lastSCMsg = [...raceControl]
-      .reverse()
-      .find((m) => m.category === "SafetyCar");
+    // Safety car
+    const lastSCMsg = [...raceControl].reverse().find((m) => m.category === "SafetyCar");
     if (lastSCMsg) {
-      if (lastSCMsg.message.includes("VIRTUAL SAFETY CAR")) {
-        state.TrackStatus = { Status: "6", Message: "VSC Deployed" };
-      } else if (lastSCMsg.message.includes("SAFETY CAR")) {
-        state.TrackStatus = { Status: "4", Message: "SC Deployed" };
-      }
+      const sc = detectSafetyCar(lastSCMsg.message);
+      if (sc) state.track_status.flag = sc;
     }
   }
 
-  // Process team radio
+  // team radio
   if (teamRadio && teamRadio.length > 0) {
     teamRadio.forEach((radio) => {
-      // Only add radios that haven't been added yet
-      const radioId = radio.recording_url;
-      const exists = state.TeamRadio.Captures.some((r) => r.Path === radioId);
+      const exists = state.team_radio.some((r) => r.recording_url === radio.recording_url);
       if (!exists) {
-        state.TeamRadio.Captures.push({
-          Utc: radio.date,
-          RacingNumber: String(radio.driver_number),
-          Path: radio.recording_url,
+        state.team_radio.push({
+          date: radio.date,
+          driver_number: radio.driver_number,
+          recording_url: radio.recording_url,
         });
-        // Keep only last 30 radios
-        if (state.TeamRadio.Captures.length > 30) {
-          state.TeamRadio.Captures = state.TeamRadio.Captures.slice(-30);
+        if (state.team_radio.length > 30) {
+          state.team_radio = state.team_radio.slice(-30);
         }
-        const driver = driversData.find(
-          (d) => d.driver_number === radio.driver_number,
-        );
-        console.log(
-          `[Replay] Team Radio: ${driver?.name_acronym || radio.driver_number}`,
-        );
+        const driver = state.drivers[String(radio.driver_number)];
+        console.log(`[Replay] Team Radio: ${driver?.name_acronym || radio.driver_number}`);
       }
     });
   }
@@ -672,12 +539,12 @@ export async function startReplay(broadcast, stateRef) {
   if (hasMQTTCredentials()) {
     POLL_INTERVAL_MS = PAID_POLL_INTERVAL_MS;
     REQUEST_DELAY_MS = PAID_REQUEST_DELAY_MS;
-    POLL_WINDOW_SECONDS = PAID_POLL_INTERVAL_MS / 1000 * REPLAY_SPEED;
+    POLL_WINDOW_SECONDS = (PAID_POLL_INTERVAL_MS / 1000) * REPLAY_SPEED;
     console.log(`[Replay] Paid tier detected — using ${POLL_INTERVAL_MS}ms interval`);
   } else {
     POLL_INTERVAL_MS = FREE_POLL_INTERVAL_MS;
     REQUEST_DELAY_MS = FREE_REQUEST_DELAY_MS;
-    POLL_WINDOW_SECONDS = FREE_POLL_INTERVAL_MS / 1000 * REPLAY_SPEED;
+    POLL_WINDOW_SECONDS = (FREE_POLL_INTERVAL_MS / 1000) * REPLAY_SPEED;
     console.log(`[Replay] Free tier — using ${POLL_INTERVAL_MS}ms interval`);
   }
 
@@ -773,34 +640,30 @@ async function pollAndBroadcast() {
   processData(data, currentStateRef);
 
   // Update InPit per driver using /v1/pit time windows
-  Object.keys(currentStateRef.TimingData.Lines).forEach((num) => {
-    currentStateRef.TimingData.Lines[num].InPit = isDriverInPit(num, currentRaceTime);
+  Object.keys(currentStateRef.timing).forEach((num) => {
+    currentStateRef.timing[num].in_pit = isDriverInPit(num, currentRaceTime);
   });
 
   // Update clock
   const hours = Math.floor(raceSeconds / 3600);
   const minutes = Math.floor((raceSeconds % 3600) / 60);
   const seconds = raceSeconds % 60;
-  currentStateRef.ExtrapolatedClock = {
-    Remaining: `${hours}:${String(minutes).padStart(2, "0")}:${String(
-      seconds,
-    ).padStart(2, "0")}`,
-    Utc: new Date().toISOString(),
+  currentStateRef.clock = {
+    remaining: `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
+    utc: new Date().toISOString(),
   };
 
-  // Broadcast update — always include DriverList and SessionInfo so clients
-  // that reconnect mid-replay get driver info on the next cycle (not just initial)
+  // Broadcast update
   broadcastFn("update", {
-    DriverList: currentStateRef.DriverList,
-    SessionInfo: currentStateRef.SessionInfo,
-    ExtrapolatedClock: currentStateRef.ExtrapolatedClock,
-    LapCount: currentStateRef.LapCount,
-    TrackStatus: currentStateRef.TrackStatus,
-    TimingData: currentStateRef.TimingData,
-    TimingAppData: currentStateRef.TimingAppData,
-    Position: currentStateRef.Position,
-    RaceControlMessages: currentStateRef.RaceControlMessages,
-    TeamRadio: currentStateRef.TeamRadio,
+    session: currentStateRef.session,
+    drivers: currentStateRef.drivers,
+    timing: currentStateRef.timing,
+    location: currentStateRef.location,
+    lap_count: currentStateRef.lap_count,
+    track_status: currentStateRef.track_status,
+    race_control_messages: currentStateRef.race_control_messages,
+    team_radio: currentStateRef.team_radio,
+    clock: currentStateRef.clock,
   });
 
   // Update last poll time

@@ -56,7 +56,7 @@ const rotate = (x: number, y: number, a: number, px: number, py: number) => {
 
 export default function TrackMap({
   drivers,
-  circuitKey = 63,
+  circuitKey,
   trackStatus,
   raceControlMessages = [],
   isSessionActive = false,
@@ -66,32 +66,47 @@ export default function TrackMap({
 }: TrackMapProps) {
   const { t } = useLanguage();
   const [mapData, setMapData] = useState<MapData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Don't attempt fetch until we have a real circuit key
+    if (!circuitKey) {
+      setMapData(null);
+      setLoading(false);
+      return;
+    }
+
     const fetchMap = async () => {
       console.log("[TrackMap] Fetching map for circuitKey:", circuitKey);
-      try {
-        setLoading(true);
-        const year = new Date().getFullYear();
-        const response = await fetch(
-          `https://api.multiviewer.app/api/v1/circuits/${circuitKey}/${year}`
-        );
+      setLoading(true);
+      setError(null);
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch map data");
+      // Try years from current down to 2024 — circuit layouts are stable
+      // across seasons so an older year is always a valid fallback.
+      const currentYear = new Date().getFullYear();
+      let data: MapData | null = null;
+      for (let year = currentYear; year >= 2024; year--) {
+        try {
+          const response = await fetch(
+            `https://api.multiviewer.app/api/v1/circuits/${circuitKey}/${year}`
+          );
+          if (response.ok) {
+            data = await response.json();
+            break;
+          }
+        } catch {
+          // Network error on this year — try the next
         }
-
-        const data = await response.json();
-        setMapData(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load map");
-        // Use a simple demo map if API fails
-        setMapData(generateDemoMap());
-      } finally {
-        setLoading(false);
       }
+
+      if (data) {
+        setMapData(data);
+      } else {
+        setError("Circuit map unavailable");
+        setMapData(null);
+      }
+      setLoading(false);
     };
 
     // Clear animated positions when circuit changes to force recalculation
@@ -759,29 +774,4 @@ export default function TrackMap({
 }
 
 // Generate a simple oval track for demo mode
-function generateDemoMap(): MapData {
-  const points = 100;
-  const a = 5000; // Semi-major axis
-  const b = 3000; // Semi-minor axis
 
-  const x: number[] = [];
-  const y: number[] = [];
-
-  for (let i = 0; i < points; i++) {
-    const angle = (2 * Math.PI * i) / points;
-    x.push(a * Math.cos(angle));
-    y.push(b * Math.sin(angle));
-  }
-
-  return {
-    x,
-    y,
-    rotation: 0,
-    corners: [
-      { number: 1, angle: 0, trackPosition: { x: a, y: 0 } },
-      { number: 2, angle: Math.PI / 2, trackPosition: { x: 0, y: b } },
-      { number: 3, angle: Math.PI, trackPosition: { x: -a, y: 0 } },
-      { number: 4, angle: -Math.PI / 2, trackPosition: { x: 0, y: -b } },
-    ],
-  };
-}

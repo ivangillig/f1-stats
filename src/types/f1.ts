@@ -108,32 +108,90 @@ export interface F1State {
   error: string | null;
 }
 
-// API Response types
-export interface TimingDataDriver {
-  RacingNumber: string;
-  Line: number;
-  GapToLeader: string;
-  IntervalToPositionAhead: { Value: string };
-  Sectors: {
-    [key: string]: {
-      Value: string;
-      PersonalFastest: boolean;
-      OverallFastest: boolean;
-    };
-  };
-  LastLapTime: { Value: string; PersonalFastest: boolean };
-  BestLapTime: { Value: string };
-  InPit: boolean;
-  PitOut: boolean;
-  Retired: boolean;
-  NumberOfPitStops: number;
+// OpenF1 proxy state types (snake_case, emitted by proxy/server.js)
+
+export interface OpenF1Session {
+  session_key: number;
+  session_name: string;
+  session_type: string;
+  circuit_key: number;
+  circuit_short_name: string;
+  country_name: string;
+  country_code: string;
+  date_start: string;
+  date_end: string | null;
+  location: string;
+  meeting_name: string;
 }
 
-export interface TimingAppDataDriver {
-  RacingNumber: string;
-  Stints: {
-    Compound: string;
-    New: string;
-    TotalLaps: number;
-  }[];
+export interface OpenF1Driver {
+  driver_number: number;
+  name_acronym: string;
+  full_name: string;
+  team_name: string;
+  team_colour: string;
+}
+
+export interface OpenF1TimingEntry {
+  position: number | null;
+  gap_to_leader: number | string | null;
+  interval: number | string | null;
+  last_lap: number | null;
+  best_lap: number | null;
+  last_lap_is_pb: boolean;
+  lap_number: number;
+  sector_1: number | null;
+  sector_2: number | null;
+  sector_3: number | null;
+  segments_1: number[];
+  segments_2: number[];
+  segments_3: number[];
+  compound: string;
+  tyre_age: number;
+  stint_number: number;
+  in_pit: boolean;
+  pit_count: number;
+  retired: boolean;
+  knocked_out: boolean;
+  is_pit_out_lap: boolean;
+}
+
+export interface OpenF1Weather {
+  air_temperature: number;
+  track_temperature: number;
+  humidity: number;
+  pressure: number;
+  rainfall: boolean;
+  wind_speed: number;
+  wind_direction: number;
+}
+
+export interface OpenF1RaceControlMessage {
+  date: string;
+  message: string;
+  flag: string | null;
+  category: string;
+  scope: string | null;
+  sector: number | null;
+  driver_number: number | null;
+  lap_number: number | null;
+}
+
+export interface OpenF1TeamRadio {
+  date: string;
+  driver_number: number;
+  recording_url: string;
+}
+
+export interface ProxyState {
+  session?: OpenF1Session;
+  drivers?: Record<string, OpenF1Driver>;
+  timing?: Record<string, OpenF1TimingEntry>;
+  location?: Record<string, { x: number; y: number }>;
+  lap_count?: { current: number; total: number };
+  track_status?: { flag: string };
+  weather?: OpenF1Weather;
+  race_control_messages?: OpenF1RaceControlMessage[];
+  team_radio?: OpenF1TeamRadio[];
+  clock?: { remaining: string; utc: string };
 }

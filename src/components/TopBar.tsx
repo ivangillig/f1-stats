@@ -184,7 +184,9 @@ export default function TopBar({
                   ? t("session.noActive")
                   : session.name || t("session.noActive")}
               </span>
-              <span className="text-zinc-400 text-sm">{session.country || session.track}</span>
+              <span className="text-zinc-400 text-sm">
+                {session.track || session.country}
+              </span>
             </div>
             {session.type && (
               <Badge

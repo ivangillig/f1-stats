@@ -3,7 +3,16 @@
  *
  * Polls OpenF1 REST API for live session data.
  * Free alternative to MQTT, with ~1-2 second latency.
+ * Emits OpenF1-native (snake_case) format directly into currentStateRef.
  */
+
+import {
+  ensureTimingEntry,
+  updateBestLap,
+  getPitWindowStatus,
+  flagToTrackStatus,
+  detectSafetyCar,
+} from "./state-utils.js";
 
 const API_BASE = "https://api.openf1.org/v1";
 
@@ -18,8 +27,8 @@ let currentStateRef = null;
 let currentSessionKey = null;
 let lastPollTime = null;
 
-// Cache for driver info
-const driversCache = {};
+// Track pit records we've already processed to avoid double-counting pit_count
+const seenPitKeys = new Set();
 
 /**
  * Fetch JSON with error handling
@@ -36,54 +45,60 @@ async function fetchJSON(url) {
 }
 
 /**
- * Get the current live session
+ * Get the current live session and write to currentStateRef.session
  */
 async function getCurrentSession() {
   console.log("[live-polling] Looking for live session...");
 
-  // Get latest session
   const sessions = await fetchJSON(`${API_BASE}/sessions?session_key=latest`);
 
-  if (sessions && sessions.length > 0) {
-    const session = sessions[0];
-    console.log(
-      `[live-polling] Found session: ${session.session_name} at ${session.location}`
-    );
-    console.log(`[live-polling] Session key: ${session.session_key}`);
-    return session;
+  if (!sessions || sessions.length === 0) return null;
+
+  const s = sessions[0];
+  console.log(`[live-polling] Found session: ${s.session_name} at ${s.location}`);
+  console.log(`[live-polling] Session key: ${s.session_key}`);
+
+  if (currentStateRef) {
+    currentStateRef.session = {
+      session_key: s.session_key,
+      session_name: s.session_name,
+      session_type: s.session_type,
+      circuit_key: s.circuit_key,
+      circuit_short_name: s.circuit_short_name,
+      country_name: s.country_name,
+      country_code: s.country_code,
+      date_start: s.date_start,
+      date_end: s.date_end,
+      location: s.location,
+      meeting_name: s.meeting_name,
+    };
+
+    if (!currentStateRef.lap_count) {
+      currentStateRef.lap_count = { current: 0, total: s.total_laps || 0 };
+    }
   }
 
-  return null;
+  return s;
 }
 
 /**
- * Fetch drivers for the session
+ * Fetch drivers for the session and write to currentStateRef.drivers
  */
 async function fetchDrivers(sessionKey) {
   const drivers = await fetchJSON(
     `${API_BASE}/drivers?session_key=${sessionKey}`
   );
 
-  drivers.forEach((d) => {
-    driversCache[String(d.driver_number)] = {
-      name: d.full_name,
-      code: d.name_acronym,
-      team: d.team_name,
-      teamColor: d.team_colour,
-    };
-  });
-
-  // Update DriverList in state
   if (currentStateRef) {
-    currentStateRef.DriverList = {};
+    if (!currentStateRef.drivers) currentStateRef.drivers = {};
     drivers.forEach((d) => {
       const num = String(d.driver_number);
-      currentStateRef.DriverList[num] = {
-        RacingNumber: num,
-        Tla: d.name_acronym,
-        FullName: d.full_name,
-        TeamName: d.team_name,
-        TeamColour: d.team_colour,
+      currentStateRef.drivers[num] = {
+        driver_number: d.driver_number,
+        name_acronym: d.name_acronym,
+        full_name: d.full_name,
+        team_name: d.team_name,
+        team_colour: d.team_colour,
       };
     });
   }
@@ -93,7 +108,7 @@ async function fetchDrivers(sessionKey) {
 }
 
 /**
- * Poll for latest data
+ * Poll for latest data and update currentStateRef in OpenF1-native format
  */
 async function pollData() {
   if (!currentSessionKey || !currentStateRef) return;
@@ -103,7 +118,6 @@ async function pollData() {
   const since = new Date(now.getTime() - 3000);
   const sinceISO = since.toISOString();
 
-  // Build URLs for parallel fetch
   const urls = [
     `${API_BASE}/position?session_key=${currentSessionKey}&date>=${sinceISO}`,
     `${API_BASE}/intervals?session_key=${currentSessionKey}&date>=${sinceISO}`,
@@ -127,29 +141,208 @@ async function pollData() {
       pits,
     ] = await Promise.all(urls.map(fetchJSON));
 
-    // Process positions
-    processPositions(positions);
+    // --- Positions ---
+    if (positions && positions.length > 0) {
+      // Latest per driver by date
+      const latest = new Map();
+      for (const p of positions) {
+        const num = String(p.driver_number);
+        const t = new Date(p.date).getTime();
+        if (!latest.has(num) || t > latest.get(num).t) {
+          latest.set(num, { t, position: p.position });
+        }
+      }
+      for (const [num, data] of latest) {
+        ensureTimingEntry(currentStateRef, num).position = data.position;
+      }
+    }
 
-    // Process intervals
-    processIntervals(intervals);
+    // --- Intervals ---
+    if (intervals && intervals.length > 0) {
+      const latest = new Map();
+      for (const i of intervals) {
+        const num = String(i.driver_number);
+        const t = new Date(i.date).getTime();
+        if (!latest.has(num) || t > latest.get(num).t) {
+          latest.set(num, { t, gap_to_leader: i.gap_to_leader, interval: i.interval });
+        }
+      }
+      for (const [num, data] of latest) {
+        const entry = ensureTimingEntry(currentStateRef, num);
+        // Leader has gap_to_leader = 0 or null — normalize to null
+        entry.gap_to_leader =
+          data.gap_to_leader === 0 || data.gap_to_leader == null
+            ? null
+            : data.gap_to_leader;
+        entry.interval = data.interval ?? null;
+      }
+    }
 
-    // Process laps
-    processLaps(laps);
+    // --- Laps ---
+    if (laps && laps.length > 0) {
+      // Latest per driver by lap_number
+      const latest = new Map();
+      for (const l of laps) {
+        const num = String(l.driver_number);
+        if (!latest.has(num) || l.lap_number > latest.get(num).lap_number) {
+          latest.set(num, l);
+        }
+      }
+      for (const [num, l] of latest) {
+        const entry = ensureTimingEntry(currentStateRef, num);
+        entry.last_lap = l.lap_duration ?? null;
+        entry.last_lap_is_pb = updateBestLap(entry, l.lap_duration, l.is_pit_out_lap);
+        entry.lap_number = l.lap_number;
+        entry.sector_1 = l.duration_sector_1 ?? null;
+        entry.sector_2 = l.duration_sector_2 ?? null;
+        entry.sector_3 = l.duration_sector_3 ?? null;
+        entry.segments_1 = Array.isArray(l.segments_sector_1) ? l.segments_sector_1 : [];
+        entry.segments_2 = Array.isArray(l.segments_sector_2) ? l.segments_sector_2 : [];
+        entry.segments_3 = Array.isArray(l.segments_sector_3) ? l.segments_sector_3 : [];
+        entry.is_pit_out_lap = l.is_pit_out_lap || false;
 
-    // Process locations (for track map)
-    processLocations(locations);
+        // Update global lap counter
+        if (!currentStateRef.lap_count) currentStateRef.lap_count = { current: 0, total: 0 };
+        if (l.lap_number > currentStateRef.lap_count.current) {
+          currentStateRef.lap_count.current = l.lap_number;
+        }
+      }
+    }
 
-    // Process race control
-    processRaceControl(raceControl);
+    // --- Locations ---
+    if (locations && locations.length > 0) {
+      if (!currentStateRef.location) currentStateRef.location = {};
+      const latest = new Map();
+      for (const l of locations) {
+        const num = String(l.driver_number);
+        const t = new Date(l.date).getTime();
+        if (!latest.has(num) || t > latest.get(num).t) {
+          latest.set(num, { t, x: l.x, y: l.y });
+        }
+      }
+      for (const [num, data] of latest) {
+        currentStateRef.location[num] = { x: data.x, y: data.y };
+      }
+    }
 
-    // Process team radio
-    processTeamRadio(teamRadio);
+    // --- Race Control ---
+    if (raceControl && raceControl.length > 0) {
+      if (!currentStateRef.race_control_messages) {
+        currentStateRef.race_control_messages = [];
+      }
+      for (const msg of raceControl) {
+        const exists = currentStateRef.race_control_messages.some(
+          (m) => m.date === msg.date && m.message === msg.message
+        );
+        if (!exists) {
+          currentStateRef.race_control_messages.push({
+            date: msg.date,
+            message: msg.message,
+            flag: msg.flag || null,
+            category: msg.category || null,
+            scope: msg.scope || null,
+            sector: msg.sector || null,
+            driver_number: msg.driver_number || null,
+            lap_number: msg.lap_number || null,
+          });
 
-    // Process stints (tire info)
-    processStints(stints);
+          if (currentStateRef.race_control_messages.length > 50) {
+            currentStateRef.race_control_messages =
+              currentStateRef.race_control_messages.slice(-50);
+          }
 
-    // Process pit stops
-    processPits(pits);
+          // Update track status from flag
+          if (msg.flag && msg.scope === "Track") {
+            const statusFromFlag = flagToTrackStatus(msg.flag);
+            if (statusFromFlag) {
+              currentStateRef.track_status = { flag: statusFromFlag };
+            }
+          }
+
+          // Detect safety car from message text
+          if (msg.category === "SafetyCar") {
+            const sc = detectSafetyCar(msg.message);
+            if (sc) {
+              currentStateRef.track_status = { flag: sc };
+            }
+          }
+        }
+      }
+    }
+
+    // --- Team Radio ---
+    if (teamRadio && teamRadio.length > 0) {
+      if (!currentStateRef.team_radio) currentStateRef.team_radio = [];
+      for (const radio of teamRadio) {
+        const exists = currentStateRef.team_radio.some(
+          (r) => r.recording_url === radio.recording_url
+        );
+        if (!exists) {
+          currentStateRef.team_radio.push({
+            date: radio.date,
+            driver_number: radio.driver_number,
+            recording_url: radio.recording_url,
+          });
+
+          if (currentStateRef.team_radio.length > 30) {
+            currentStateRef.team_radio = currentStateRef.team_radio.slice(-30);
+          }
+
+          const driverAcronym =
+            currentStateRef.drivers?.[String(radio.driver_number)]?.name_acronym;
+          console.log(
+            `[live-polling] Team Radio: ${driverAcronym || radio.driver_number}`
+          );
+        }
+      }
+    }
+
+    // --- Stints ---
+    if (stints && stints.length > 0) {
+      // Latest stint per driver by stint_number
+      const latest = new Map();
+      for (const s of stints) {
+        const num = String(s.driver_number);
+        if (!latest.has(num) || s.stint_number > latest.get(num).stint_number) {
+          latest.set(num, s);
+        }
+      }
+      for (const [num, s] of latest) {
+        const entry = ensureTimingEntry(currentStateRef, num);
+        entry.compound = s.compound || "UNKNOWN";
+        entry.tyre_age = s.tyre_age_at_start || 0;
+        entry.stint_number = s.stint_number || 0;
+      }
+    }
+
+    // --- Pits ---
+    if (pits && pits.length > 0) {
+      for (const p of pits) {
+        if (!p.date || !p.lane_duration) continue;
+        const num = String(p.driver_number);
+        const pitKey = `${num}_${p.date}`;
+
+        const entry = ensureTimingEntry(currentStateRef, num);
+
+        // Count each unique pit record once
+        if (!seenPitKeys.has(pitKey)) {
+          seenPitKeys.add(pitKey);
+          entry.pit_count = (entry.pit_count || 0) + 1;
+        }
+
+        const { in_pit, remaining_ms } = getPitWindowStatus(p.date, p.lane_duration);
+        if (in_pit) {
+          entry.in_pit = true;
+          setTimeout(() => {
+            const e = currentStateRef?.timing?.[num];
+            if (e) {
+              e.in_pit = false;
+              if (broadcastFn) broadcastFn("update", currentStateRef);
+            }
+          }, remaining_ms + 1000);
+        }
+      }
+    }
 
     // Broadcast update
     if (broadcastFn) {
@@ -163,336 +356,7 @@ async function pollData() {
 }
 
 /**
- * Process position data
- */
-function processPositions(positions) {
-  if (!positions || !currentStateRef) return;
-
-  // Get latest position per driver
-  const latestPositions = {};
-  positions.forEach((p) => {
-    const num = String(p.driver_number);
-    const time = new Date(p.date).getTime();
-    if (!latestPositions[num] || time > latestPositions[num].time) {
-      latestPositions[num] = { time, position: p.position };
-    }
-  });
-
-  // Update TimingData
-  if (!currentStateRef.TimingData) {
-    currentStateRef.TimingData = { Lines: {} };
-  }
-
-  Object.entries(latestPositions).forEach(([num, data]) => {
-    if (!currentStateRef.TimingData.Lines[num]) {
-      currentStateRef.TimingData.Lines[num] = {};
-    }
-    currentStateRef.TimingData.Lines[num].Position = String(data.position);
-  });
-}
-
-/**
- * Process interval data
- */
-function processIntervals(intervals) {
-  if (!intervals || !currentStateRef) return;
-
-  // Get latest interval per driver
-  const latestIntervals = {};
-  intervals.forEach((i) => {
-    const num = String(i.driver_number);
-    const time = new Date(i.date).getTime();
-    if (!latestIntervals[num] || time > latestIntervals[num].time) {
-      latestIntervals[num] = {
-        time,
-        gap: i.gap_to_leader,
-        interval: i.interval,
-      };
-    }
-  });
-
-  // Update TimingData
-  if (!currentStateRef.TimingData) {
-    currentStateRef.TimingData = { Lines: {} };
-  }
-
-  Object.entries(latestIntervals).forEach(([num, data]) => {
-    if (!currentStateRef.TimingData.Lines[num]) {
-      currentStateRef.TimingData.Lines[num] = {};
-    }
-    currentStateRef.TimingData.Lines[num].GapToLeader =
-      data.gap != null ? String(data.gap) : "";
-    currentStateRef.TimingData.Lines[num].IntervalToPositionAhead = {
-      Value: data.interval != null ? String(data.interval) : "",
-    };
-  });
-}
-
-/**
- * Process lap data
- */
-function processLaps(laps) {
-  if (!laps || !currentStateRef) return;
-
-  // Get latest lap per driver
-  const latestLaps = {};
-  laps.forEach((l) => {
-    const num = String(l.driver_number);
-    if (!latestLaps[num] || l.lap_number > latestLaps[num].lapNumber) {
-      latestLaps[num] = {
-        lapNumber: l.lap_number,
-        lapDuration: l.lap_duration,
-        sector1: l.duration_sector_1,
-        sector2: l.duration_sector_2,
-        sector3: l.duration_sector_3,
-        isPitOut: l.is_pit_out_lap,
-      };
-    }
-  });
-
-  // Update TimingData
-  if (!currentStateRef.TimingData) {
-    currentStateRef.TimingData = { Lines: {} };
-  }
-
-  Object.entries(latestLaps).forEach(([num, data]) => {
-    if (!currentStateRef.TimingData.Lines[num]) {
-      currentStateRef.TimingData.Lines[num] = {};
-    }
-    const line = currentStateRef.TimingData.Lines[num];
-
-    line.NumberOfLaps = data.lapNumber;
-    line.LastLapTime = {
-      Value: data.lapDuration ? formatLapTime(data.lapDuration) : "",
-    };
-    line.Sectors = {
-      0: { Value: data.sector1 ? data.sector1.toFixed(3) : "" },
-      1: { Value: data.sector2 ? data.sector2.toFixed(3) : "" },
-      2: { Value: data.sector3 ? data.sector3.toFixed(3) : "" },
-    };
-    line.PitOut = data.isPitOut || false;
-  });
-}
-
-/**
- * Process location data (track map positions)
- */
-function processLocations(locations) {
-  if (!locations || !currentStateRef) return;
-
-  // Get latest location per driver
-  const latestLocations = {};
-  locations.forEach((l) => {
-    const num = String(l.driver_number);
-    const time = new Date(l.date).getTime();
-    if (!latestLocations[num] || time > latestLocations[num].time) {
-      latestLocations[num] = { time, x: l.x, y: l.y };
-    }
-  });
-
-  // Update Position
-  if (!currentStateRef.Position) {
-    currentStateRef.Position = { Position: {} };
-  }
-
-  Object.entries(latestLocations).forEach(([num, data]) => {
-    currentStateRef.Position.Position[num] = { X: data.x, Y: data.y };
-  });
-}
-
-/**
- * Process race control messages
- */
-function processRaceControl(messages) {
-  if (!messages || !currentStateRef) return;
-
-  if (!currentStateRef.RaceControlMessages) {
-    currentStateRef.RaceControlMessages = { Messages: [] };
-  }
-
-  messages.forEach((msg) => {
-    // Check if already exists
-    const exists = currentStateRef.RaceControlMessages.Messages.some(
-      (m) => m.Utc === msg.date && m.Message === msg.message
-    );
-
-    if (!exists) {
-      currentStateRef.RaceControlMessages.Messages.push({
-        Utc: msg.date,
-        Category: msg.category || "Other",
-        Message: msg.message,
-        Flag: msg.flag || null,
-        Scope: msg.scope || null,
-        Sector: msg.sector || null,
-        DriverNumber: msg.driver_number || null,
-        LapNumber: msg.lap_number || null,
-      });
-
-      // Keep only last 50
-      if (currentStateRef.RaceControlMessages.Messages.length > 50) {
-        currentStateRef.RaceControlMessages.Messages =
-          currentStateRef.RaceControlMessages.Messages.slice(-50);
-      }
-
-
-      // Update track status
-      if (msg.flag && msg.scope === "Track") {
-        updateTrackStatus(msg.flag);
-      }
-      if (msg.category === "SafetyCar") {
-        if (msg.message.includes("VIRTUAL SAFETY CAR")) {
-          currentStateRef.TrackStatus = {
-            Status: "6",
-            Message: "VSC Deployed",
-          };
-        } else if (msg.message.includes("SAFETY CAR")) {
-          currentStateRef.TrackStatus = { Status: "4", Message: "SC Deployed" };
-        }
-      }
-    }
-  });
-}
-
-/**
- * Process team radio
- */
-function processTeamRadio(radios) {
-  if (!radios || !currentStateRef) return;
-
-  if (!currentStateRef.TeamRadio) {
-    currentStateRef.TeamRadio = { Captures: [] };
-  }
-
-  radios.forEach((radio) => {
-    // Check if already exists
-    const exists = currentStateRef.TeamRadio.Captures.some(
-      (r) => r.Path === radio.recording_url
-    );
-
-    if (!exists) {
-      currentStateRef.TeamRadio.Captures.push({
-        Utc: radio.date,
-        RacingNumber: String(radio.driver_number),
-        Path: radio.recording_url,
-      });
-
-      // Keep only last 30
-      if (currentStateRef.TeamRadio.Captures.length > 30) {
-        currentStateRef.TeamRadio.Captures =
-          currentStateRef.TeamRadio.Captures.slice(-30);
-      }
-
-      const driver = driversCache[String(radio.driver_number)];
-      console.log(
-        `[live-polling] Team Radio: ${driver?.code || radio.driver_number}`
-      );
-    }
-  });
-}
-
-/**
- * Process stint data (tires)
- */
-function processStints(stints) {
-  if (!stints || !currentStateRef) return;
-
-  // Get latest stint per driver
-  const latestStints = {};
-  stints.forEach((s) => {
-    const num = String(s.driver_number);
-    if (!latestStints[num] || s.stint_number > latestStints[num].stintNumber) {
-      latestStints[num] = {
-        stintNumber: s.stint_number,
-        compound: s.compound,
-        tyreAge: s.tyre_age_at_start,
-      };
-    }
-  });
-
-  // Update TimingData with tire info
-  if (!currentStateRef.TimingData) {
-    currentStateRef.TimingData = { Lines: {} };
-  }
-
-  Object.entries(latestStints).forEach(([num, data]) => {
-    if (!currentStateRef.TimingData.Lines[num]) {
-      currentStateRef.TimingData.Lines[num] = {};
-    }
-    currentStateRef.TimingData.Lines[num].Stints = {
-      0: {
-        Compound: data.compound,
-        TotalLaps: data.tyreAge,
-      },
-    };
-    currentStateRef.TimingData.Lines[num].NumberOfPitStops = Math.max(
-      0,
-      data.stintNumber - 1
-    );
-  });
-}
-
-/**
- * Process pit stop events.
- * If the car is still within its pit lane window (date to date+lane_duration),
- * marks it InPit=true and schedules a timer to clear it on exit.
- */
-function processPits(pits) {
-  if (!pits || !currentStateRef) return;
-
-  if (!currentStateRef.TimingData) currentStateRef.TimingData = { Lines: {} };
-
-  const now = Date.now();
-  pits.forEach((p) => {
-    if (!p.date || !p.lane_duration) return;
-    const num = String(p.driver_number);
-    if (!currentStateRef.TimingData.Lines[num]) {
-      currentStateRef.TimingData.Lines[num] = {};
-    }
-    const entryMs = new Date(p.date).getTime();
-    const exitMs = entryMs + p.lane_duration * 1000;
-    if (now >= entryMs && now <= exitMs) {
-      currentStateRef.TimingData.Lines[num].InPit = true;
-      const remainingMs = exitMs - now;
-      setTimeout(() => {
-        if (currentStateRef?.TimingData?.Lines[num]) {
-          currentStateRef.TimingData.Lines[num].InPit = false;
-          if (broadcastFn) broadcastFn("update", currentStateRef);
-        }
-      }, remainingMs + 1000);
-    }
-  });
-}
-
-/**
- * Update track status based on flag
- */
-function updateTrackStatus(flag) {
-  if (!currentStateRef) return;
-
-  const f = flag.toUpperCase();
-  if (f === "GREEN") {
-    currentStateRef.TrackStatus = { Status: "1", Message: "AllClear" };
-  } else if (f === "YELLOW" || f === "DOUBLE YELLOW") {
-    currentStateRef.TrackStatus = { Status: "2", Message: "Yellow" };
-  } else if (f === "RED") {
-    currentStateRef.TrackStatus = { Status: "5", Message: "Red" };
-  } else if (f === "CHEQUERED") {
-    currentStateRef.TrackStatus = { Status: "7", Message: "Chequered" };
-  }
-}
-
-/**
- * Format lap time from seconds
- */
-function formatLapTime(seconds) {
-  if (!seconds) return "";
-  const mins = Math.floor(seconds / 60);
-  const secs = (seconds % 60).toFixed(3);
-  return mins > 0 ? `${mins}:${secs.padStart(6, "0")}` : secs;
-}
-
-/**
- * Fetch historical data for the session
+ * Fetch historical race_control and team_radio and write to currentStateRef
  */
 async function fetchHistoricalData(sessionKey) {
   console.log(
@@ -505,20 +369,46 @@ async function fetchHistoricalData(sessionKey) {
       fetchJSON(`${API_BASE}/team_radio?session_key=${sessionKey}`),
     ]);
 
-    // Process all historical race control
     if (raceControl.length > 0) {
       console.log(
         `[live-polling] Loaded ${raceControl.length} historical race control messages`
       );
-      processRaceControl(raceControl);
+      if (!currentStateRef.race_control_messages) {
+        currentStateRef.race_control_messages = [];
+      }
+      for (const msg of raceControl) {
+        currentStateRef.race_control_messages.push({
+          date: msg.date,
+          message: msg.message,
+          flag: msg.flag || null,
+          category: msg.category || null,
+          scope: msg.scope || null,
+          sector: msg.sector || null,
+          driver_number: msg.driver_number || null,
+          lap_number: msg.lap_number || null,
+        });
+      }
+      if (currentStateRef.race_control_messages.length > 50) {
+        currentStateRef.race_control_messages =
+          currentStateRef.race_control_messages.slice(-50);
+      }
     }
 
-    // Process all historical team radio
     if (teamRadio.length > 0) {
       console.log(
         `[live-polling] Loaded ${teamRadio.length} historical team radios`
       );
-      processTeamRadio(teamRadio);
+      if (!currentStateRef.team_radio) currentStateRef.team_radio = [];
+      for (const radio of teamRadio) {
+        currentStateRef.team_radio.push({
+          date: radio.date,
+          driver_number: radio.driver_number,
+          recording_url: radio.recording_url,
+        });
+      }
+      if (currentStateRef.team_radio.length > 30) {
+        currentStateRef.team_radio = currentStateRef.team_radio.slice(-30);
+      }
     }
   } catch (error) {
     console.error("[live-polling] Error fetching historical data:", error.message);
@@ -537,15 +427,15 @@ export async function startLivePolling(broadcast, stateRef) {
   broadcastFn = broadcast;
   currentStateRef = stateRef;
 
-  // Initialize state
-  if (!currentStateRef.TimingData) currentStateRef.TimingData = { Lines: {} };
-  if (!currentStateRef.DriverList) currentStateRef.DriverList = {};
-  if (!currentStateRef.Position) currentStateRef.Position = { Position: {} };
-  if (!currentStateRef.RaceControlMessages)
-    currentStateRef.RaceControlMessages = { Messages: [] };
-  if (!currentStateRef.TeamRadio) currentStateRef.TeamRadio = { Captures: [] };
-  if (!currentStateRef.TrackStatus)
-    currentStateRef.TrackStatus = { Status: "1", Message: "AllClear" };
+  // Initialize top-level state keys if absent
+  if (!currentStateRef.session) currentStateRef.session = {};
+  if (!currentStateRef.drivers) currentStateRef.drivers = {};
+  if (!currentStateRef.timing) currentStateRef.timing = {};
+  if (!currentStateRef.location) currentStateRef.location = {};
+  if (!currentStateRef.lap_count) currentStateRef.lap_count = { current: 0, total: 0 };
+  if (!currentStateRef.track_status) currentStateRef.track_status = { flag: "GREEN" };
+  if (!currentStateRef.race_control_messages) currentStateRef.race_control_messages = [];
+  if (!currentStateRef.team_radio) currentStateRef.team_radio = [];
 
   // Get current session
   const session = await getCurrentSession();
@@ -555,17 +445,6 @@ export async function startLivePolling(broadcast, stateRef) {
   }
 
   currentSessionKey = session.session_key;
-
-  // Update session info
-  currentStateRef.SessionInfo = {
-    Meeting: {
-      Name: session.meeting_name || session.location,
-      Circuit: {
-        ShortName: session.circuit_short_name || session.location,
-      },
-    },
-    Name: session.session_name || session.session_type,
-  };
 
   // Fetch drivers
   await fetchDrivers(currentSessionKey);
@@ -600,7 +479,7 @@ export function stopLivePolling() {
 
   currentSessionKey = null;
   lastPollTime = null;
-  Object.keys(driversCache).forEach((k) => delete driversCache[k]);
+  seenPitKeys.clear();
 }
 
 /**
