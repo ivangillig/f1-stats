@@ -1,265 +1,52 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import AlertStrip from "@/components/AlertStrip";
 import Image from "next/image";
-import TopBar from "@/components/TopBar";
-import TimingBoard from "@/components/TimingBoard";
-import TrackMap from "@/components/TrackMap";
-import TeamRadios from "@/components/TeamRadios";
-import RaceControl from "@/components/RaceControl";
-import TrackViolations from "@/components/TrackViolations";
-import Footer from "@/components/Footer";
-import { useF1DataSSE } from "@/hooks/useF1DataSSE";
-import { useLanguage } from "@/contexts/LanguageContext";
+import F1LandingPage from "@/components/F1LandingPage";
+import { useNextF1Session } from "@/hooks/useNextF1Session";
 
-export default function Dashboard() {
-  const { t } = useLanguage();
-  const {
-    drivers,
-    sessionInfo,
-    trackStatus,
-    weather,
-    teamRadios,
-    raceControlMessages,
-    error,
-    proxyMode,
-  } = useF1DataSSE();
-
-  const [activeTab, setActiveTab] = useState<"map" | "control" | "violations" | "radio">("map");
-  const [hoveredDriverNumber, setHoveredDriverNumber] = useState<string | null>(
-    null,
-  );
-  const [pinnedDriverNumber, setPinnedDriverNumber] = useState<string | null>(
-    null,
-  );
-  const [latestRaceControlMessage, setLatestRaceControlMessage] = useState<
-    { category?: string; message: string } | undefined
-  >();
-  const lastShownMessageRef = useRef<string | null>(null);
-
-  // Detect new race control messages and show banner for 5 seconds
-  useEffect(() => {
-    if (raceControlMessages.length > 0) {
-      // Get the newest message (first in array after sorting by date desc)
-      const newestMessage = raceControlMessages[0];
-
-      // Only show banner if this is a NEW message we haven't shown yet
-      if (
-        newestMessage &&
-        newestMessage.message !== lastShownMessageRef.current
-      ) {
-        // Filter out boring messages like "CLEAR IN TRACK SECTOR X"
-        const isInterestingMessage =
-          !newestMessage.message.includes("CLEAR IN TRACK SECTOR") &&
-          !newestMessage.message.includes("TRACK SURFACE SLIPPERY");
-
-        if (isInterestingMessage) {
-          lastShownMessageRef.current = newestMessage.message;
-          setLatestRaceControlMessage({
-            category: newestMessage.category,
-            message: newestMessage.message,
-          });
-        }
-      }
-    }
-  }, [raceControlMessages]);
-
-  const hideBanner = useCallback(() => setLatestRaceControlMessage(undefined), []);
-
-  // Compute latest alert across all three sources for the strip
-  const latestAlert = (() => {
-    const msg = raceControlMessages[0];
-    const radio = teamRadios[0];
-    const msgTime = msg ? new Date(msg.utc).getTime() : 0;
-    const radioTime = radio ? new Date(radio.utc).getTime() : 0;
-
-    if (!msg && !radio) return null;
-
-    if (radio && radioTime > msgTime) {
-      const driver = drivers.find((d) => d.driverNumber === radio.racingNumber);
-      return {
-        label: "Radio",
-        text: driver ? driver.code : `#${radio.racingNumber}`,
-        time: radio.utc,
-        icon: "📻" as string | null,
-        color: "text-purple-400",
-      };
-    }
-
-    if (!msg) return null;
-    const m = msg.message;
-    const isViolation = m.toUpperCase().includes("TRACK LIMITS");
-    return {
-      label: isViolation ? "Violaciones" : "Control de Carrera",
-      color: isViolation ? "text-orange-400" : "text-zinc-400",
-      text: msg.message,
-      time: msg.utc,
-      icon: m.includes("CHEQUERED") ? "🏁"
-        : m.includes("BLACK AND WHITE") ? "⚑"
-        : m.includes("DOUBLE YELLOW") ? "🟡"
-        : m.includes("YELLOW") ? "🟡"
-        : m.includes("RED FLAG") ? "🔴"
-        : m.includes("GREEN") ? "🟢"
-        : m.includes("BLUE FLAG") ? "🔵"
-        : m.includes("SAFETY CAR") ? "🚗"
-        : m.includes("VSC") ? "🟡"
-        : null,
-    };
-  })();
-
-  if (error === "OFFLINE") {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-10">
-        {/* Logo */}
+function LoadingSplash() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex flex-col items-center gap-6">
         <Image
           src="/images/logo.png"
           alt="F1 Dashboard"
-          width={180}
-          height={60}
-          className="opacity-90"
+          width={250}
+          height={50}
           priority
         />
-
-        {/* Línea roja */}
-        <div className="w-20 h-0.5 bg-primary" />
-
-        {/* Mensaje */}
-        <div className="text-center space-y-3">
-          <p
-            className="text-foreground text-2xl tracking-widest uppercase"
-            style={{
-              fontFamily: "'Formula1 Display', sans-serif",
-              fontWeight: 700,
-            }}
-          >
-            {t("error.offline")}
-          </p>
-          <p className="text-muted-foreground text-sm tracking-wide">
-            {t("error.retrying")}
-          </p>
-        </div>
-
-        {/* Indicador animado */}
-        <div className="flex items-center gap-2 text-muted-foreground/50 text-xs tracking-widest uppercase">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-          {t("error.offlineBadge")}
+        <div className="flex gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <motion.div
+              key={i}
+              className="w-1.5 h-1.5 rounded-full bg-primary"
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }}
+            />
+          ))}
         </div>
       </div>
-    );
-  }
-
-  return (
-    <div className="h-screen overflow-hidden bg-background flex flex-col">
-      <TopBar
-        session={sessionInfo}
-        trackStatus={trackStatus}
-        latestRaceControlMessage={latestRaceControlMessage}
-        onBannerComplete={hideBanner}
-      />
-
-      <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {error === "RECONNECTING" && (
-          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm shrink-0">
-            {t("error.reconnecting")}
-          </div>
-        )}
-
-        {proxyMode === "replay" && (
-          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm flex items-center gap-2 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
-            <span className="font-semibold">{t("mode.replayLabel")}</span>
-            <span className="text-yellow-200/70">{t("mode.replayDesc")}</span>
-          </div>
-        )}
-
-        {/* Main content: fills viewport, no page scroll */}
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 p-2">
-          {/* Column 1 - Timing Board with internal scroll */}
-          <div className="h-[42vh] lg:h-auto flex-none overflow-x-auto min-h-0">
-            <TimingBoard
-              drivers={drivers}
-              sessionName={sessionInfo.sessionName}
-              qualifyingPart={sessionInfo.qualifyingPart}
-              hoveredDriverNumber={hoveredDriverNumber}
-              onDriverHover={setHoveredDriverNumber}
-              pinnedDriverNumber={pinnedDriverNumber}
-              onDriverPin={setPinnedDriverNumber}
-            />
-          </div>
-
-          {/* Column 2 - Integrated tabbed panel + alert strip */}
-          <div className="flex-1 min-h-0 flex flex-col gap-1" style={{ minWidth: 220 }}>
-            {/* Integrated panel: tab bar + content inside one bordered box */}
-            <div className="flex-1 min-h-0 border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden flex flex-col">
-              {/* Tab bar */}
-              <div className="flex shrink-0 border-b border-zinc-800 bg-zinc-950/40">
-                {(
-                  [
-                    { id: "map", label: "Mapa" },
-                    { id: "control", label: "Control de Carrera" },
-                    { id: "violations", label: "Violaciones" },
-                    { id: "radio", label: "Radio" },
-                  ] as const
-                ).map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`relative px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
-                      activeTab === tab.id
-                        ? "text-zinc-100"
-                        : "text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    {tab.label}
-                    {activeTab === tab.id && (
-                      <motion.div
-                        layoutId="tab-indicator"
-                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-                        transition={{ type: "spring", stiffness: 400, damping: 35 }}
-                      />
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              {/* Tab content */}
-              <div className="flex-1 min-h-0 overflow-hidden">
-                {activeTab === "map" && (
-                  <TrackMap
-                    drivers={drivers}
-                    circuitKey={sessionInfo.circuitKey}
-                    trackStatus={trackStatus}
-                    raceControlMessages={raceControlMessages}
-                    isSessionActive={sessionInfo.isLive}
-                    qualifyingPart={sessionInfo.qualifyingPart}
-                    hoveredDriverNumber={hoveredDriverNumber ?? pinnedDriverNumber}
-                    weather={weather}
-                  />
-                )}
-                {activeTab === "control" && (
-                  <RaceControl messages={raceControlMessages} />
-                )}
-                {activeTab === "violations" && (
-                  <TrackViolations
-                    messages={raceControlMessages}
-                    drivers={drivers}
-                  />
-                )}
-                {activeTab === "radio" && (
-                  <TeamRadios radios={teamRadios} drivers={drivers} />
-                )}
-              </div>
-            </div>
-
-            {/* Alert strip — latest event across all sources */}
-            {latestAlert && <AlertStrip alert={latestAlert} />}
-          </div>
-        </div>
-      </main>
-
-      <Footer />
     </div>
   );
+}
+
+export default function HomePage() {
+  const router = useRouter();
+  const { loading, isLive } = useNextF1Session();
+
+  useEffect(() => {
+    if (!loading && isLive) {
+      router.push("/dashboard");
+    }
+  }, [loading, isLive, router]);
+
+  if (loading) return <LoadingSplash />;
+
+  // isLive redirects via useEffect; while navigating, keep showing splash
+  if (isLive) return <LoadingSplash />;
+
+  return <F1LandingPage onEnterDemo={() => router.push("/dashboard")} />;
 }

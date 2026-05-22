@@ -82,6 +82,39 @@ export const TRACK_STATUS: Record<
   7: { name: "VSC Ending", color: "#FFA500", key: "vscEnding" },
 };
 
+// Country name to ISO 3166-1 alpha-2 code (for flagcdn.com images)
+export const COUNTRY_CODES: Record<string, string> = {
+  Australia: "au",
+  Austria: "at",
+  Azerbaijan: "az",
+  Bahrain: "bh",
+  Belgium: "be",
+  Brazil: "br",
+  Canada: "ca",
+  China: "cn",
+  France: "fr",
+  Germany: "de",
+  "Great Britain": "gb",
+  Hungary: "hu",
+  Italy: "it",
+  Japan: "jp",
+  Mexico: "mx",
+  Monaco: "mc",
+  Netherlands: "nl",
+  Portugal: "pt",
+  Qatar: "qa",
+  Russia: "ru",
+  "Saudi Arabia": "sa",
+  Singapore: "sg",
+  Spain: "es",
+  UAE: "ae",
+  "United Arab Emirates": "ae",
+  "United States": "us",
+  USA: "us",
+  "Las Vegas": "us",
+  Miami: "us",
+};
+
 // Country name to flag emoji mapping
 export const COUNTRY_FLAGS: Record<string, string> = {
   Australia: "🇦🇺",

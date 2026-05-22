@@ -30,6 +30,9 @@ const PROXY_MODE = process.env.PROXY_MODE || "auto";
 // Track if f1dash client is running
 let isF1DashRunning = false;
 
+// Track first data received (for initial vs incremental broadcast)
+let hasReceivedInitialData = false;
+
 // Store current state
 let currentState = {};
 let sseClients = new Set();
@@ -236,6 +239,47 @@ function deepMerge(target, source) {
   return result;
 }
 
+// Handle data from f1dash client — merge into state and broadcast
+function handleF1DashData(state) {
+  for (const key of Object.keys(state)) {
+    if (typeof state[key] === "object" && state[key] !== null && !Array.isArray(state[key])) {
+      currentState[key] = deepMerge(currentState[key] || {}, state[key]);
+    } else {
+      currentState[key] = state[key];
+    }
+  }
+  if (!hasReceivedInitialData && state.SessionInfo) {
+    hasReceivedInitialData = true;
+    console.log("[proxy] Broadcasting initial state to all clients");
+    broadcastSSE("initial", currentState);
+  } else {
+    broadcastSSE("update", state);
+  }
+}
+
+// Start fallback source when there is no live session
+// Production → OpenF1 REST replay | Development → f1dash feed
+function startFallbackNoLive() {
+  if (process.env.NODE_ENV === "production") {
+    console.log("[proxy] No live session — production: starting OpenF1 replay...");
+    startReplay(broadcastSSE, currentState);
+  } else {
+    console.log("[proxy] No live session — dev: starting f1dash feed...");
+    isF1DashRunning = true;
+    hasReceivedInitialData = false;
+    startF1DashClient(handleF1DashData);
+    // If f1dash produces no data after 20s, fall back to OpenF1 replay
+    setTimeout(() => {
+      if (!hasF1DashState()) {
+        console.log("[proxy] f1dash unavailable — falling back to OpenF1 replay...");
+        stopF1DashClient();
+        isF1DashRunning = false;
+        startReplay(broadcastSSE, currentState);
+      }
+    }, 20000);
+  }
+}
+
 // Broadcast to all SSE clients
 function broadcastSSE(event, data) {
   const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -353,111 +397,52 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 
 // Start server
 server.listen(PORT, async () => {
+  const env = process.env.NODE_ENV === "production" ? "production" : "development";
   console.log(`[proxy] ─────────────────────────────────────`);
   console.log(`[proxy] F1 Proxy running on port ${PORT}`);
-  console.log(`[proxy] Mode: ${PROXY_MODE}`);
+  console.log(`[proxy] Environment: ${env}`);
+  console.log(`[proxy] Mode override: ${PROXY_MODE}`);
   console.log(`[proxy] ─────────────────────────────────────`);
 
-  // Track if we've received initial data (for sending proper event type)
-  let hasReceivedInitialData = false;
-
-  // Determine which mode to use
+  // Explicit overrides (for debugging/testing only)
   if (PROXY_MODE === "f1dash") {
-    // Use f1-dash.com's processed feed (recommended for live sessions)
-    console.log("[proxy] Using f1-dash.com realtime feed...");
+    console.log("[proxy] Override: f1dash feed...");
     isF1DashRunning = true;
-    startF1DashClient((state) => {
-      // Merge the state into currentState (preserving reference)
-      // The state from f1dash is already in F1 SignalR format
-      for (const key of Object.keys(state)) {
-        if (
-          typeof state[key] === "object" &&
-          state[key] !== null &&
-          !Array.isArray(state[key])
-        ) {
-          currentState[key] = deepMerge(currentState[key] || {}, state[key]);
-        } else {
-          currentState[key] = state[key];
-        }
-      }
-      // On first data with SessionInfo, send as "initial" to ensure all clients get full state
-      if (!hasReceivedInitialData && state.SessionInfo) {
-        hasReceivedInitialData = true;
-        console.log("[proxy] Broadcasting initial state to all clients");
-        broadcastSSE("initial", currentState);
-      } else {
-        // Broadcast incremental updates
-        broadcastSSE("update", state);
-      }
-    });
+    startF1DashClient(handleF1DashData);
   } else if (PROXY_MODE === "live-polling") {
-    // Force live polling mode (free REST API)
-    console.log("[proxy] Using live polling mode (REST API)...");
+    console.log("[proxy] Override: live-polling...");
     const success = await startLivePolling(broadcastSSE, currentState);
-    if (!success) {
-      console.log("[proxy] No live session, falling back to replay...");
-      startReplay(broadcastSSE, currentState);
-    }
-  } else if (
-    PROXY_MODE === "openf1" ||
-    (PROXY_MODE === "mqtt" && hasMQTTCredentials())
-  ) {
-    // OpenF1 paid tier via MQTT ("openf1" and "mqtt" are equivalent)
-    console.log("[proxy] Using OpenF1 MQTT client...");
+    if (!success) startFallbackNoLive();
+  } else if (PROXY_MODE === "mqtt" || PROXY_MODE === "openf1") {
+    console.log("[proxy] Override: MQTT...");
     const sessionLive = await startMQTT(broadcastSSE, currentState);
-    if (!sessionLive) {
-      console.log("[proxy] No active F1 session — falling back to replay...");
-      startReplay(broadcastSSE, currentState);
-    }
+    if (!sessionLive) startFallbackNoLive();
   } else if (PROXY_MODE === "replay") {
-    // Force replay mode
-    console.log("[proxy] Using replay mode...");
+    console.log("[proxy] Override: replay...");
     startReplay(broadcastSSE, currentState);
   } else if (PROXY_MODE === "signalr") {
-    console.log("[proxy] Using direct F1 SignalR connection...");
+    console.log("[proxy] Override: direct F1 SignalR...");
     connectToF1();
   } else {
-    // Auto mode: MQTT → f1dash → live-polling → replay
+    // Auto mode — always detect live session first, then pick source by environment
+    console.log(`[proxy] Auto mode — checking for live session...`);
     if (hasMQTTCredentials()) {
-      console.log("[proxy] Auto: MQTT credentials found — using real-time feed...");
-      startMQTT(broadcastSSE, currentState);
+      // startMQTT internally calls checkActiveSession and returns false if no live session
+      const sessionLive = await startMQTT(broadcastSSE, currentState);
+      if (!sessionLive) {
+        console.log("[proxy] No live session via MQTT — using fallback...");
+        startFallbackNoLive();
+      }
     } else {
-      console.log("[proxy] Auto: trying f1-dash.com feed...");
-      isF1DashRunning = true;
-      startF1DashClient((state) => {
-        for (const key of Object.keys(state)) {
-          if (
-            typeof state[key] === "object" &&
-            state[key] !== null &&
-            !Array.isArray(state[key])
-          ) {
-            currentState[key] = deepMerge(currentState[key] || {}, state[key]);
-          } else {
-            currentState[key] = state[key];
-          }
-        }
-        if (!hasReceivedInitialData && state.SessionInfo) {
-          hasReceivedInitialData = true;
-          console.log("[proxy] Broadcasting initial state to all clients");
-          broadcastSSE("initial", currentState);
-        } else {
-          broadcastSSE("update", state);
-        }
-      });
-
-      // If no data arrived after 20s, f1dash is down — fall back to live-polling → replay
-      setTimeout(async () => {
-        if (!hasF1DashState()) {
-          console.log("[proxy] Auto: f1-dash unavailable, trying live-polling...");
-          stopF1DashClient();
-          isF1DashRunning = false;
-          const success = await startLivePolling(broadcastSSE, currentState);
-          if (!success) {
-            console.log("[proxy] Auto: no live session found, using replay...");
-            startReplay(broadcastSSE, currentState);
-          }
-        }
-      }, 20000);
+      // No MQTT credentials: check session manually, then route
+      const sessionLive = await checkActiveSession();
+      if (sessionLive) {
+        console.log("[proxy] Live session detected — starting live-polling...");
+        const success = await startLivePolling(broadcastSSE, currentState);
+        if (!success) startFallbackNoLive();
+      } else {
+        startFallbackNoLive();
+      }
     }
   }
 });

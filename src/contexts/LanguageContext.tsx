@@ -165,6 +165,19 @@ const translations = {
     // Viewers
     "viewers.watching": "Viendo ahora",
     "viewers.count": "{{count}} espectadores",
+
+    // Landing page
+    "landing.nextRace": "Próxima Carrera",
+    "landing.startsIn": "Comienza En",
+    "landing.liveNow": "En Curso",
+    "landing.weekendSchedule": "Este Fin de Semana",
+    "landing.enterDemo": "Entrar al Modo Demo",
+    "landing.replayInfo": "Reproduciendo: Azerbaijan GP 2024 · Baku City Circuit",
+    "landing.scheduleUnavailable": "Calendario no disponible",
+    "landing.countdown.days": "Días",
+    "landing.countdown.hours": "Horas",
+    "landing.countdown.minutes": "Min",
+    "landing.countdown.seconds": "Seg",
   },
   en: {
     // TopBar
@@ -315,6 +328,19 @@ const translations = {
     // Viewers
     "viewers.watching": "Watching now",
     "viewers.count": "{{count}} viewers",
+
+    // Landing page
+    "landing.nextRace": "Next Race",
+    "landing.startsIn": "Starts In",
+    "landing.liveNow": "Live Now",
+    "landing.weekendSchedule": "Weekend Schedule",
+    "landing.enterDemo": "Enter Demo Mode",
+    "landing.replayInfo": "Replaying: Azerbaijan GP 2024 · Baku City Circuit",
+    "landing.scheduleUnavailable": "Schedule unavailable",
+    "landing.countdown.days": "Days",
+    "landing.countdown.hours": "Hours",
+    "landing.countdown.minutes": "Min",
+    "landing.countdown.seconds": "Sec",
   },
 };
 
