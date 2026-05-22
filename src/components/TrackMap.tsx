@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { Driver, TrackStatusInfo, RaceControlMessage, WeatherData } from "@/types/f1";
+import {
+  Driver,
+  TrackStatusInfo,
+  RaceControlMessage,
+  WeatherData,
+} from "@/types/f1";
 import { TEAM_COLORS } from "@/lib/constants";
 import { useLanguage } from "@/contexts/LanguageContext";
 import WeatherOverlay from "@/components/WeatherOverlay";
@@ -33,9 +38,27 @@ const SPACE = 1000;
 const ROTATION_FIX = 90;
 
 const DRIVER_PHOTO_CODES = new Set([
-  "VER", "HAM", "LEC", "NOR", "PIA", "RUS", "ALO", "STR", "SAI",
-  "GAS", "OCO", "HUL", "BOT", "ALB", "PER", "LAW", "HAD", "ANT",
-  "BEA", "BOR", "COL",
+  "VER",
+  "HAM",
+  "LEC",
+  "NOR",
+  "PIA",
+  "RUS",
+  "ALO",
+  "STR",
+  "SAI",
+  "GAS",
+  "OCO",
+  "HUL",
+  "BOT",
+  "ALB",
+  "PER",
+  "LAW",
+  "HAD",
+  "ANT",
+  "BEA",
+  "BOR",
+  "COL",
 ]);
 
 // Helper functions
@@ -89,7 +112,7 @@ export default function TrackMap({
       for (let year = currentYear; year >= 2024; year--) {
         try {
           const response = await fetch(
-            `https://api.multiviewer.app/api/v1/circuits/${circuitKey}/${year}`
+            `https://api.multiviewer.app/api/v1/circuits/${circuitKey}/${year}`,
           );
           if (response.ok) {
             data = await response.json();
@@ -122,7 +145,7 @@ export default function TrackMap({
       "[TrackMap] Session change detected, clearing positions. qualifyingPart:",
       qualifyingPart,
       "isSessionActive:",
-      isSessionActive
+      isSessionActive,
     );
     animatedPositionsRef.current.clear();
     setAnimatedPositions(new Map());
@@ -149,7 +172,7 @@ export default function TrackMap({
       const fixedRotation = (mapData.rotation || 0) + ROTATION_FIX;
 
       const rotatedPoints = mapData.x.map((x, index) =>
-        rotate(x, mapData.y[index], fixedRotation, cx, cy)
+        rotate(x, mapData.y[index], fixedRotation, cx, cy),
       );
 
       const pointsX = rotatedPoints.map((item) => item.x);
@@ -168,14 +191,14 @@ export default function TrackMap({
             corner.trackPosition.y,
             fixedRotation,
             cx,
-            cy
+            cy,
           ),
           labelPos: rotate(
             corner.trackPosition.x + 540 * Math.cos(rad(corner.angle)),
             corner.trackPosition.y + 540 * Math.sin(rad(corner.angle)),
             fixedRotation,
             cx,
-            cy
+            cy,
           ),
         })) || [];
 
@@ -218,7 +241,7 @@ export default function TrackMap({
     console.log(
       "[TrackMap] Mini sector boundaries:",
       boundaries.length,
-      "sectors"
+      "sectors",
     );
     return boundaries;
   }, [points, mapData]);
@@ -239,7 +262,7 @@ export default function TrackMap({
 
     // Sort messages by time (oldest first) to process in order
     const sortedMessages = [...raceControlMessages].sort(
-      (a, b) => new Date(a.utc).getTime() - new Date(b.utc).getTime()
+      (a, b) => new Date(a.utc).getTime() - new Date(b.utc).getTime(),
     );
 
     sortedMessages.forEach((msg) => {
@@ -320,7 +343,7 @@ export default function TrackMap({
           pitIndex /
           Math.max(
             20,
-            drivers.filter((d) => d.inPit || (!d.bestLap && !d.lastLap)).length
+            drivers.filter((d) => d.inPit || (!d.bestLap && !d.lastLap)).length,
           );
         const trackIdx = Math.floor(pitProgress * pitLaneEndIndex);
         pitIndex++;
@@ -338,7 +361,7 @@ export default function TrackMap({
         miniSectorIndexes.length > 0
       ) {
         const completedMiniSectors = driver.miniSectors.filter(
-          (s) => s !== "none"
+          (s) => s !== "none",
         ).length;
 
         if (
@@ -364,7 +387,7 @@ export default function TrackMap({
       // Fallback: use position
       const trackIndex =
         Math.floor(
-          ((driver.position - 1) * points.length) / (drivers.length + 5)
+          ((driver.position - 1) * points.length) / (drivers.length + 5),
         ) % points.length;
       targets.set(driver.driverNumber, {
         targetIndex: trackIndex,
@@ -395,7 +418,7 @@ export default function TrackMap({
         y: p1.y + (p2.y - p1.y) * fraction,
       };
     },
-    [points]
+    [points],
   );
 
   // Animation loop for smooth movement along track points
@@ -582,7 +605,7 @@ export default function TrackMap({
     if (sectorPoints.length === 0) return "";
 
     console.log(
-      `[TrackMap] Drawing sector ${sectorNum} (index ${index}): points ${boundary.start}-${boundary.end}`
+      `[TrackMap] Drawing sector ${sectorNum} (index ${index}): points ${boundary.start}-${boundary.end}`,
     );
 
     return `M${sectorPoints[0].x},${sectorPoints[0].y} ${sectorPoints
@@ -601,7 +624,10 @@ export default function TrackMap({
         {/* Clip paths for driver photos */}
         <defs>
           {carPositions.map(({ driver }) => (
-            <clipPath key={`cp-${driver.driverNumber}`} id={`clip-photo-${driver.driverNumber}`}>
+            <clipPath
+              key={`cp-${driver.driverNumber}`}
+              id={`clip-photo-${driver.driverNumber}`}
+            >
               <circle r={112} />
             </clipPath>
           ))}
@@ -691,17 +717,23 @@ export default function TrackMap({
         {/* Car dots — hovered driver rendered last so it appears on top */}
         {[...carPositions]
           .sort((a, b) =>
-            a.driver.driverNumber === hoveredDriverNumber ? 1 :
-            b.driver.driverNumber === hoveredDriverNumber ? -1 : 0
+            a.driver.driverNumber === hoveredDriverNumber
+              ? 1
+              : b.driver.driverNumber === hoveredDriverNumber
+                ? -1
+                : 0,
           )
           .map(({ driver, x, y }) => {
-            const teamColor = driver.teamColor || TEAM_COLORS[driver.team] || "#666666";
+            const teamColor =
+              driver.teamColor || TEAM_COLORS[driver.team] || "#666666";
             const isHovered = driver.driverNumber === hoveredDriverNumber;
             const hasPhoto = DRIVER_PHOTO_CODES.has(driver.code);
 
             return (
-              <g key={`car.${driver.driverNumber}`} transform={`translate(${x}, ${y})`}>
-
+              <g
+                key={`car.${driver.driverNumber}`}
+                transform={`translate(${x}, ${y})`}
+              >
                 {/* Label outside dot — fuera del scale group para no desplazar el fill-box */}
                 <text
                   fontWeight="bold"
@@ -774,4 +806,3 @@ export default function TrackMap({
 }
 
 // Generate a simple oval track for demo mode
-
