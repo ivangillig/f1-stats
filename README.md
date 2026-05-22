@@ -1,6 +1,6 @@
 # F1 Live Dashboard
 
-Un dashboard en tiempo real para ver la telemetría de F1, inspirado en [f1-dash.com](https://f1-dash.com).
+Dashboard en tiempo real para telemetría de Fórmula 1, construido con Next.js y Node.js. Consume datos de [OpenF1](https://openf1.org) vía MQTT (tier pago) o REST polling (tier gratuito), con modo replay para cuando no hay sesión activa.
 
 ![F1 Dashboard](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
@@ -9,47 +9,47 @@ Un dashboard en tiempo real para ver la telemetría de F1, inspirado en [f1-dash
 
 ## Características
 
-- 🏎️ **Clasificación en vivo** - Posiciones actualizadas en tiempo real
-- ⏱️ **Tiempos de sector** - Con indicadores de colores (púrpura = mejor general, verde = mejor personal, amarillo = mejor en este sector)
-- 🔴 **Estado de neumáticos** - Compuesto y edad de los neumáticos con indicadores visuales
-- 🏁 **Estado de pista** - Bandera verde, amarilla, safety car, red flag, etc.
-- 📊 **Info de sesión** - Tiempo restante, vuelta actual, tipo de sesión, clima
-- 🗺️ **Mapa de circuito** - Visualización de posiciones de pilotos en el circuito
-- 📻 **Radio de equipos** - Capturas de audio de comunicaciones
-- 🚨 **Race Control** - Mensajes oficiales de dirección de carrera
-- ⚠️ **Track Violations** - Límites de pista y penalizaciones
-- 🌡️ **Datos meteorológicos** - Temperatura de pista/aire, humedad, viento
-- 🎙️ **Banner de Race Control** - Notificaciones animadas de mensajes importantes (estilo FIA oficial)
+- 🏎️ **Clasificación en vivo** — posiciones actualizadas en tiempo real
+- ⏱️ **Tiempos de sector** — con indicadores de colores (púrpura = mejor general, verde = mejor personal, amarillo = en progreso)
+- 🔴 **Estado de neumáticos** — compuesto y edad con indicadores visuales
+- 🏁 **Estado de pista** — verde, amarilla, safety car, VSC, red flag, etc.
+- 📊 **Info de sesión** — tiempo restante, vuelta actual, tipo de sesión
+- 🗺️ **Mapa de circuito** — posiciones de pilotos en tiempo real sobre el trazado
+- 📻 **Radio de equipos** — capturas de audio de comunicaciones
+- 🚨 **Race Control** — mensajes oficiales de dirección de carrera con banner animado
+- ⚠️ **Track Violations** — límites de pista y penalizaciones
+- 🌡️ **Datos meteorológicos** — temperatura de pista/aire, humedad, viento
+- 👁️ **Contador de espectadores** — visitantes en vivo deduplicados por sesión de browser
 
 ## Arquitectura
 
-Este proyecto consta de dos componentes:
+```
+Browser (Next.js 14)
+  └─ useF1DataSSE.ts (EventSource → /api/sse)
+       └─ Next.js rewrite → proxy:4000
+            └─ proxy/server.js (Node.js)
+                 ├─ mqtt-client.js    (OpenF1 MQTT — tier pago, fuente primaria)
+                 ├─ live-polling.js   (OpenF1 REST polling — tier gratuito, fallback)
+                 └─ replay.js         (OpenF1 datos históricos — cuando no hay sesión activa)
+```
 
-### Frontend (Next.js 14)
-
-- Dashboard interactivo con componentes React
-- Conexión SSE (Server-Sent Events) para actualizaciones en tiempo real
-- Diseño responsive con Tailwind CSS
-- Fuentes oficiales Formula1 Display
-
-### Backend Proxy (Node.js)
-
-- Servidor proxy que se conecta a la API SignalR de F1 Live Timing
-- Convierte WebSocket a SSE para compatibilidad con navegadores
-- Maneja la negociación y subscripción a los streams de datos
-- Puerto: 4000
+El proxy normaliza todas las fuentes en un único stream SSE. El frontend nunca habla directamente con las APIs de F1.
 
 ## Inicio Rápido
 
 ### Opción 1: Desarrollo Local
 
 ```bash
-# Terminal 1 - Backend Proxy
+# Copiar variables de entorno
+cp .env.example .env
+cp proxy/.env.example proxy/.env
+
+# Terminal 1 — Proxy (puerto 4000)
 cd proxy
 npm install
-npm start
+npm run dev
 
-# Terminal 2 - Frontend
+# Terminal 2 — Frontend (puerto 3000)
 npm install
 npm run dev
 
@@ -63,90 +63,94 @@ docker-compose up
 # Abrir http://localhost:3000
 ```
 
-## Scripts Disponibles
+## Modos del Proxy
+
+Configurar `PROXY_MODE` en `proxy/.env`:
+
+| Modo | Fuente | Credenciales |
+|---|---|---|
+| `mqtt` | OpenF1 MQTT — push en tiempo real (tier pago) | Sí (`OPENF1_USERNAME` / `OPENF1_PASSWORD`) |
+| `live-polling` | OpenF1 REST API — polling cada 4–8s (tier gratuito) | No |
+| `replay` | Datos históricos OpenF1 (GP de Azerbaiyán 2024) | No |
+| `auto` | MQTT → live-polling → replay (fallback automático) | Depende |
+
+Con `auto`, el proxy detecta si hay credenciales MQTT y si hay una sesión activa; si no, cae automáticamente a replay.
+
+## Variables de Entorno
+
+### Frontend (`.env`)
+
+```env
+# URL del proxy (opcional, por defecto usa el rewrite de Next.js)
+NEXT_PUBLIC_PROXY_URL=http://localhost:4000
+```
+
+### Proxy (`proxy/.env`)
+
+```env
+PROXY_MODE=auto
+
+# Solo necesario para MQTT (OpenF1 tier pago)
+OPENF1_USERNAME=tu_usuario
+OPENF1_PASSWORD=tu_contraseña
+```
+
+## Scripts
 
 ### Frontend
 
-| Comando         | Descripción                      |
-| --------------- | -------------------------------- |
-| `npm run dev`   | Inicia el servidor de desarrollo |
-| `npm run build` | Compila para producción          |
-| `npm run start` | Inicia el servidor de producción |
-| `npm run lint`  | Ejecuta el linter                |
+| Comando | Descripción |
+|---|---|
+| `npm run dev` | Servidor de desarrollo |
+| `npm run build` | Compilar para producción |
+| `npm run start` | Servidor de producción |
+| `npm run lint` | Linter |
 
-### Backend (proxy/)
+### Proxy (`proxy/`)
 
-| Comando     | Descripción              |
-| ----------- | ------------------------ |
-| `npm start` | Inicia el servidor proxy |
-
-## Fuente de Datos
-
-Este proyecto utiliza la API oficial de F1 Live Timing que transmite datos en tiempo real durante las sesiones oficiales de F1 a través de SignalR WebSocket.
-
-**Endpoints:**
-
-- Proxy Backend: `http://localhost:4000/api/sse`
-- Frontend: `http://localhost:3000`
-
-**Nota:** Los datos en vivo solo están disponibles durante las sesiones oficiales (prácticas, clasificación, carrera). Cuando no hay sesión activa, se muestran datos de demostración.
+| Comando | Descripción |
+|---|---|
+| `npm run dev` | Proxy con nodemon (recarga automática) |
+| `npm start` | Proxy en producción |
 
 ## Tecnologías
 
 ### Frontend
 
-- **Next.js 14** - Framework React con App Router
-- **TypeScript** - Tipado estático
-- **Tailwind CSS** - Utilidad CSS
-- **shadcn/ui** - Componentes UI
-- **Formula1 Display** - Fuentes oficiales de F1
+- **Next.js 14** — App Router, React 18
+- **TypeScript** — tipado estricto
+- **Tailwind CSS** — utilidades CSS con tokens de tema F1
+- **shadcn/ui** — componentes UI
+- **Framer Motion** — animaciones
+- **Formula1 Display** — fuentes tipográficas oficiales
 
-### Backend
+### Backend (proxy)
 
-- **Node.js** - Runtime de JavaScript
-- **@microsoft/signalr** - Cliente SignalR para WebSocket
-- **Express** - Framework web minimalista
-- **cors** - Middleware para CORS
+- **Node.js 20**
+- **mqtt** — cliente MQTT para OpenF1 broker (`mqtt.openf1.org:8883`, TLS)
+- **ws** — WebSocket
+- **nodemon** — recarga en desarrollo
 
-## Variables de Entorno
+## Fuente de Datos
 
-Crea un archivo `.env.local` en la raíz del proyecto:
+[OpenF1](https://openf1.org) es una API pública de telemetría de F1:
 
-```env
-# URL del backend proxy (opcional, por defecto http://localhost:4000)
-NEXT_PUBLIC_PROXY_URL=http://localhost:4000
-```
+- **Tier gratuito** — REST API, ~30 req/min. Suficiente para live-polling y replay.
+- **Tier pago** — acceso MQTT para push en tiempo real y mayor rate limit (60 req/min).
 
-## Desarrollo
-
-### Agregar nuevos componentes
-
-```bash
-npx shadcn-ui@latest add [component]
-```
+Los datos en vivo solo están disponibles durante sesiones oficiales (prácticas, clasificación, carrera). Fuera de sesión, el proxy sirve automáticamente una sesión grabada del GP de Azerbaiyán 2024.
 
 ## Contribuir
 
-Las contribuciones son bienvenidas. Por favor:
-
 1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
+2. Crea una rama (`git checkout -b feature/mi-feature`)
+3. Commit los cambios (`git commit -m 'feat: descripción'`)
+4. Push (`git push origin feature/mi-feature`)
 5. Abre un Pull Request
-
-## Créditos
-
-- Inspirado en [f1-dash.com](https://f1-dash.com)
-- Datos de [F1 Live Timing API](https://livetiming.formula1.com)
-- Mapas de circuito de [MultiViewer API](https://api.multiviewer.app)
-- Fuentes Formula1 Display por Formula 1
 
 ## Disclaimer
 
-Este proyecto no está afiliado, asociado, autorizado, respaldado por, o de ninguna manera oficialmente conectado con Formula 1, FIA, o cualquiera de sus subsidiarias o afiliados. Todos los nombres, marcas y logotipos son propiedad de sus respectivos dueños.
-
-Este es un proyecto educativo y de código abierto para fines de demostración.
+Este proyecto no está afiliado, asociado, autorizado ni respaldado por Formula 1, FIA, o cualquiera de sus subsidiarias. Todos los nombres, marcas y logotipos son propiedad de sus respectivos dueños. Proyecto educativo y de código abierto.
 
 ## Licencia
 

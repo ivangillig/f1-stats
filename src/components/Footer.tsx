@@ -24,6 +24,13 @@ export default function Footer() {
             GitHub
           </a>
           <span className="text-zinc-700">•</span>
+          <a
+            href="https://github.com/sponsors/ivangillig"
+            className="text-pink-400 hover:underline"
+          >
+            ♥ Sponsor
+          </a>
+          <span className="text-zinc-700">•</span>
           v1.0.0
         </span>
         <span className="text-[10px] text-zinc-600">
