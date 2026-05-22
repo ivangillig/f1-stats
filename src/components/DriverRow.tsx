@@ -226,24 +226,20 @@ export default function DriverRow({
   // Check if driver is in elimination zone for Qualifying (at risk of being eliminated)
   const isInEliminationZone = (): boolean => {
     const pos = driver.position;
-    const session = sessionName?.toLowerCase() || "";
-    const isSprint = session.includes("sprint") || session.includes("sq");
 
+    // Both regular Q and Sprint Q eliminate 5 per round: 20→15→10
     // Use qualifyingPart if available (1=Q1/SQ1, 2=Q2/SQ2, 3=Q3/SQ3)
     if (qualifyingPart) {
-      if (qualifyingPart === 1) return isSprint ? pos >= 15 : pos >= 16;
-      if (qualifyingPart === 2) return isSprint ? pos >= 9 : pos >= 11;
+      if (qualifyingPart === 1) return pos >= 16; // positions 16-20 in danger
+      if (qualifyingPart === 2) return pos >= 11; // positions 11-15 in danger
       // Q3/SQ3: no elimination zone
       return false;
     }
 
     // Fallback: parse from sessionName
-    if (session.includes("q1") || session === "qualifying 1") {
-      return isSprint ? pos >= 15 : pos >= 16;
-    }
-    if (session.includes("q2") || session === "qualifying 2") {
-      return isSprint ? pos >= 9 : pos >= 11;
-    }
+    const session = sessionName?.toLowerCase() || "";
+    if (session.includes("q1") || session.includes("qualifying 1")) return pos >= 16;
+    if (session.includes("q2") || session.includes("qualifying 2")) return pos >= 11;
     return false;
   };
 
