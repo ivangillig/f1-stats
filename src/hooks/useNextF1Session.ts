@@ -54,8 +54,9 @@ export function useNextF1Session(): NextSessionState {
 
   const fetchSessions = useCallback(() => {
     // Use yesterday to catch sessions that started before midnight but are still running
+    // Route through proxy so credentials are used when OpenF1 restricts access during live sessions
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    fetch(`https://api.openf1.org/v1/sessions?date_start>=${yesterday}`)
+    fetch(`/api/proxy/api/sessions?date_start>=${yesterday}`)
       .then((r) => r.json())
       .then((data: OpenF1Session[]) => {
         const now = Date.now();

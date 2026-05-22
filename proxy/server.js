@@ -8,6 +8,7 @@ import {
   isMQTTRunning,
   hasMQTTCredentials,
   checkActiveSession,
+  ensureValidToken,
 } from "./mqtt-client.js";
 import {
   startLivePolling,
@@ -385,6 +386,29 @@ const server = http.createServer((req, res) => {
   if (req.url === "/api/viewers") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ viewers: sseClients.size }));
+    return;
+  }
+
+  // Sessions proxy — forwards to OpenF1 with auth credentials when available
+  // Avoids 401 that OpenF1 returns to unauthenticated clients during live sessions
+  if (req.url.startsWith("/api/sessions")) {
+    const reqUrl = new URL(req.url, "http://localhost");
+    const queryString = reqUrl.search; // e.g. "?date_start>=2026-05-21"
+    const upstreamUrl = `https://api.openf1.org/v1/sessions${queryString}`;
+    try {
+      const headers = { "Accept": "application/json" };
+      if (hasMQTTCredentials()) {
+        const token = await ensureValidToken();
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const upstreamRes = await fetch(upstreamUrl, { headers });
+      const body = await upstreamRes.text();
+      res.writeHead(upstreamRes.status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(body);
+    } catch (err) {
+      res.writeHead(502, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "upstream_error", detail: err.message }));
+    }
     return;
   }
 
