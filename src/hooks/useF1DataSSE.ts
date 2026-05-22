@@ -11,7 +11,7 @@ import {
   RadioCapture,
   RaceControlMessage,
 } from "@/types/f1";
-import { DRIVERS } from "@/lib/constants";
+import { DRIVERS, CIRCUIT_TO_COUNTRY } from "@/lib/constants";
 
 // Use NEXT_PUBLIC_PROXY_URL if set (preferred — direct connection, no Next.js rewrite needed).
 // Falls back to /api/proxy (Next.js rewrite) for backwards compatibility.
@@ -80,6 +80,9 @@ export function useF1DataSSE(): F1DataState {
     extrapolating: boolean;
   } | null>(null);
 
+  // Fallback: session end date from SessionInfo.EndDate
+  const sessionEndDateRef = useRef<Date | null>(null);
+
   // Store driver list from API (updated in real-time)
   const driverListRef = useRef<
     Record<
@@ -112,7 +115,7 @@ export function useF1DataSSE(): F1DataState {
                   driverData.FullName ||
                   driverData.BroadcastName ||
                   `Driver ${num}`,
-                team: driverData.TeamName || "Unknown",
+                team: driverData.TeamName || null,
                 code: driverData.Tla || num,
                 teamColor: driverData.TeamColour
                   ? `#${driverData.TeamColour}`
@@ -162,6 +165,14 @@ export function useF1DataSSE(): F1DataState {
         };
       }
 
+      // Store session EndDate as fallback clock source
+      if (sessionData.EndDate) {
+        const endDate = new Date(sessionData.EndDate);
+        if (!isNaN(endDate.getTime())) {
+          sessionEndDateRef.current = endDate;
+        }
+      }
+
       if (
         sessionData.Meeting ||
         extrapolatedClock?.Remaining ||
@@ -173,13 +184,22 @@ export function useF1DataSSE(): F1DataState {
         if (sessionData.Path) {
           sessionPathRef.current = sessionData.Path;
         }
+        const circuitShortName = sessionData.Meeting?.Circuit?.ShortName;
+        const derivedType = sessionData.Type ||
+          (/^Practice/i.test(sessionData.Name) ? "Practice" :
+           sessionData.Name === "Race" ? "Race" :
+           /qualifying/i.test(sessionData.Name) ? "Qualifying" :
+           /sprint/i.test(sessionData.Name) ? "Sprint" : undefined);
+        const derivedCountry = sessionData.Meeting?.Country?.Name ||
+          (circuitShortName ? CIRCUIT_TO_COUNTRY[circuitShortName] : undefined);
+
         setSessionInfo((prev) => ({
           ...prev,
-          type: sessionData.Type || prev.type,
+          type: derivedType || prev.type,
           name: sessionData.Meeting?.Name || prev.name,
           sessionName: sessionData.Name || prev.sessionName, // "Practice 3", "Qualifying", etc.
-          track: sessionData.Meeting?.Circuit?.ShortName || prev.track,
-          country: sessionData.Meeting?.Country?.Name || prev.country,
+          track: circuitShortName || prev.track,
+          country: derivedCountry || prev.country,
           // Don't set remainingTime here, let the interval handle it
           currentLap: lapCount.CurrentLap || prev.currentLap,
           totalLaps: lapCount.TotalLaps || prev.totalLaps,
@@ -319,9 +339,14 @@ export function useF1DataSSE(): F1DataState {
             ([num, driverData]: [string, any]) => {
               const existing = driversMap.get(num);
 
-              // Use API DriverList first, then fallback to hardcoded DRIVERS, then defaults
+              // Use API DriverList first, then fallback to hardcoded DRIVERS, then defaults.
+              // When TeamName/TeamColour are null, look up by driver code (Tla) since
+              // racing numbers can change year-to-year (e.g. champion takes #1).
               const apiDriverInfo = driverListRef.current[num];
-              const hardcodedInfo = DRIVERS[num];
+              const apiCode = apiDriverInfo?.code || num;
+              const hardcodedByCode = Object.values(DRIVERS).find(d => d.code === apiCode);
+              const hardcodedByNum = DRIVERS[num];
+              const hardcodedInfo = hardcodedByCode || hardcodedByNum;
               const driverInfo = {
                 name:
                   apiDriverInfo?.name || hardcodedInfo?.name || `Driver ${num}`,
@@ -737,7 +762,22 @@ export function useF1DataSSE(): F1DataState {
   useEffect(() => {
     const updateClock = () => {
       const clockData = extrapolatedClockRef.current;
-      if (!clockData) return;
+
+      // Fallback: derive remaining time from SessionInfo.EndDate when ExtrapolatedClock is absent
+      if (!clockData) {
+        const endDate = sessionEndDateRef.current;
+        if (!endDate) return;
+        const diffMs = endDate.getTime() - Date.now();
+        const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        const formatted = hours > 0
+          ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+          : `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+        setSessionInfo((prev) => ({ ...prev, remainingTime: formatted }));
+        return;
+      }
 
       // Parse the remaining time (format: HH:MM:SS or MM:SS)
       const remainingParts = clockData.remaining.split(":").map(Number);

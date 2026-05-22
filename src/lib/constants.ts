@@ -82,6 +82,34 @@ export const TRACK_STATUS: Record<
   7: { name: "VSC Ending", color: "#FFA500", key: "vscEnding" },
 };
 
+// Circuit ShortName → Country name fallback (when API omits Meeting.Country)
+export const CIRCUIT_TO_COUNTRY: Record<string, string> = {
+  Montreal: "Canada",
+  Silverstone: "Great Britain",
+  Monza: "Italy",
+  Imola: "Italy",
+  Spa: "Belgium",
+  Monaco: "Monaco",
+  Barcelona: "Spain",
+  Suzuka: "Japan",
+  Zandvoort: "Netherlands",
+  Baku: "Azerbaijan",
+  Jeddah: "Saudi Arabia",
+  Melbourne: "Australia",
+  Sakhir: "Bahrain",
+  Shanghai: "China",
+  Budapest: "Hungary",
+  Singapore: "Singapore",
+  Austin: "United States",
+  "Mexico City": "Mexico",
+  "São Paulo": "Brazil",
+  "Las Vegas": "United States",
+  Lusail: "Qatar",
+  "Yas Island": "UAE",
+  Spielberg: "Austria",
+  Miami: "United States",
+};
+
 // Country name to ISO 3166-1 alpha-2 code (for flagcdn.com images)
 export const COUNTRY_CODES: Record<string, string> = {
   Australia: "au",
