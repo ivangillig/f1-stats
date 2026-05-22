@@ -18,6 +18,7 @@ services:
       - OPENF1_USERNAME=${OPENF1_USERNAME}
       - OPENF1_PASSWORD=${OPENF1_PASSWORD}
       - F1_SSE_SECURE=${F1_SSE_SECURE:-true}
+      - NODE_ENV=${NODE_ENV:-development}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
       interval: 30s

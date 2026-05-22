@@ -47,7 +47,8 @@ function getCountryCode(country: string): string {
 
 // Hook to fetch viewer count
 function useViewerCount() {
-  const [viewers, setViewers] = useState<number | null>(null);
+  // Start at 1 — the current user is already on the dashboard
+  const [viewers, setViewers] = useState<number>(1);
 
   useEffect(() => {
     const fetchViewers = async () => {
@@ -56,7 +57,8 @@ function useViewerCount() {
         const res = await fetch(`${proxyUrl}/api/viewers`);
         if (res.ok) {
           const data = await res.json();
-          setViewers(data.viewers);
+          // Always show at least 1 (the current user)
+          setViewers(Math.max(1, data.viewers));
         }
       } catch {
         // Silently fail - viewers count is not critical
@@ -299,7 +301,7 @@ export default function TopBar({
           <LanguageToggle />
 
           {/* Viewers count */}
-          {viewers !== null && viewers > 0 && (
+          {viewers > 0 && (
             <div
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-800/50 border border-zinc-700"
               title={t("viewers.watching") || "Watching now"}

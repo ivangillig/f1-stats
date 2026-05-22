@@ -680,7 +680,13 @@ export function useF1DataSSE(): F1DataState {
 
     console.log(`[SSE] Connecting to ${PROXY_URL}/api/sse`);
 
-    const eventSource = new EventSource(`${PROXY_URL}/api/sse`);
+    let clientId = localStorage.getItem("f1_client_id");
+    if (!clientId) {
+      clientId = crypto.randomUUID();
+      localStorage.setItem("f1_client_id", clientId);
+    }
+
+    const eventSource = new EventSource(`${PROXY_URL}/api/sse?clientId=${clientId}`);
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {

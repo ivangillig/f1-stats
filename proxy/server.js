@@ -35,7 +35,8 @@ let hasReceivedInitialData = false;
 
 // Store current state
 let currentState = {};
-let sseClients = new Set();
+// Map<clientId, res> — deduplicates reconnects and StrictMode double-mounts
+let sseClients = new Map();
 
 // SignalR subscription message
 const SIGNALR_SUBSCRIBE = JSON.stringify({
@@ -284,11 +285,11 @@ function startFallbackNoLive() {
 function broadcastSSE(event, data) {
   const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 
-  sseClients.forEach((client) => {
+  sseClients.forEach((client, clientId) => {
     try {
       client.write(message);
     } catch (err) {
-      sseClients.delete(client);
+      sseClients.delete(clientId);
     }
   });
 }
@@ -334,7 +335,17 @@ const server = http.createServer((req, res) => {
   }
 
   // SSE endpoint
-  if (req.url === "/api/sse") {
+  const reqUrl = new URL(req.url, "http://localhost");
+  if (reqUrl.pathname === "/api/sse") {
+    const clientId = reqUrl.searchParams.get("clientId") || `anon-${Date.now()}-${Math.random()}`;
+
+    // Close any existing connection for this clientId (handles reconnects / StrictMode double-mount)
+    const existing = sseClients.get(clientId);
+    if (existing) {
+      try { existing.end(); } catch (_) {}
+      sseClients.delete(clientId);
+    }
+
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -345,9 +356,8 @@ const server = http.createServer((req, res) => {
     // Send current state as initial (even if empty, so client knows connection is working)
     res.write(`event: initial\ndata: ${JSON.stringify(currentState)}\n\n`);
 
-    // Add client to set
-    sseClients.add(res);
-    console.log(`[proxy-sse] Client connected. Total: ${sseClients.size}`);
+    sseClients.set(clientId, res);
+    console.log(`[proxy-sse] Client connected (${clientId}). Unique viewers: ${sseClients.size}`);
 
     // Keep alive
     const keepAlive = setInterval(() => {
@@ -357,8 +367,8 @@ const server = http.createServer((req, res) => {
     // Remove client on close
     req.on("close", () => {
       clearInterval(keepAlive);
-      sseClients.delete(res);
-      console.log(`[proxy-sse] Client disconnected. Total: ${sseClients.size}`);
+      if (sseClients.get(clientId) === res) sseClients.delete(clientId);
+      console.log(`[proxy-sse] Client disconnected (${clientId}). Unique viewers: ${sseClients.size}`);
     });
 
     return;
