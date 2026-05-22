@@ -117,6 +117,35 @@ tire.soft / tire.medium / tire.hard / tire.inter / tire.wet
 
 `LanguageContext.tsx` provides EN/ES translations. Toggle via `LanguageToggle` component. All user-facing strings should use the context hook.
 
+## OpenF1 API Reference
+
+Base URL: `https://api.openf1.org/v1`. All endpoints support generic filtering on any non-array field with `>=`, `<=`, `>`, `<` operators, and `csv=true` for CSV output.
+
+| Endpoint | Description | Key response fields |
+|---|---|---|
+| `/v1/car_data` | Car telemetry ~3.7 Hz | `brake`, `throttle`, `rpm`, `speed`, `drs`, `n_gear`, `date` |
+| `/v1/championship_drivers` | Driver standings (beta, races only) | `driver_number`, `points_current`, `position_current` |
+| `/v1/championship_teams` | Team standings (beta, races only) | `team_name`, `points_current`, `position_current` |
+| `/v1/drivers` | Driver info for a session | `driver_number`, `name_acronym`, `full_name`, `team_name`, `team_colour`, `headshot_url` |
+| `/v1/intervals` | Gap to leader / interval ~4s (races only) | `driver_number`, `gap_to_leader`, `interval`, `date` |
+| `/v1/laps` | Per-lap data | `driver_number`, `lap_number`, `lap_duration`, `duration_sector_1/2/3`, `segments_sector_1/2/3`, `is_pit_out_lap`, `date_start` |
+| `/v1/location` | Car position on circuit ~3.7 Hz | `driver_number`, `x`, `y`, `z`, `date` |
+| `/v1/meetings` | Grand Prix weekend info | `meeting_key`, `meeting_name`, `circuit_key`, `circuit_short_name`, `country_name`, `date_start`, `date_end` |
+| `/v1/overtakes` | Overtake events (races only) | `overtaking_driver_number`, `overtaken_driver_number`, `position`, `date` |
+| `/v1/pit` | **Pit lane events** | `driver_number`, `lap_number`, `date` (entry time), `lane_duration` (total in pit lane, seconds), `stop_duration` (stationary time, seconds) |
+| `/v1/position` | Race position changes | `driver_number`, `position`, `date` |
+| `/v1/race_control` | Flags, safety car, incidents | `flag`, `category`, `message`, `scope`, `sector`, `driver_number`, `lap_number`, `date` |
+| `/v1/sessions` | Session info | `session_key`, `session_name`, `session_type`, `date_start`, `date_end`, `circuit_key`, `location` |
+| `/v1/session_result` | Final standings (available minutes after) | `driver_number`, `position`, `gap_to_leader`, `number_of_laps` |
+| `/v1/starting_grid` | Race starting grid (available minutes after) | `driver_number`, `position`, `lap_duration` |
+| `/v1/stints` | Stint/tire info | `driver_number`, `stint_number`, `compound`, `lap_start`, `lap_end`, `tyre_age_at_start` |
+| `/v1/team_radio` | Team radio recordings | `driver_number`, `recording_url`, `date` |
+| `/v1/weather` | Track weather (per minute) | `air_temperature`, `track_temperature`, `rainfall`, `humidity`, `wind_speed`, `wind_direction` |
+
+**Pit detection pattern**: A driver is in the pit lane between `/v1/pit`'s `date` and `date + lane_duration * 1000ms`. The `is_pit_out_lap` field in `/v1/laps` only marks the **outlap** (lap after exit) — it does NOT indicate the driver is currently in the pit lane.
+
+**MQTT topics** mirror REST paths: `v1/laps`, `v1/pit`, `v1/position`, etc.
+
 ## Conventions
 
 - Components go in `src/components/`. Simple UI primitives go in `src/components/ui/` (shadcn/ui pattern).

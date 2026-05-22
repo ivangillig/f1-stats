@@ -112,6 +112,7 @@ async function pollData() {
     `${API_BASE}/race_control?session_key=${currentSessionKey}&date>=${sinceISO}`,
     `${API_BASE}/team_radio?session_key=${currentSessionKey}&date>=${sinceISO}`,
     `${API_BASE}/stints?session_key=${currentSessionKey}`,
+    `${API_BASE}/pit?session_key=${currentSessionKey}&date>=${sinceISO}`,
   ];
 
   try {
@@ -123,6 +124,7 @@ async function pollData() {
       raceControl,
       teamRadio,
       stints,
+      pits,
     ] = await Promise.all(urls.map(fetchJSON));
 
     // Process positions
@@ -145,6 +147,9 @@ async function pollData() {
 
     // Process stints (tire info)
     processStints(stints);
+
+    // Process pit stops
+    processPits(pits);
 
     // Broadcast update
     if (broadcastFn) {
@@ -423,6 +428,38 @@ function processStints(stints) {
       0,
       data.stintNumber - 1
     );
+  });
+}
+
+/**
+ * Process pit stop events.
+ * If the car is still within its pit lane window (date to date+lane_duration),
+ * marks it InPit=true and schedules a timer to clear it on exit.
+ */
+function processPits(pits) {
+  if (!pits || !currentStateRef) return;
+
+  if (!currentStateRef.TimingData) currentStateRef.TimingData = { Lines: {} };
+
+  const now = Date.now();
+  pits.forEach((p) => {
+    if (!p.date || !p.lane_duration) return;
+    const num = String(p.driver_number);
+    if (!currentStateRef.TimingData.Lines[num]) {
+      currentStateRef.TimingData.Lines[num] = {};
+    }
+    const entryMs = new Date(p.date).getTime();
+    const exitMs = entryMs + p.lane_duration * 1000;
+    if (now >= entryMs && now <= exitMs) {
+      currentStateRef.TimingData.Lines[num].InPit = true;
+      const remainingMs = exitMs - now;
+      setTimeout(() => {
+        if (currentStateRef?.TimingData?.Lines[num]) {
+          currentStateRef.TimingData.Lines[num].InPit = false;
+          if (broadcastFn) broadcastFn("update", currentStateRef);
+        }
+      }, remainingMs + 1000);
+    }
   });
 }
 

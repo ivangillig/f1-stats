@@ -30,6 +30,7 @@ const TOPICS = [
   "v1/team_radio",
   "v1/weather",
   "v1/stints",
+  "v1/pit",
 ];
 
 // State
@@ -136,6 +137,9 @@ function processMessage(topic, message) {
         break;
       case "stints":
         handleStint(data);
+        break;
+      case "pit":
+        handlePit(data);
         break;
     }
 
@@ -379,6 +383,38 @@ function handleWeather(data) {
 }
 
 /**
+ * Handle pit stop events.
+ * Sets inPit=true if the car is still within its pit lane window (date to date+lane_duration),
+ * and schedules a timer to clear it when the window closes.
+ */
+function handlePit(data) {
+  const num = String(data.driver_number);
+  if (!driverData[num]) driverData[num] = {};
+
+  driverData[num].pitStops = (driverData[num].pitStops || 0) + 1;
+
+  if (data.date && data.lane_duration) {
+    const entryMs = new Date(data.date).getTime();
+    const exitMs = entryMs + data.lane_duration * 1000;
+    const now = Date.now();
+
+    if (now >= entryMs && now <= exitMs) {
+      driverData[num].inPit = true;
+      const remainingMs = exitMs - now;
+      setTimeout(() => {
+        if (driverData[num]) {
+          driverData[num].inPit = false;
+          updateTimingData(num);
+          if (broadcastFn && currentStateRef) broadcastFn("update", currentStateRef);
+        }
+      }, remainingMs + 1000);
+    }
+  }
+
+  updateTimingData(num);
+}
+
+/**
  * Handle stint data (tire info)
  */
 function handleStint(data) {
@@ -475,7 +511,7 @@ async function fetchHistoricalData(sessionKey) {
       Authorization: `Bearer ${token}`,
     };
 
-    const [raceControlRes, teamRadioRes, driversRes, lapsRes, intervalsRes, stintsRes] =
+    const [raceControlRes, teamRadioRes, driversRes, lapsRes, intervalsRes, stintsRes, pitRes] =
       await Promise.all([
         fetch(`${API_BASE}/race_control?session_key=${sessionKey}`, { headers }),
         fetch(`${API_BASE}/team_radio?session_key=${sessionKey}`, { headers }),
@@ -483,6 +519,7 @@ async function fetchHistoricalData(sessionKey) {
         fetch(`${API_BASE}/laps?session_key=${sessionKey}`, { headers }),
         fetch(`${API_BASE}/intervals?session_key=${sessionKey}`, { headers }),
         fetch(`${API_BASE}/stints?session_key=${sessionKey}`, { headers }),
+        fetch(`${API_BASE}/pit?session_key=${sessionKey}`, { headers }),
       ]);
 
     if (raceControlRes.ok) {
@@ -524,6 +561,26 @@ async function fetchHistoricalData(sessionKey) {
     if (stintsRes.ok) {
       const stints = await stintsRes.json();
       stints.forEach((stint) => handleStint(stint));
+    }
+
+    if (pitRes.ok) {
+      const pits = await pitRes.json();
+      const now = Date.now();
+      pits.forEach((p) => {
+        if (!p.date || !p.lane_duration) return;
+        const num = String(p.driver_number);
+        if (!driverData[num]) driverData[num] = {};
+        const entryMs = new Date(p.date).getTime();
+        const exitMs = entryMs + p.lane_duration * 1000;
+        if (now >= entryMs && now <= exitMs) {
+          handlePit(p); // driver is currently in the pit lane
+        } else {
+          // Just accumulate stop count without triggering timers
+          driverData[num].pitStops = (driverData[num].pitStops || 0) + 1;
+          updateTimingData(num);
+        }
+      });
+      console.log(`[openf1-mqtt] Loaded ${pits.length} historical pit stops`);
     }
 
     console.log("[openf1-mqtt] Historical data loaded");

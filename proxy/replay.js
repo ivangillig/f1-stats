@@ -49,6 +49,9 @@ let lastPollTime = null; // Last race time we polled up to
 const driverBestLaps = {};
 const driverBestSectors = {};
 
+// Pit stop windows loaded at startup: { "driverNum": [{ entryMs, exitMs }] }
+const pitData = {};
+
 // Helper: format sector time
 function formatSectorTime(seconds) {
   if (!seconds || seconds > 60) return null;
@@ -324,6 +327,31 @@ function fetchStartingGrid() {
   return Promise.resolve(STATIC_STARTING_GRID);
 }
 
+async function fetchPitData() {
+  console.log(`[Replay] Loading pit stop data...`);
+  const pits = await fetchJSON(`${API_BASE}/pit?session_key=${SESSION_KEY}`);
+  // Clear before populating (in case of restart)
+  Object.keys(pitData).forEach((k) => delete pitData[k]);
+  pits.forEach((p) => {
+    if (!p.date || !p.lane_duration) return;
+    const num = String(p.driver_number);
+    if (!pitData[num]) pitData[num] = [];
+    pitData[num].push({
+      entryMs: new Date(p.date).getTime(),
+      exitMs: new Date(p.date).getTime() + p.lane_duration * 1000,
+    });
+  });
+  console.log(
+    `[Replay] Loaded ${pits.length} pit stops across ${Object.keys(pitData).length} drivers`,
+  );
+}
+
+function isDriverInPit(driverNum, currentTime) {
+  const stops = pitData[driverNum] || [];
+  const now = currentTime.getTime();
+  return stops.some((s) => now >= s.entryMs && now <= s.exitMs);
+}
+
 // Fetch incremental data for a time window — sequential to respect rate limits.
 // Skips location (not needed for timing board) and team_radio (low priority).
 async function fetchTimeWindow(sessionKey, startTime, endTime) {
@@ -521,8 +549,7 @@ function processData(data, state) {
       };
     }
 
-    // Pit status
-    line.InPit = lap.is_pit_out_lap || false;
+    // PitOut: driver is on the outlap after a stop. InPit is computed from /v1/pit data.
     line.PitOut = lap.is_pit_out_lap || false;
   });
 
@@ -658,6 +685,7 @@ export async function startReplay(broadcast, stateRef) {
     // Sequential fetches to avoid rate limiting (free tier: 3 req/s, 30 req/min)
     const sessionInfo = await fetchSessionInfo();
     const startingGrid = await fetchStartingGrid();
+    await fetchPitData();
 
     const { session, drivers } = sessionInfo;
     sessionData = session;
@@ -744,6 +772,11 @@ async function pollAndBroadcast() {
   // Process and update state
   processData(data, currentStateRef);
 
+  // Update InPit per driver using /v1/pit time windows
+  Object.keys(currentStateRef.TimingData.Lines).forEach((num) => {
+    currentStateRef.TimingData.Lines[num].InPit = isDriverInPit(num, currentRaceTime);
+  });
+
   // Update clock
   const hours = Math.floor(raceSeconds / 3600);
   const minutes = Math.floor((raceSeconds % 3600) / 60);
@@ -786,6 +819,7 @@ export function stopReplay() {
   raceStartTime = null;
   replayStartRealTime = null;
   lastPollTime = null;
+  Object.keys(pitData).forEach((k) => delete pitData[k]);
   console.log("[Replay] Replay stopped");
 }
 
