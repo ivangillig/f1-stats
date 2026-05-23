@@ -10,6 +10,7 @@ import {
   WeatherData,
   RadioCapture,
   RaceControlMessage,
+  CarData,
 } from "@/types/f1";
 import { DRIVERS, CIRCUIT_TO_COUNTRY } from "@/lib/constants";
 
@@ -28,6 +29,7 @@ interface F1DataState {
   weather?: WeatherData;
   teamRadios: RadioCapture[];
   raceControlMessages: RaceControlMessage[];
+  carData: Record<string, CarData>;
   isConnected: boolean;
   error: string | null;
   proxyMode: string | null;
@@ -107,6 +109,7 @@ export function useF1DataSSE(): F1DataState {
   const [raceControlMessages, setRaceControlMessages] = useState<
     RaceControlMessage[]
   >([]);
+  const [carData, setCarData] = useState<Record<string, CarData>>({});
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proxyMode, setProxyMode] = useState<string | null>(null);
@@ -286,7 +289,13 @@ export function useF1DataSSE(): F1DataState {
         });
       }
 
-      // ── 9. Timing data → drivers ─────────────────────────────────────────
+      // ── 9. Car telemetry ────────────────────────────────────────────────────
+      const carDataRaw = data.car_data;
+      if (carDataRaw && typeof carDataRaw === "object") {
+        setCarData(carDataRaw as Record<string, CarData>);
+      }
+
+      // ── 10. Timing data → drivers ─────────────────────────────────────────
       const timingData = data.timing;
       if (!timingData || Object.keys(timingData).length === 0) return;
 
@@ -739,6 +748,7 @@ export function useF1DataSSE(): F1DataState {
     weather,
     teamRadios,
     raceControlMessages,
+    carData,
     isConnected,
     error,
     proxyMode,

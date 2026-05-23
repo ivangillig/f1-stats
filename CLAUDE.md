@@ -63,6 +63,8 @@ Set `PROXY_MODE` in `proxy/.env`:
 
 **No active session**: when `date_end` of the latest session is >30 min in the past, `checkActiveSession()` returns false and the proxy falls back to replay automatically.
 
+**Session watchdog**: when the proxy falls back to replay, a watchdog timer fires every 60s and calls `checkActiveSession()`. As soon as a live session appears in the OpenF1 API (typically at session start), the watchdog stops replay, clears state, and starts MQTT+SignalR automatically. This prevents the common failure where the proxy starts during a break between sessions and stays in replay for the entire next session.
+
 ## OpenF1 MQTT (paid tier)
 
 - Auth: `POST https://api.openf1.org/token` with `username`/`password` → Bearer token
@@ -145,6 +147,32 @@ Base URL: `https://api.openf1.org/v1`. All endpoints support generic filtering o
 **Pit detection pattern**: A driver is in the pit lane between `/v1/pit`'s `date` and `date + lane_duration * 1000ms`. The `is_pit_out_lap` field in `/v1/laps` only marks the **outlap** (lap after exit) — it does NOT indicate the driver is currently in the pit lane.
 
 **MQTT topics** mirror REST paths: `v1/laps`, `v1/pit`, `v1/position`, etc.
+
+## Principio rector: tiempo real ante todo
+
+El objetivo central del dashboard es mostrar telemetría **lo más en vivo posible**. Ante cualquier decisión de diseño, preguntarse: ¿esto le llega al usuario cuando pasa, o varios segundos/vueltas después?
+
+**Regla de fuentes de datos:**
+
+| Dato | Fuente correcta | Por qué |
+|------|-----------------|---------|
+| Mini-sectores (segmentos) | SignalR | OpenF1 los entrega solo al completar la vuelta — llegan tarde |
+| Tiempos de sector en curso | SignalR | Ídem |
+| Bandera de pista (SC, roja, etc.) | SignalR | ~200ms vs varios segundos con polling |
+| InPit / PitOut en tiempo real | SignalR | OpenF1 MQTT/REST solo confirma el stop cuando ya terminó |
+| KnockedOut en clasificación | SignalR | No existe en OpenF1 |
+| Tiempo restante de sesión | SignalR | OpenF1 no lo provee |
+| Posición en carrera | SignalR (prioritaria) | Más confiable y más rápida que MQTT |
+| Location x/y para track map | OpenF1 MQTT | SignalR no lo tiene |
+| Neumáticos / stints | OpenF1 MQTT | SignalR no lo tiene |
+| Team radio | OpenF1 MQTT | SignalR no lo tiene |
+| Clima | OpenF1 MQTT | SignalR no lo tiene |
+| Car data (RPM, velocidad) | OpenF1 MQTT | SignalR no lo tiene |
+
+**SignalR** = `livetiming.formula1.com` — feed oficial de la F1, gratuito, WebSocket, datos por evento (no polling).
+**OpenF1 MQTT** = paid tier, push-based, rico en datos pero segmentos/sectores solo llegan al completar la vuelta.
+
+En modo live, ambos corren en paralelo. SignalR no puede ser sobreescrito por datos de OpenF1 para los campos que gestiona (segmentos, sectores, track_status, clock, in_pit).
 
 ## Conventions
 

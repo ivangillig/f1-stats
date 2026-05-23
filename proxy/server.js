@@ -61,13 +61,76 @@ function broadcastSSE(event, data) {
   });
 }
 
-// Start fallback when there is no live session: live-polling → replay
+// ── Session watchdog ──────────────────────────────────────────────────────────
+// When the proxy falls back to replay because no live session existed at startup,
+// this watchdog polls every 60 s. When a session appears, it stops replay and
+// switches to the best available live source.
+
+const WATCHDOG_INTERVAL_MS = 60_000;
+let sessionWatchdog = null;
+
+function clearCurrentState() {
+  for (const key of Object.keys(currentState)) delete currentState[key];
+  broadcastSSE("reset", {});
+}
+
+async function tryUpgradeToLive() {
+  if (isMQTTRunning() || isLivePollingRunning()) {
+    stopSessionWatchdog();
+    return;
+  }
+
+  try {
+    if (hasMQTTCredentials()) {
+      const sessionLive = await checkActiveSession();
+      if (!sessionLive) return;
+
+      console.log("[proxy] Watchdog: live session detected — stopping replay, starting MQTT+SignalR");
+      stopReplay();
+      clearCurrentState();
+
+      const ok = await startMQTT(broadcastSSE, currentState);
+      if (ok) {
+        startSignalR(broadcastSSE, currentState);
+        stopSessionWatchdog();
+      }
+    } else {
+      // No MQTT credentials — try live-polling (it checks for active session internally)
+      const ok = await startLivePolling(broadcastSSE, currentState);
+      if (ok) {
+        console.log("[proxy] Watchdog: live session detected — stopping replay, starting live-polling");
+        stopReplay();
+        stopSessionWatchdog();
+      }
+    }
+  } catch (err) {
+    console.error("[proxy] Watchdog check error:", err.message);
+  }
+}
+
+function startSessionWatchdog() {
+  if (sessionWatchdog) return;
+  console.log(
+    `[proxy] Session watchdog started — checking every ${WATCHDOG_INTERVAL_MS / 1000}s for a live session`,
+  );
+  sessionWatchdog = setInterval(tryUpgradeToLive, WATCHDOG_INTERVAL_MS);
+}
+
+function stopSessionWatchdog() {
+  if (sessionWatchdog) {
+    clearInterval(sessionWatchdog);
+    sessionWatchdog = null;
+  }
+}
+
+// Start fallback when there is no live session: live-polling → replay + watchdog
 async function startFallbackNoLive() {
   console.log("[proxy] No live session — checking live-polling...");
   const success = await startLivePolling(broadcastSSE, currentState);
   if (!success) {
     console.log("[proxy] live-polling unavailable — starting replay...");
     startReplay(broadcastSSE, currentState);
+    startSessionWatchdog();
   }
 }
 
@@ -103,6 +166,7 @@ const server = http.createServer(async (req, res) => {
         mqttAvailable: hasMQTTCredentials(),
         mqttRunning: isMQTTRunning(),
         signalrRunning: isSignalRRunning(),
+        watchdogRunning: sessionWatchdog !== null,
       }),
     );
     return;
@@ -199,6 +263,7 @@ const server = http.createServer(async (req, res) => {
 // Graceful shutdown
 function shutdown(signal) {
   console.log(`[proxy] ${signal} received — shutting down`);
+  stopSessionWatchdog();
   stopLivePolling();
   stopMQTT();
   stopSignalR();
@@ -221,7 +286,10 @@ server.listen(PORT, async () => {
   if (PROXY_MODE === "live-polling") {
     console.log("[proxy] Override: live-polling...");
     const success = await startLivePolling(broadcastSSE, currentState);
-    if (!success) startReplay(broadcastSSE, currentState);
+    if (!success) {
+      startReplay(broadcastSSE, currentState);
+      startSessionWatchdog();
+    }
   } else if (PROXY_MODE === "mqtt" || PROXY_MODE === "openf1") {
     console.log("[proxy] Override: MQTT + SignalR hybrid...");
     const sessionLive = await startMQTT(broadcastSSE, currentState);

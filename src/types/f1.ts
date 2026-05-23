@@ -183,11 +183,22 @@ export interface OpenF1TeamRadio {
   recording_url: string;
 }
 
+export interface CarData {
+  brake: number;      // 0–100
+  throttle: number;   // 0–100
+  rpm: number;        // 0–~13500
+  speed: number;      // km/h
+  n_gear: number;     // 0 = neutral, 1–8
+  drs: number;        // 0=off, 8=eligible, 10/12/14=active
+  date?: string;
+}
+
 export interface ProxyState {
   session?: OpenF1Session;
   drivers?: Record<string, OpenF1Driver>;
   timing?: Record<string, OpenF1TimingEntry>;
   location?: Record<string, { x: number; y: number }>;
+  car_data?: Record<string, CarData>;
   lap_count?: { current: number; total: number };
   track_status?: { flag: string };
   weather?: OpenF1Weather;

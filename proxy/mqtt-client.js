@@ -48,6 +48,8 @@ let broadcastFn = null;
 let currentStateRef = null;
 let isRunning = false;
 let reconnectTimeout = null;
+let carDataDirty = false;
+let carDataTimer = null;
 
 /**
  * Obtain OAuth2 access token from OpenF1
@@ -129,8 +131,9 @@ function processMessage(topic, message) {
         handleLocation(data);
         break;
       case "car_data":
-        // High-frequency, not needed for timing board — skip
-        break;
+        handleCarData(data);
+        carDataDirty = true;
+        return; // skip per-message broadcast — car_data uses a dedicated 500ms timer
       case "race_control":
         handleRaceControl(data);
         break;
@@ -435,6 +438,25 @@ function handlePit(data) {
       }
     }, remaining_ms + 1000);
   }
+}
+
+/**
+ * Handle car telemetry data (~3.7 Hz per driver).
+ * State is updated immediately; broadcasts are batched via carDataTimer.
+ */
+function handleCarData(data) {
+  if (!currentStateRef) return;
+  const num = String(data.driver_number);
+  if (!currentStateRef.car_data) currentStateRef.car_data = {};
+  currentStateRef.car_data[num] = {
+    brake: data.brake ?? 0,
+    throttle: data.throttle ?? 0,
+    rpm: data.rpm ?? 0,
+    speed: data.speed ?? 0,
+    n_gear: data.n_gear ?? 0,
+    drs: data.drs ?? 0,
+    date: data.date,
+  };
 }
 
 /**
@@ -762,6 +784,15 @@ export async function startMQTT(broadcast, stateRef) {
   if (!currentStateRef.race_control_messages)
     currentStateRef.race_control_messages = [];
   if (!currentStateRef.team_radio) currentStateRef.team_radio = [];
+  if (!currentStateRef.car_data) currentStateRef.car_data = {};
+
+  // Broadcast car telemetry at 500ms — car_data is ~3.7 Hz, too fast to broadcast per-message
+  carDataTimer = setInterval(() => {
+    if (carDataDirty && broadcastFn && currentStateRef) {
+      broadcastFn("update", currentStateRef);
+      carDataDirty = false;
+    }
+  }, 500);
 
   await connect();
   return true;
@@ -778,6 +809,12 @@ export function stopMQTT() {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
   }
+
+  if (carDataTimer) {
+    clearInterval(carDataTimer);
+    carDataTimer = null;
+  }
+  carDataDirty = false;
 
   if (client) {
     client.end(true);
