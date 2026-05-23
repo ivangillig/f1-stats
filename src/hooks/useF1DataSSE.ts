@@ -148,6 +148,9 @@ export function useF1DataSSE(): F1DataState {
   const sessionFastestLapRef = useRef<number>(Infinity);
   const sessionFastestDriverRef = useRef<string | null>(null);
 
+  // Track qualifying part so we can reset fastest-lap tracking when it advances
+  const qualifyingPartRef = useRef<number | undefined>(undefined);
+
   const processData = useCallback((data: any) => {
     if (!data) return;
 
@@ -206,6 +209,19 @@ export function useF1DataSSE(): F1DataState {
             ? new Date(dateEnd) > new Date(Date.now() - 30 * 60 * 1000)
             : true,
         }));
+
+        // When the qualifying segment advances (Q1→Q2, Q2→Q3), reset fastest-lap
+        // tracking so the new segment starts fresh.
+        const newPart = sessionData?.qualifying_part;
+        if (
+          newPart != null &&
+          qualifyingPartRef.current != null &&
+          newPart > qualifyingPartRef.current
+        ) {
+          sessionFastestLapRef.current = Infinity;
+          sessionFastestDriverRef.current = null;
+        }
+        if (newPart != null) qualifyingPartRef.current = newPart;
       }
 
       // ── 4. Clock ────────────────────────────────────────────────────────
@@ -646,6 +662,7 @@ export function useF1DataSSE(): F1DataState {
       maxSegCounts.current = { s1: 6, s2: 6, s3: 6 };
       sessionFastestLapRef.current = Infinity;
       sessionFastestDriverRef.current = null;
+      qualifyingPartRef.current = undefined;
       if (hasData) {
         processData(data);
       }
@@ -660,6 +677,7 @@ export function useF1DataSSE(): F1DataState {
       maxSegCounts.current = { s1: 6, s2: 6, s3: 6 };
       sessionFastestLapRef.current = Infinity;
       sessionFastestDriverRef.current = null;
+      qualifyingPartRef.current = undefined;
     });
 
     eventSource.addEventListener("update", (event) => {

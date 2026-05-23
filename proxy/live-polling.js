@@ -136,7 +136,8 @@ async function fetchDrivers(sessionKey) {
   );
 
   if (currentStateRef) {
-    if (!currentStateRef.drivers) currentStateRef.drivers = {};
+    // Replace entirely so stale drivers from a previous session don't persist
+    currentStateRef.drivers = {};
     drivers.forEach((d) => {
       const num = String(d.driver_number);
       currentStateRef.drivers[num] = {

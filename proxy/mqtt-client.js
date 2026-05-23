@@ -581,6 +581,9 @@ async function fetchHistoricalData(sessionKey) {
     if (driversRes.ok) {
       const drivers = await driversRes.json();
       console.log(`[openf1-mqtt] Loaded ${drivers.length} drivers`);
+      // Replace entirely so that retained MQTT messages for drivers from past
+      // sessions (e.g. RIC) don't persist into the current session.
+      currentStateRef.drivers = {};
       drivers.forEach((driver) => handleDriver(driver));
     }
 

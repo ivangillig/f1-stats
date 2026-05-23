@@ -90,7 +90,29 @@ function processTimingData(data, isSnapshot = false) {
   if (data.SessionPart != null && currentStateRef.session) {
     const part = parseInt(data.SessionPart, 10);
     if (!isNaN(part)) {
+      const prevPart = currentStateRef.session.qualifying_part ?? 0;
       currentStateRef.session.qualifying_part = part;
+      // When advancing to a new qualifying segment, wipe all per-lap timing so
+      // stale Q1/Q2 times don't bleed into the new segment's leaderboard.
+      if (part > prevPart && currentStateRef.timing) {
+        for (const entry of Object.values(currentStateRef.timing)) {
+          entry.best_lap = null;
+          entry.last_lap = null;
+          entry.last_lap_is_pb = false;
+          entry.sector_1 = null;
+          entry.sector_2 = null;
+          entry.sector_3 = null;
+          entry.best_sector_1 = null;
+          entry.best_sector_2 = null;
+          entry.best_sector_3 = null;
+          entry.segments_1 = [];
+          entry.segments_2 = [];
+          entry.segments_3 = [];
+          entry.gap_to_leader = null;
+          entry.interval = null;
+        }
+        console.log(`[signalr] Qualifying part advanced to Q${part} — timing data cleared`);
+      }
       changed = true;
     }
   }
