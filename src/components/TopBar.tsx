@@ -100,7 +100,7 @@ export default function TopBar({
       return "#FF0000";
     return statusInfo.color;
   })();
-  const isRace = session.type === "Race";
+  const isRace = session.type === "Race" || session.type === "Sprint";
   const { t } = useLanguage();
   const viewers = useViewerCount();
 
@@ -271,12 +271,13 @@ export default function TopBar({
                 {session.remainingTime}
               </div>
             )}
-            {isRace && session.totalLaps > 0 && (
+            {isRace && session.currentLap > 0 && (
               <span
                 className="text-2xl font-extrabold tabular-nums"
                 title="Current Lap / Total Laps"
               >
-                {session.currentLap} / {session.totalLaps}
+                {t("topbar.laps")} {session.currentLap}
+                {session.totalLaps > 0 && ` ${t("topbar.of")} ${session.totalLaps}`}
               </span>
             )}
           </div>

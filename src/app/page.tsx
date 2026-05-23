@@ -7,6 +7,8 @@ import Image from "next/image";
 import F1LandingPage from "@/components/F1LandingPage";
 import { useNextF1Session } from "@/hooks/useNextF1Session";
 
+const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || "/api/proxy";
+
 function LoadingSplash() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -37,16 +39,30 @@ export default function HomePage() {
   const router = useRouter();
   const { loading, isLive } = useNextF1Session();
 
+  // When the session start time arrives, poll the proxy health until it confirms
+  // live data is flowing (mode !== "replay"), then redirect to the dashboard.
+  // This avoids landing on the dashboard showing demo data just because the
+  // countdown hit zero — the proxy might not have switched sources yet.
   useEffect(() => {
-    if (!loading && isLive) {
-      router.push("/dashboard");
-    }
-  }, [loading, isLive, router]);
+    if (!isLive) return;
+
+    const check = () => {
+      fetch(`${PROXY_URL}/health`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.status === "ok" && data.mode !== "replay") {
+            router.push("/dashboard");
+          }
+        })
+        .catch(() => {});
+    };
+
+    check();
+    const id = setInterval(check, 5000);
+    return () => clearInterval(id);
+  }, [isLive, router]);
 
   if (loading) return <LoadingSplash />;
-
-  // isLive redirects via useEffect; while navigating, keep showing splash
-  if (isLive) return <LoadingSplash />;
 
   return <F1LandingPage onEnterDemo={() => router.push("/dashboard")} />;
 }

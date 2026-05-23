@@ -483,6 +483,15 @@ export function useF1DataSSE(): F1DataState {
           sessionTypeRef.current?.includes("Practice") ||
           sessionTypeRef.current?.includes("Qualifying");
 
+        // If OpenF1 has returned a session driver list, use it as the authority.
+        // This prevents stale drivers from a previous session (e.g. replay) from showing up.
+        const sessionDriverNums = Object.keys(driverListRef.current);
+        if (sessionDriverNums.length > 0) {
+          for (const num of driversMap.keys()) {
+            if (!sessionDriverNums.includes(num)) driversMap.delete(num);
+          }
+        }
+
         const sortedDrivers = Array.from(driversMap.values())
           .filter((d) => d.driverNumber)
           .sort((a, b) => {
@@ -576,9 +585,27 @@ export function useF1DataSSE(): F1DataState {
           ? `(${Object.keys(data).length} keys)`
           : "(empty - waiting for data)",
       );
+      // Reset driver-related state so stale entries from a previous session don't persist
+      setDrivers([]);
+      driverListRef.current = {};
+      carDataRef.current = {};
+      maxSegCounts.current = { s1: 6, s2: 6, s3: 6 };
+      sessionFastestLapRef.current = Infinity;
+      sessionFastestDriverRef.current = null;
       if (hasData) {
         processData(data);
       }
+    });
+
+    // Proxy signals a session change — clear local driver state immediately
+    eventSource.addEventListener("reset", () => {
+      console.log("[SSE] Session reset received — clearing driver state");
+      setDrivers([]);
+      driverListRef.current = {};
+      carDataRef.current = {};
+      maxSegCounts.current = { s1: 6, s2: 6, s3: 6 };
+      sessionFastestLapRef.current = Infinity;
+      sessionFastestDriverRef.current = null;
     });
 
     eventSource.addEventListener("update", (event) => {

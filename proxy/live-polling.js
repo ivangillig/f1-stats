@@ -55,7 +55,9 @@ async function getCurrentSession() {
   if (!sessions || sessions.length === 0) return null;
 
   const s = sessions[0];
-  console.log(`[live-polling] Found session: ${s.session_name} at ${s.location}`);
+  console.log(
+    `[live-polling] Found session: ${s.session_name} at ${s.location}`,
+  );
   console.log(`[live-polling] Session key: ${s.session_key}`);
 
   if (currentStateRef) {
@@ -86,7 +88,7 @@ async function getCurrentSession() {
  */
 async function fetchDrivers(sessionKey) {
   const drivers = await fetchJSON(
-    `${API_BASE}/drivers?session_key=${sessionKey}`
+    `${API_BASE}/drivers?session_key=${sessionKey}`,
   );
 
   if (currentStateRef) {
@@ -164,7 +166,11 @@ async function pollData() {
         const num = String(i.driver_number);
         const t = new Date(i.date).getTime();
         if (!latest.has(num) || t > latest.get(num).t) {
-          latest.set(num, { t, gap_to_leader: i.gap_to_leader, interval: i.interval });
+          latest.set(num, {
+            t,
+            gap_to_leader: i.gap_to_leader,
+            interval: i.interval,
+          });
         }
       }
       for (const [num, data] of latest) {
@@ -191,18 +197,29 @@ async function pollData() {
       for (const [num, l] of latest) {
         const entry = ensureTimingEntry(currentStateRef, num);
         entry.last_lap = l.lap_duration ?? null;
-        entry.last_lap_is_pb = updateBestLap(entry, l.lap_duration, l.is_pit_out_lap);
+        entry.last_lap_is_pb = updateBestLap(
+          entry,
+          l.lap_duration,
+          l.is_pit_out_lap,
+        );
         entry.lap_number = l.lap_number;
         entry.sector_1 = l.duration_sector_1 ?? null;
         entry.sector_2 = l.duration_sector_2 ?? null;
         entry.sector_3 = l.duration_sector_3 ?? null;
-        entry.segments_1 = Array.isArray(l.segments_sector_1) ? l.segments_sector_1 : [];
-        entry.segments_2 = Array.isArray(l.segments_sector_2) ? l.segments_sector_2 : [];
-        entry.segments_3 = Array.isArray(l.segments_sector_3) ? l.segments_sector_3 : [];
+        entry.segments_1 = Array.isArray(l.segments_sector_1)
+          ? l.segments_sector_1
+          : [];
+        entry.segments_2 = Array.isArray(l.segments_sector_2)
+          ? l.segments_sector_2
+          : [];
+        entry.segments_3 = Array.isArray(l.segments_sector_3)
+          ? l.segments_sector_3
+          : [];
         entry.is_pit_out_lap = l.is_pit_out_lap || false;
 
         // Update global lap counter
-        if (!currentStateRef.lap_count) currentStateRef.lap_count = { current: 0, total: 0 };
+        if (!currentStateRef.lap_count)
+          currentStateRef.lap_count = { current: 0, total: 0 };
         if (l.lap_number > currentStateRef.lap_count.current) {
           currentStateRef.lap_count.current = l.lap_number;
         }
@@ -232,7 +249,7 @@ async function pollData() {
       }
       for (const msg of raceControl) {
         const exists = currentStateRef.race_control_messages.some(
-          (m) => m.date === msg.date && m.message === msg.message
+          (m) => m.date === msg.date && m.message === msg.message,
         );
         if (!exists) {
           currentStateRef.race_control_messages.push({
@@ -275,7 +292,7 @@ async function pollData() {
       if (!currentStateRef.team_radio) currentStateRef.team_radio = [];
       for (const radio of teamRadio) {
         const exists = currentStateRef.team_radio.some(
-          (r) => r.recording_url === radio.recording_url
+          (r) => r.recording_url === radio.recording_url,
         );
         if (!exists) {
           currentStateRef.team_radio.push({
@@ -289,9 +306,10 @@ async function pollData() {
           }
 
           const driverAcronym =
-            currentStateRef.drivers?.[String(radio.driver_number)]?.name_acronym;
+            currentStateRef.drivers?.[String(radio.driver_number)]
+              ?.name_acronym;
           console.log(
-            `[live-polling] Team Radio: ${driverAcronym || radio.driver_number}`
+            `[live-polling] Team Radio: ${driverAcronym || radio.driver_number}`,
           );
         }
       }
@@ -330,7 +348,10 @@ async function pollData() {
           entry.pit_count = (entry.pit_count || 0) + 1;
         }
 
-        const { in_pit, remaining_ms } = getPitWindowStatus(p.date, p.lane_duration);
+        const { in_pit, remaining_ms } = getPitWindowStatus(
+          p.date,
+          p.lane_duration,
+        );
         if (in_pit) {
           entry.in_pit = true;
           setTimeout(() => {
@@ -360,7 +381,7 @@ async function pollData() {
  */
 async function fetchHistoricalData(sessionKey) {
   console.log(
-    `[live-polling] Fetching historical data for session ${sessionKey}...`
+    `[live-polling] Fetching historical data for session ${sessionKey}...`,
   );
 
   try {
@@ -371,7 +392,7 @@ async function fetchHistoricalData(sessionKey) {
 
     if (raceControl.length > 0) {
       console.log(
-        `[live-polling] Loaded ${raceControl.length} historical race control messages`
+        `[live-polling] Loaded ${raceControl.length} historical race control messages`,
       );
       if (!currentStateRef.race_control_messages) {
         currentStateRef.race_control_messages = [];
@@ -396,7 +417,7 @@ async function fetchHistoricalData(sessionKey) {
 
     if (teamRadio.length > 0) {
       console.log(
-        `[live-polling] Loaded ${teamRadio.length} historical team radios`
+        `[live-polling] Loaded ${teamRadio.length} historical team radios`,
       );
       if (!currentStateRef.team_radio) currentStateRef.team_radio = [];
       for (const radio of teamRadio) {
@@ -411,7 +432,10 @@ async function fetchHistoricalData(sessionKey) {
       }
     }
   } catch (error) {
-    console.error("[live-polling] Error fetching historical data:", error.message);
+    console.error(
+      "[live-polling] Error fetching historical data:",
+      error.message,
+    );
   }
 }
 
@@ -432,9 +456,12 @@ export async function startLivePolling(broadcast, stateRef) {
   if (!currentStateRef.drivers) currentStateRef.drivers = {};
   if (!currentStateRef.timing) currentStateRef.timing = {};
   if (!currentStateRef.location) currentStateRef.location = {};
-  if (!currentStateRef.lap_count) currentStateRef.lap_count = { current: 0, total: 0 };
-  if (!currentStateRef.track_status) currentStateRef.track_status = { flag: "GREEN" };
-  if (!currentStateRef.race_control_messages) currentStateRef.race_control_messages = [];
+  if (!currentStateRef.lap_count)
+    currentStateRef.lap_count = { current: 0, total: 0 };
+  if (!currentStateRef.track_status)
+    currentStateRef.track_status = { flag: "GREEN" };
+  if (!currentStateRef.race_control_messages)
+    currentStateRef.race_control_messages = [];
   if (!currentStateRef.team_radio) currentStateRef.team_radio = [];
 
   // Get current session
@@ -442,6 +469,27 @@ export async function startLivePolling(broadcast, stateRef) {
   if (!session) {
     console.log("[live-polling] No active session found");
     return false;
+  }
+
+  // If a different session was already loaded (e.g. replay or previous session),
+  // clear all session-scoped state so stale drivers/timing don't bleed in.
+  const prevSessionKey = currentStateRef.session?.session_key;
+  if (
+    prevSessionKey &&
+    String(prevSessionKey) !== String(session.session_key)
+  ) {
+    console.log(
+      `[live-polling] Session changed (${prevSessionKey} → ${session.session_key}) — clearing stale state`,
+    );
+    currentStateRef.timing = {};
+    currentStateRef.drivers = {};
+    currentStateRef.location = {};
+    currentStateRef.race_control_messages = [];
+    currentStateRef.team_radio = [];
+    currentStateRef.lap_count = { current: 0, total: 0 };
+    seenPitKeys.clear();
+    // Notify connected clients so they can reset their local driver state
+    if (broadcastFn) broadcastFn("reset", { session_key: session.session_key });
   }
 
   currentSessionKey = session.session_key;

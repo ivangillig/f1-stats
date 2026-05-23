@@ -178,6 +178,11 @@ function handleSession(data) {
     location: data.location,
     meeting_name: data.meeting_name || data.location,
   };
+  // Set total laps when available (Race and Sprint sessions provide this)
+  if (data.total_laps) {
+    if (!currentStateRef.lap_count) currentStateRef.lap_count = { current: 0, total: 0 };
+    currentStateRef.lap_count.total = data.total_laps;
+  }
 }
 
 /**
@@ -494,6 +499,7 @@ async function fetchHistoricalData(sessionKey) {
       intervalsRes,
       stintsRes,
       pitRes,
+      posRes,
     ] = await Promise.all([
       fetch(`${API_BASE}/race_control?session_key=${sessionKey}`, { headers }),
       fetch(`${API_BASE}/team_radio?session_key=${sessionKey}`, { headers }),
@@ -502,6 +508,7 @@ async function fetchHistoricalData(sessionKey) {
       fetch(`${API_BASE}/intervals?session_key=${sessionKey}`, { headers }),
       fetch(`${API_BASE}/stints?session_key=${sessionKey}`, { headers }),
       fetch(`${API_BASE}/pit?session_key=${sessionKey}`, { headers }),
+      fetch(`${API_BASE}/position?session_key=${sessionKey}`, { headers }),
     ]);
 
     if (raceControlRes.ok) {
@@ -589,6 +596,20 @@ async function fetchHistoricalData(sessionKey) {
         }
       });
       console.log(`[openf1-mqtt] Loaded ${pits.length} historical pit stops`);
+    }
+
+    if (posRes.ok) {
+      const positions = await posRes.json();
+      // Keep only the most recent position per driver
+      const latestPos = {};
+      for (const p of positions) {
+        const key = String(p.driver_number);
+        if (!latestPos[key] || p.date > latestPos[key].date) {
+          latestPos[key] = p;
+        }
+      }
+      Object.values(latestPos).forEach((p) => handlePosition(p));
+      console.log(`[openf1-mqtt] Loaded positions for ${Object.keys(latestPos).length} drivers`);
     }
 
     console.log("[openf1-mqtt] Historical data loaded");

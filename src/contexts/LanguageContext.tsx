@@ -178,6 +178,8 @@ const translations = {
     "landing.countdown.hours": "Horas",
     "landing.countdown.minutes": "Min",
     "landing.countdown.seconds": "Seg",
+    "landing.waitingSignal": "Esperando datos de sesión en vivo",
+    "landing.sessionAboutToStart": "Se conectará automáticamente cuando comience la sesión",
   },
   en: {
     // TopBar
@@ -341,6 +343,8 @@ const translations = {
     "landing.countdown.hours": "Hours",
     "landing.countdown.minutes": "Min",
     "landing.countdown.seconds": "Sec",
+    "landing.waitingSignal": "Waiting for live session data",
+    "landing.sessionAboutToStart": "Will connect automatically when the session begins",
   },
 };
 

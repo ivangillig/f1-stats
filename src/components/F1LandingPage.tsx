@@ -307,6 +307,45 @@ export default function F1LandingPage({ onEnterDemo }: Props) {
               </motion.div>
             )}
 
+            {countdown.isPast && (
+              <motion.div
+                className="flex flex-col items-center gap-5"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+              >
+                <div className="flex items-center gap-3">
+                  <motion.span
+                    className="w-2 h-2 rounded-full bg-primary inline-block"
+                    animate={{ opacity: [0.4, 1, 0.4], scale: [0.9, 1.2, 0.9] }}
+                    transition={{ repeat: Infinity, duration: 1.4 }}
+                  />
+                  <span
+                    className="text-sm text-zinc-200 uppercase tracking-[0.18em]"
+                    style={f1Font}
+                  >
+                    {t("landing.waitingSignal")}
+                  </span>
+                </div>
+                <div className="flex gap-1.5">
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-primary"
+                      animate={{ opacity: [0.3, 1, 0.3] }}
+                      transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }}
+                    />
+                  ))}
+                </div>
+                <p
+                  className="text-[10px] text-zinc-600 tracking-[0.25em] uppercase text-center"
+                  style={f1Font}
+                >
+                  {t("landing.sessionAboutToStart")}
+                </p>
+              </motion.div>
+            )}
+
             {/* Weekend schedule */}
             {weekendSessions.length > 0 && (
               <motion.div
