@@ -266,7 +266,7 @@ export default function TopBar({
         <div className="flex items-center gap-4 flex-shrink-0">
           {/* Session time and laps */}
           <div className="flex items-center gap-3">
-            {session.remainingTime && (
+            {!isRace && session.remainingTime && (
               <div className="font-mono text-4xl font-bold tabular-nums text-white">
                 {session.remainingTime}
               </div>
@@ -277,7 +277,8 @@ export default function TopBar({
                 title="Current Lap / Total Laps"
               >
                 {t("topbar.laps")} {session.currentLap}
-                {session.totalLaps > 0 && ` ${t("topbar.of")} ${session.totalLaps}`}
+                {session.totalLaps > 0 &&
+                  ` ${t("topbar.of")} ${session.totalLaps}`}
               </span>
             )}
           </div>

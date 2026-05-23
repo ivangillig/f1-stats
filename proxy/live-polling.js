@@ -77,10 +77,43 @@ async function getCurrentSession() {
 
     if (!currentStateRef.lap_count) {
       currentStateRef.lap_count = { current: 0, total: s.total_laps || 0 };
+    } else if (s.total_laps) {
+      // Always sync — may have been initialised as 0 before session was known
+      currentStateRef.lap_count.total = s.total_laps;
     }
   }
 
   return s;
+}
+
+/**
+ * Fetch current positions for all drivers in the session (no time filter).
+ * Necessary when the proxy starts mid-race: the per-tick 3-second window
+ * only captures recent changes, leaving drivers that haven't moved with
+ * position = 0 / null.
+ */
+async function fetchInitialPositions(sessionKey) {
+  const positions = await fetchJSON(
+    `${API_BASE}/position?session_key=${sessionKey}`,
+  );
+  if (!positions || positions.length === 0) {
+    console.log("[live-polling] No initial position data");
+    return;
+  }
+  const latest = new Map();
+  for (const p of positions) {
+    const num = String(p.driver_number);
+    const ts = new Date(p.date).getTime();
+    if (!latest.has(num) || ts > latest.get(num).ts) {
+      latest.set(num, { ts, position: p.position });
+    }
+  }
+  for (const [num, data] of latest) {
+    ensureTimingEntry(currentStateRef, num).position = data.position;
+  }
+  console.log(
+    `[live-polling] Loaded initial positions for ${latest.size} drivers`,
+  );
 }
 
 /**
@@ -496,6 +529,9 @@ export async function startLivePolling(broadcast, stateRef) {
 
   // Fetch drivers
   await fetchDrivers(currentSessionKey);
+
+  // Fetch initial positions for all drivers (handles proxy starting mid-race)
+  await fetchInitialPositions(currentSessionKey);
 
   // Fetch historical data
   await fetchHistoricalData(currentSessionKey);

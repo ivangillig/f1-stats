@@ -487,7 +487,7 @@ export function useF1DataSSE(): F1DataState {
         // This prevents stale drivers from a previous session (e.g. replay) from showing up.
         const sessionDriverNums = Object.keys(driverListRef.current);
         if (sessionDriverNums.length > 0) {
-          for (const num of driversMap.keys()) {
+          for (const num of Array.from(driversMap.keys())) {
             if (!sessionDriverNums.includes(num)) driversMap.delete(num);
           }
         }
@@ -508,7 +508,20 @@ export function useF1DataSSE(): F1DataState {
               if (timeB === Infinity) return -1;
               return timeA - timeB;
             } else {
-              return (a.position || 99) - (b.position || 99);
+              // Race/Sprint: prefer explicit API position, fall back to gap ordering
+              // when position is 0/missing (proxy may have started mid-race)
+              const posA = a.position;
+              const posB = b.position;
+              if (posA > 0 && posB > 0) return posA - posB;
+              if (posA > 0) return -1;
+              if (posB > 0) return 1;
+              // Both have no position — rank by gap_to_leader string ("+X.XXX")
+              const parseGap = (g: string) => {
+                if (!g) return 0; // leader
+                if (g.startsWith("+")) return parseFloat(g.slice(1)) || 0;
+                return 9999; // "LAP" or lapped cars go to the end
+              };
+              return parseGap(a.gap) - parseGap(b.gap);
             }
           });
 
