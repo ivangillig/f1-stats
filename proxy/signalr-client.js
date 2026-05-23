@@ -73,8 +73,14 @@ function parseF1Time(value) {
  * The SignalR feed sends partial objects — only changed fields are present.
  * We deep-merge each segment and sector value into the existing state entry
  * so that a single-segment update doesn't wipe the rest of the array.
+ *
+ * @param {Object}  data        TimingData payload from SignalR
+ * @param {boolean} isSnapshot  true when this is the full initial snapshot (msg.R),
+ *                              false for incremental live-feed messages (msg.M).
+ *                              Snapshots are treated as authoritative: an absent InPit
+ *                              field means the car is NOT in the pit lane.
  */
-function processTimingData(data) {
+function processTimingData(data, isSnapshot = false) {
   if (!currentStateRef || !data?.Lines) return;
 
   let changed = false;
@@ -109,10 +115,23 @@ function processTimingData(data) {
     // This is the only reliable source: OpenF1 REST/MQTT only provides pit data
     // after the stop is complete (lane_duration present), so cars currently in
     // the pit lane (e.g. during a red flag) would never show in_pit=true there.
+    //
+    // Snapshot vs incremental distinction matters here:
+    // - Incremental (isSnapshot=false): absent InPit means "no change" — only
+    //   update when the field is explicitly present.
+    // - Snapshot (isSnapshot=true): the payload is the complete current state.
+    //   An absent InPit means the car is NOT in the pit — treat it as false.
+    //   This prevents stale in_pit=true values from persisting across reconnects
+    //   (e.g. after a red flag where all cars pitted, then the race restarted
+    //   but some InPit:false updates were missed during a brief disconnect).
     if (driverData.InPit === true) {
       entry.in_pit = true;
       changed = true;
     } else if (driverData.InPit === false || driverData.PitOut === true) {
+      entry.in_pit = false;
+      changed = true;
+    } else if (isSnapshot && entry.in_pit) {
+      // Snapshot is authoritative: car not shown as InPit:true → must be on track.
       entry.in_pit = false;
       changed = true;
     }
@@ -251,8 +270,8 @@ function processTimingStats(data) {
   }
 }
 
-function handleFeedMessage(topic, data) {
-  if (topic === "TimingData") processTimingData(data);
+function handleFeedMessage(topic, data, isSnapshot = false) {
+  if (topic === "TimingData") processTimingData(data, isSnapshot);
   else if (topic === "TimingStats") processTimingStats(data);
   else if (topic === "TrackStatus") processTrackStatus(data);
   else if (topic === "ExtrapolatedClock") processExtrapolatedClock(data);
@@ -307,11 +326,13 @@ async function connect() {
         // Subscribe response snapshot: { I: "1", R: { TopicName: {data}, ... } }
         // This is the initial state sent back when we call Subscribe().
         // Must be processed BEFORE live incremental M[] messages arrive.
+        // isSnapshot=true so processTimingData treats absent InPit as false,
+        // clearing any stale in_pit:true from a previous connection cycle.
         if (msg.R && typeof msg.R === "object" && !Array.isArray(msg.R)) {
           for (const [topic, data] of Object.entries(msg.R)) {
             if (data && typeof data === "object") {
               console.log(`[signalr] Snapshot: ${topic}`);
-              handleFeedMessage(topic, data);
+              handleFeedMessage(topic, data, true);
             }
           }
         }
