@@ -312,6 +312,17 @@ export function useF1DataSSE(): F1DataState {
         }
       });
 
+      // Compute overall session-best sector times across all drivers (for purple highlighting)
+      const overallBestSectors = { s1: Infinity, s2: Infinity, s3: Infinity };
+      Object.values(timingData).forEach((entry: any) => {
+        if (entry.best_sector_1 != null && entry.best_sector_1 < overallBestSectors.s1)
+          overallBestSectors.s1 = entry.best_sector_1;
+        if (entry.best_sector_2 != null && entry.best_sector_2 < overallBestSectors.s2)
+          overallBestSectors.s2 = entry.best_sector_2;
+        if (entry.best_sector_3 != null && entry.best_sector_3 < overallBestSectors.s3)
+          overallBestSectors.s3 = entry.best_sector_3;
+      });
+
       setDrivers((prev) => {
         const driversMap = new Map(prev.map((d) => [d.driverNumber, d]));
 
@@ -439,13 +450,30 @@ export function useF1DataSSE(): F1DataState {
               entry.sector_3 != null
                 ? formatLapTime(entry.sector_3)
                 : (existing?.sector3 ?? ""),
-            // Best sectors not available from OpenF1 native format
-            bestSector1: existing?.bestSector1 || "",
-            bestSector2: existing?.bestSector2 || "",
-            bestSector3: existing?.bestSector3 || "",
-            hasSector1Record: false,
-            hasSector2Record: false,
-            hasSector3Record: false,
+            bestSector1:
+              entry.best_sector_1 != null
+                ? formatLapTime(entry.best_sector_1)
+                : (existing?.bestSector1 ?? ""),
+            bestSector2:
+              entry.best_sector_2 != null
+                ? formatLapTime(entry.best_sector_2)
+                : (existing?.bestSector2 ?? ""),
+            bestSector3:
+              entry.best_sector_3 != null
+                ? formatLapTime(entry.best_sector_3)
+                : (existing?.bestSector3 ?? ""),
+            hasSector1Record:
+              entry.best_sector_1 != null &&
+              overallBestSectors.s1 < Infinity &&
+              entry.best_sector_1 === overallBestSectors.s1,
+            hasSector2Record:
+              entry.best_sector_2 != null &&
+              overallBestSectors.s2 < Infinity &&
+              entry.best_sector_2 === overallBestSectors.s2,
+            hasSector3Record:
+              entry.best_sector_3 != null &&
+              overallBestSectors.s3 < Infinity &&
+              entry.best_sector_3 === overallBestSectors.s3,
             sector1Status: s1Status,
             sector2Status: s2Status,
             sector3Status: s3Status,
@@ -458,6 +486,10 @@ export function useF1DataSSE(): F1DataState {
               entry.in_pit !== undefined
                 ? entry.in_pit
                 : (existing?.inPit ?? false),
+            isPitOutLap:
+              entry.is_pit_out_lap !== undefined
+                ? entry.is_pit_out_lap
+                : (existing?.isPitOutLap ?? false),
             pitCount: entry.pit_count ?? existing?.pitCount ?? 0,
             retired:
               entry.retired !== undefined

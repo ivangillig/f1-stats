@@ -200,7 +200,16 @@ export default function DashboardPage() {
             className="flex-1 min-h-0 flex flex-col gap-1"
             style={{ minWidth: 220 }}
           >
-            <div className="flex-1 min-h-0 border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden flex flex-col">
+            <div className="relative flex-1 min-h-0 border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden flex flex-col">
+              {trackStatus.status === 7 && (
+                <div
+                  className="absolute inset-0 pointer-events-none z-10 rounded-lg"
+                  style={{
+                    background:
+                      "repeating-conic-gradient(rgba(255,255,255,0.07) 0% 25%, rgba(0,0,0,0.07) 0% 50%) 0 0 / 32px 32px",
+                  }}
+                />
+              )}
               <div className="flex shrink-0 border-b border-zinc-800 bg-zinc-950/40">
                 {(
                   [

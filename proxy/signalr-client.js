@@ -28,9 +28,9 @@ const CONNECTION_DATA = encodeURIComponent(
 const NEGOTIATE_URL = `https://${SIGNALR_HOST}/signalr/negotiate?clientProtocol=1.5&connectionData=${CONNECTION_DATA}`;
 const WS_BASE = `wss://${SIGNALR_HOST}/signalr/connect`;
 
-// Topics: TimingData for live segments/sector times, TrackStatus and ExtrapolatedClock
-// as fast overrides (OpenF1 MQTT doesn't provide either of these live)
-const SUBSCRIBE_TOPICS = ["TimingData", "TrackStatus", "ExtrapolatedClock"];
+// Topics: TimingData for live segments/sector times, TimingStats for personal best sectors,
+// TrackStatus and ExtrapolatedClock as fast overrides (OpenF1 MQTT doesn't provide these live)
+const SUBSCRIBE_TOPICS = ["TimingData", "TimingStats", "TrackStatus", "ExtrapolatedClock"];
 
 const COMMON_HEADERS = {
   "User-Agent": "BestHTTP",
@@ -213,8 +213,47 @@ function processExtrapolatedClock(data) {
   }
 }
 
+/**
+ * TimingStats — personal best sector times per driver.
+ * Lines[num].BestSectors[0/1/2].Value contains the driver's best time for that sector.
+ */
+function processTimingStats(data) {
+  if (!currentStateRef || !data?.Lines) return;
+
+  let changed = false;
+
+  for (const [driverNum, driverData] of Object.entries(data.Lines)) {
+    if (!driverData || typeof driverData !== "object") continue;
+
+    const num = String(driverNum);
+    const entry = ensureTimingEntry(currentStateRef, num);
+
+    const bestSectors = driverData.BestSectors;
+    if (bestSectors && typeof bestSectors === "object") {
+      for (const [sectorIdxStr, sectorData] of Object.entries(bestSectors)) {
+        if (!sectorData || typeof sectorData !== "object") continue;
+        const sIdx = parseInt(sectorIdxStr, 10); // 0, 1, or 2
+        if (isNaN(sIdx) || sIdx < 0 || sIdx > 2) continue;
+        const key = `best_sector_${sIdx + 1}`; // best_sector_1/2/3
+        if (sectorData.Value !== undefined) {
+          const seconds = parseF1Time(sectorData.Value);
+          if (seconds != null) {
+            entry[key] = seconds;
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (changed && broadcastFn && currentStateRef) {
+    broadcastFn("update", currentStateRef);
+  }
+}
+
 function handleFeedMessage(topic, data) {
   if (topic === "TimingData") processTimingData(data);
+  else if (topic === "TimingStats") processTimingStats(data);
   else if (topic === "TrackStatus") processTrackStatus(data);
   else if (topic === "ExtrapolatedClock") processExtrapolatedClock(data);
 }

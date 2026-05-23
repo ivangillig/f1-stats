@@ -27,6 +27,7 @@ export interface Driver {
   sector3SegmentCount?: number;
   tire: TireInfo;
   inPit: boolean;
+  isPitOutLap?: boolean;
   pitCount: number;
   retired: boolean;
   knockedOut: boolean; // Eliminated in qualifying

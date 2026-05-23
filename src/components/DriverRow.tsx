@@ -116,25 +116,30 @@ function TireCompound({
   );
 }
 
-// PIT indicator - shows cyan PIT tag when car is in pit lane, dim otherwise
+// PIT indicator - shows cyan PIT when in pit, yellow OUT on pit-out lap, dim otherwise
 function PitIndicator({
   inPit,
+  isPitOutLap,
   t,
 }: {
   inPit?: boolean;
+  isPitOutLap?: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
+  const isOut = !inPit && isPitOutLap;
   return (
     <div
       className={cn(
         "text-base inline-flex h-9 w-full items-center justify-center rounded-md font-mono font-black",
         inPit
           ? "border-[3px] border-cyan-500 text-cyan-500"
-          : "border-2 border-zinc-800 text-zinc-800",
+          : isOut
+            ? "border-[3px] border-yellow-400 text-yellow-400"
+            : "border-2 border-zinc-800 text-zinc-800",
       )}
-      title={inPit ? t("driver.inPit") : undefined}
+      title={inPit ? t("driver.inPit") : isOut ? t("driver.pitOut") : undefined}
     >
-      PIT
+      {isOut ? "OUT" : "PIT"}
     </div>
   );
 }
@@ -360,7 +365,7 @@ export default function DriverRow({
       */}
 
       {/* PIT indicator */}
-      <PitIndicator inPit={driver.inPit} t={t} />
+      <PitIndicator inPit={driver.inPit} isPitOutLap={driver.isPitOutLap} t={t} />
 
       {/* Tire with L and PIT */}
       <TireCompound

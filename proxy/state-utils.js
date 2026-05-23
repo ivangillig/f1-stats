@@ -20,6 +20,9 @@ export function ensureTimingEntry(state, driverNum) {
       sector_1: null,
       sector_2: null,
       sector_3: null,
+      best_sector_1: null,
+      best_sector_2: null,
+      best_sector_3: null,
       segments_1: [],
       segments_2: [],
       segments_3: [],
@@ -70,7 +73,8 @@ export function getPitWindowStatus(pitDate, laneDuration) {
  */
 export function flagToTrackStatus(flag) {
   const f = (flag || "").toUpperCase();
-  if (f === "GREEN") return "GREEN";
+  // CLEAR means a localised yellow was lifted — track is back to green
+  if (f === "GREEN" || f === "CLEAR") return "GREEN";
   if (f === "YELLOW" || f === "DOUBLE YELLOW") return "YELLOW";
   if (f === "RED") return "RED";
   if (f === "CHEQUERED") return "CHEQUERED";
