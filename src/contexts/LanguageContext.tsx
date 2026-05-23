@@ -132,6 +132,8 @@ const translations = {
     "error.reconnecting": "Reconectando...",
     "mode.replayLabel": "Modo Demo:",
     "mode.replayDesc": "Datos en vivo no disponibles. Mostrando sesión grabada.",
+    "mode.standbyLabel": "Esperando sesión en vivo",
+    "mode.standbyDesc": "El proxy se conectará automáticamente cuando inicie la sesión.",
 
     // Track status
     "status.allClear": "Despejado",
@@ -298,6 +300,8 @@ const translations = {
     "error.reconnecting": "Reconnecting...",
     "mode.replayLabel": "Demo Mode:",
     "mode.replayDesc": "Live data unavailable. Displaying recorded session.",
+    "mode.standbyLabel": "Waiting for live session",
+    "mode.standbyDesc": "Will connect automatically when the session starts.",
 
     // Track status
     "status.allClear": "All Clear",

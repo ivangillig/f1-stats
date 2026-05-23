@@ -175,6 +175,13 @@ export default function DashboardPage() {
             <span className="text-yellow-200/70">{t("mode.replayDesc")}</span>
           </div>
         )}
+        {proxyMode === "standby" && (
+          <div className="bg-blue-500/10 border-b border-blue-500/30 text-blue-200 px-4 py-2 text-sm flex items-center gap-2 shrink-0">
+            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
+            <span className="font-semibold">{t("mode.standbyLabel")}</span>
+            <span className="text-blue-200/70">{t("mode.standbyDesc")}</span>
+          </div>
+        )}
 
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 p-2">
           <div className="h-[42vh] lg:h-auto flex-none overflow-x-auto min-h-0">

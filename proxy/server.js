@@ -123,13 +123,14 @@ function stopSessionWatchdog() {
   }
 }
 
-// Start fallback when there is no live session: live-polling → replay + watchdog
+// No live session found — enter standby. Never start replay automatically:
+// replay only runs when explicitly set via PROXY_MODE=replay.
+// The watchdog will switch to live the moment a session appears.
 async function startFallbackNoLive() {
   console.log("[proxy] No live session — checking live-polling...");
   const success = await startLivePolling(broadcastSSE, currentState);
   if (!success) {
-    console.log("[proxy] live-polling unavailable — starting replay...");
-    startReplay(broadcastSSE, currentState);
+    console.log("[proxy] No active session — entering standby (watchdog monitoring)");
     startSessionWatchdog();
   }
 }
@@ -152,6 +153,7 @@ const server = http.createServer(async (req, res) => {
     if (isLivePollingRunning()) mode = "live-polling";
     else if (isMQTTRunning()) mode = "mqtt-live";
     else if (isReplayRunning()) mode = "replay";
+    else if (sessionWatchdog !== null) mode = "standby";
 
     res.writeHead(200, {
       "Content-Type": "application/json",
@@ -287,7 +289,6 @@ server.listen(PORT, async () => {
     console.log("[proxy] Override: live-polling...");
     const success = await startLivePolling(broadcastSSE, currentState);
     if (!success) {
-      startReplay(broadcastSSE, currentState);
       startSessionWatchdog();
     }
   } else if (PROXY_MODE === "mqtt" || PROXY_MODE === "openf1") {

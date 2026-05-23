@@ -55,6 +55,17 @@ async function getCurrentSession() {
   if (!sessions || sessions.length === 0) return null;
 
   const s = sessions[0];
+
+  // Only start for sessions that are currently active or ended within the last 30 min.
+  // Prevents live-polling from showing stale data from a session that ended hours ago.
+  if (s.date_end) {
+    const endDate = new Date(s.date_end);
+    if (endDate < new Date(Date.now() - 30 * 60 * 1000)) {
+      console.log(`[live-polling] Latest session ended at ${s.date_end} — not active, skipping`);
+      return null;
+    }
+  }
+
   console.log(
     `[live-polling] Found session: ${s.session_name} at ${s.location}`,
   );
