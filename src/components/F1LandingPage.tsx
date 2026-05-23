@@ -91,7 +91,7 @@ function ScheduleRow({
 
   return (
     <div
-      className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
+      className={`flex items-center gap-3 px-3 sm:px-4 py-1.5 sm:py-2.5 transition-colors ${
         isNext
           ? "border-l-2 border-primary bg-primary/10"
           : "border-l-2 border-transparent"
@@ -212,7 +212,7 @@ export default function F1LandingPage({ onEnterDemo }: Props) {
       </div>
 
       {/* Main */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 gap-6">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-4 sm:py-6 gap-4 sm:gap-6">
         {/* "PRÓXIMA CARRERA" label */}
         <motion.div className="flex items-center gap-3" {...stagger(0)}>
           <div className="w-10 h-px bg-primary opacity-70" />
@@ -240,19 +240,19 @@ export default function F1LandingPage({ onEnterDemo }: Props) {
                   src={`https://flagcdn.com/w80/${countryCode}.png`}
                   srcSet={`https://flagcdn.com/w160/${countryCode}.png 2x`}
                   alt={nextSession!.country_name}
-                  className="h-12 rounded shadow-lg shadow-black/50"
+                  className="h-10 sm:h-12 rounded shadow-lg shadow-black/50"
                 />
               </motion.div>
             )}
             <motion.div className="text-center" {...stagger(2)}>
               <h1
-                className="text-5xl sm:text-6xl md:text-7xl uppercase text-white leading-none tracking-tight"
+                className="text-[clamp(1.5rem,7vw,3.75rem)] sm:text-6xl md:text-7xl uppercase text-white leading-none tracking-tight"
                 style={f1Wide}
               >
                 {nextSession.location}
               </h1>
               <p
-                className="mt-3 text-xs tracking-[0.25em] text-zinc-500 uppercase"
+                className="mt-1 sm:mt-3 text-xs tracking-[0.25em] text-zinc-500 uppercase"
                 style={f1Font}
               >
                 {nextSession.circuit_short_name} &nbsp;·&nbsp;{" "}
@@ -354,7 +354,7 @@ export default function F1LandingPage({ onEnterDemo }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6, duration: 0.5 }}
               >
-                <div className="flex items-center gap-3 mb-3">
+                <div className="flex items-center gap-3 mb-1 sm:mb-3">
                   <div className="h-px flex-1 bg-zinc-800/60" />
                   <span
                     className="text-[10px] tracking-[0.3em] text-zinc-600 uppercase flex-none"
@@ -382,7 +382,7 @@ export default function F1LandingPage({ onEnterDemo }: Props) {
 
       {/* CTA */}
       <motion.footer
-        className="relative z-10 shrink-0 flex flex-col items-center gap-3 py-8 px-4"
+        className="relative z-10 shrink-0 flex flex-col items-center gap-3 sm:gap-3 py-5 sm:py-8 px-4"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.75, duration: 0.5 }}
@@ -391,7 +391,7 @@ export default function F1LandingPage({ onEnterDemo }: Props) {
           onClick={onEnterDemo}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.97 }}
-          className="group flex items-center gap-3 bg-primary hover:bg-primary/90 text-white px-10 py-4 text-sm uppercase tracking-[0.2em] transition-colors"
+          className="group flex items-center gap-3 bg-primary hover:bg-primary/90 text-white px-6 sm:px-10 py-4 text-sm uppercase tracking-[0.12em] sm:tracking-[0.2em] transition-colors whitespace-nowrap"
           style={{ ...f1Font, fontWeight: 700 }}
         >
           <span>{t("landing.enterDemo")}</span>
