@@ -93,9 +93,12 @@ export default function TopBar({
   // use the message to override the color when they disagree
   const effectiveColor = (() => {
     const msg = (trackStatus.message || "").toUpperCase();
+    // Chequered takes priority over everything — the race is over
+    if (msg === "CHEQUERED") return "#3A3A3A";
     if (msg.includes("RED")) return "#FF0000";
     if (msg.includes("GREEN") || msg === "ALLCLEAR" || msg === "ALL CLEAR")
       return "#00bc7d";
+    // Only use race control override for RED FLAG if we're not already past it
     if (latestRaceControlMessage?.message.includes("RED FLAG"))
       return "#FF0000";
     return statusInfo.color;
@@ -111,6 +114,9 @@ export default function TopBar({
       const messageUpper = trackStatus.message.toUpperCase().trim();
 
       // Verificar coincidencias exactas primero
+      if (messageUpper === "CHEQUERED") {
+        return t("status.chequered");
+      }
       if (messageUpper === "ALLCLEAR" || messageUpper === "ALL CLEAR") {
         return t("status.allClear");
       }

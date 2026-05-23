@@ -339,6 +339,11 @@ function handleRaceControl(data, opts = {}) {
       }
     }
 
+    // CHEQUERED can arrive with flag=null — detect from message text as fallback
+    if (data.message?.toUpperCase().includes("CHEQUERED")) {
+      currentStateRef.track_status = { flag: "CHEQUERED" };
+    }
+
     // Safety car overrides flag-based status
     const scStatus = detectSafetyCar(data.message);
     if (scStatus) {

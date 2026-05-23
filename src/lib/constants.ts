@@ -79,7 +79,7 @@ export const TRACK_STATUS: Record<
   4: { name: "Safety Car", color: "#FFA500", key: "scDeployed" },
   5: { name: "Red Flag", color: "#FF0000", key: "red" },
   6: { name: "VSC Deployed", color: "#FFA500", key: "vscDeployed" },
-  7: { name: "VSC Ending", color: "#FFA500", key: "vscEnding" },
+  7: { name: "Chequered Flag", color: "#3A3A3A", key: "chequered" },
 };
 
 // Circuit ShortName → Country name fallback (when API omits Meeting.Country)

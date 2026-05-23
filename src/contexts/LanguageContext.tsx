@@ -141,6 +141,7 @@ const translations = {
     "status.red": "Bandera Roja",
     "status.vscDeployed": "Virtual Safety Car",
     "status.vscEnding": "VSC Finalizando",
+    "status.chequered": "Bandera a Cuadros",
 
     // Session types
     "session.title": "Sesión",
@@ -306,6 +307,7 @@ const translations = {
     "status.red": "Red Flag",
     "status.vscDeployed": "VSC Deployed",
     "status.vscEnding": "VSC Ending",
+    "status.chequered": "Chequered Flag",
 
     // Session types
     "session.title": "Session",

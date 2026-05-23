@@ -95,6 +95,16 @@ function processTimingData(data) {
     const num = String(driverNum);
     const entry = ensureTimingEntry(currentStateRef, num);
 
+    // Race position — present in every TimingData snapshot and incremental update.
+    // More reliable than MQTT v1/position which only fires on position changes.
+    if (driverData.Position != null) {
+      const pos = parseInt(String(driverData.Position), 10);
+      if (!isNaN(pos) && pos > 0) {
+        entry.position = pos;
+        changed = true;
+      }
+    }
+
     // InPit / PitOut — real-time pit lane detection.
     // This is the only reliable source: OpenF1 REST/MQTT only provides pit data
     // after the stop is complete (lane_duration present), so cars currently in
