@@ -290,22 +290,43 @@ export default function TopBar({
           </div>
 
           {/* Track Status Flag */}
-          <div
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border-2"
-            style={{
-              backgroundColor: effectiveColor,
-              borderColor: effectiveColor,
-              boxShadow: `0 0 50px ${effectiveColor}, 0 0 100px ${effectiveColor}80, inset 0 0 20px ${effectiveColor}40`,
-            }}
-            title={statusInfo.name}
-          >
-            <span
-              className="text-sm font-bold uppercase tracking-wider"
-              style={{ color: "white" }}
+          {(trackStatus.message || "").toUpperCase() === "CHEQUERED" ? (
+            <div
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border-2"
+              style={{
+                background:
+                  "repeating-conic-gradient(#111 0% 25%, #e8e8e8 0% 50%) 0 0 / 14px 14px",
+                borderColor: "#888",
+                boxShadow:
+                  "0 0 30px rgba(255,255,255,0.25), 0 0 70px rgba(255,255,255,0.1)",
+              }}
+              title={statusInfo.name}
             >
-              {getTrackStatusText()}
-            </span>
-          </div>
+              <span
+                className="text-sm font-bold uppercase tracking-wider px-2 py-0.5 rounded"
+                style={{ color: "#fff", backgroundColor: "rgba(0,0,0,0.65)" }}
+              >
+                {getTrackStatusText()}
+              </span>
+            </div>
+          ) : (
+            <div
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border-2"
+              style={{
+                backgroundColor: effectiveColor,
+                borderColor: effectiveColor,
+                boxShadow: `0 0 50px ${effectiveColor}, 0 0 100px ${effectiveColor}80, inset 0 0 20px ${effectiveColor}40`,
+              }}
+              title={statusInfo.name}
+            >
+              <span
+                className="text-sm font-bold uppercase tracking-wider"
+                style={{ color: "white" }}
+              >
+                {getTrackStatusText()}
+              </span>
+            </div>
+          )}
 
           {/* Language Toggle */}
           <LanguageToggle />
