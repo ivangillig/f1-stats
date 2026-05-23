@@ -30,7 +30,12 @@ const WS_BASE = `wss://${SIGNALR_HOST}/signalr/connect`;
 
 // Topics: TimingData for live segments/sector times, TimingStats for personal best sectors,
 // TrackStatus and ExtrapolatedClock as fast overrides (OpenF1 MQTT doesn't provide these live)
-const SUBSCRIBE_TOPICS = ["TimingData", "TimingStats", "TrackStatus", "ExtrapolatedClock"];
+const SUBSCRIBE_TOPICS = [
+  "TimingData",
+  "TimingStats",
+  "TrackStatus",
+  "ExtrapolatedClock",
+];
 
 const COMMON_HEADERS = {
   "User-Agent": "BestHTTP",
@@ -111,7 +116,9 @@ function processTimingData(data, isSnapshot = false) {
           entry.gap_to_leader = null;
           entry.interval = null;
         }
-        console.log(`[signalr] Qualifying part advanced to Q${part} — timing data cleared`);
+        console.log(
+          `[signalr] Qualifying part advanced to Q${part} — timing data cleared`,
+        );
       }
       changed = true;
     }

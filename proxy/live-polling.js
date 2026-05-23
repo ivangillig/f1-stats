@@ -61,7 +61,9 @@ async function getCurrentSession() {
   if (s.date_end) {
     const endDate = new Date(s.date_end);
     if (endDate < new Date(Date.now() - 30 * 60 * 1000)) {
-      console.log(`[live-polling] Latest session ended at ${s.date_end} — not active, skipping`);
+      console.log(
+        `[live-polling] Latest session ended at ${s.date_end} — not active, skipping`,
+      );
       return null;
     }
   }

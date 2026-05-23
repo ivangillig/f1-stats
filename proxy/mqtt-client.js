@@ -183,7 +183,8 @@ function handleSession(data) {
   };
   // Set total laps when available (Race and Sprint sessions provide this)
   if (data.total_laps) {
-    if (!currentStateRef.lap_count) currentStateRef.lap_count = { current: 0, total: 0 };
+    if (!currentStateRef.lap_count)
+      currentStateRef.lap_count = { current: 0, total: 0 };
     currentStateRef.lap_count.total = data.total_laps;
   }
 }
@@ -639,7 +640,9 @@ async function fetchHistoricalData(sessionKey) {
         }
       }
       Object.values(latestPos).forEach((p) => handlePosition(p));
-      console.log(`[openf1-mqtt] Loaded positions for ${Object.keys(latestPos).length} drivers`);
+      console.log(
+        `[openf1-mqtt] Loaded positions for ${Object.keys(latestPos).length} drivers`,
+      );
     }
 
     console.log("[openf1-mqtt] Historical data loaded");

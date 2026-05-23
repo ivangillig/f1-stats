@@ -331,11 +331,20 @@ export function useF1DataSSE(): F1DataState {
       // Compute overall session-best sector times across all drivers (for purple highlighting)
       const overallBestSectors = { s1: Infinity, s2: Infinity, s3: Infinity };
       Object.values(timingData).forEach((entry: any) => {
-        if (entry.best_sector_1 != null && entry.best_sector_1 < overallBestSectors.s1)
+        if (
+          entry.best_sector_1 != null &&
+          entry.best_sector_1 < overallBestSectors.s1
+        )
           overallBestSectors.s1 = entry.best_sector_1;
-        if (entry.best_sector_2 != null && entry.best_sector_2 < overallBestSectors.s2)
+        if (
+          entry.best_sector_2 != null &&
+          entry.best_sector_2 < overallBestSectors.s2
+        )
           overallBestSectors.s2 = entry.best_sector_2;
-        if (entry.best_sector_3 != null && entry.best_sector_3 < overallBestSectors.s3)
+        if (
+          entry.best_sector_3 != null &&
+          entry.best_sector_3 < overallBestSectors.s3
+        )
           overallBestSectors.s3 = entry.best_sector_3;
       });
 
