@@ -205,10 +205,25 @@ export default function DashboardPage() {
               <div className="flex shrink-0 border-b border-zinc-800 bg-zinc-950/40">
                 {(
                   [
-                    { id: "map",        label: "Mapa",    icon: Map,           color: "#38bdf8" }, // sky
-                    { id: "control",    label: "Control", icon: Flag,          color: "#facc15" }, // yellow
-                    { id: "violations", label: "Límites", icon: AlertTriangle, color: "#f97316" }, // orange
-                    { id: "radio",      label: "Radio",   icon: Radio,         color: "#a78bfa" }, // violet
+                    { id: "map", label: "Mapa", icon: Map, color: "#38bdf8" }, // sky
+                    {
+                      id: "control",
+                      label: "Control",
+                      icon: Flag,
+                      color: "#facc15",
+                    }, // yellow
+                    {
+                      id: "violations",
+                      label: "Límites",
+                      icon: AlertTriangle,
+                      color: "#f97316",
+                    }, // orange
+                    {
+                      id: "radio",
+                      label: "Radio",
+                      icon: Radio,
+                      color: "#a78bfa",
+                    }, // violet
                   ] as const
                 ).map((tab) => (
                   <button
@@ -220,10 +235,7 @@ export default function DashboardPage() {
                         : "text-zinc-500 hover:text-zinc-300"
                     }`}
                   >
-                    <tab.icon
-                      size={13}
-                      style={{ color: tab.color }}
-                    />
+                    <tab.icon size={13} style={{ color: tab.color }} />
                     {tab.label}
                     {activeTab === tab.id && (
                       <motion.div
