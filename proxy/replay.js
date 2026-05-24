@@ -346,7 +346,9 @@ function processData(data, state) {
     const num = String(int.driver_number);
     const entry = ensureTimingEntry(state, num);
     const gap = parseFloat(int.gap_to_leader);
-    entry.gap_to_leader = (int.gap_to_leader === 0 || int.gap_to_leader == null) ? null : (!isNaN(gap) ? gap : null);
+    const isLeader = int.gap_to_leader === 0 || int.gap_to_leader == null;
+    entry.gap_to_leader = isLeader ? null : (!isNaN(gap) ? gap : null);
+    if (isLeader) entry.position = 1;
     const ivl = parseFloat(int.interval);
     entry.interval = (!isNaN(ivl) && int.interval !== 0) ? ivl : null;
   });

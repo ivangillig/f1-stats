@@ -225,10 +225,9 @@ function handleInterval(data) {
   if (!currentStateRef) return;
   const num = String(data.driver_number);
   const entry = ensureTimingEntry(currentStateRef, num);
-  entry.gap_to_leader =
-    data.gap_to_leader === 0 || data.gap_to_leader == null
-      ? null
-      : data.gap_to_leader;
+  const isLeader = data.gap_to_leader === 0 || data.gap_to_leader == null;
+  entry.gap_to_leader = isLeader ? null : data.gap_to_leader;
+  if (isLeader) entry.position = 1;
   entry.interval =
     data.interval === 0 || data.interval == null ? null : data.interval;
 }
