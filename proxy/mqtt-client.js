@@ -582,8 +582,34 @@ async function fetchHistoricalData(sessionKey) {
     }
 
     if (driversRes.ok) {
-      const drivers = await driversRes.json();
-      console.log(`[openf1-mqtt] Loaded ${drivers.length} drivers`);
+      let drivers = await driversRes.json();
+      // OpenF1 doesn't populate drivers for a session until it actually starts.
+      // Fall back to the previous session's driver list so codes/images are
+      // available before the session begins.
+      if (drivers.length === 0) {
+        console.log(
+          `[openf1-mqtt] No drivers for session ${sessionKey} yet — falling back to previous session`,
+        );
+        try {
+          const prevRes = await fetch(
+            `${API_BASE}/drivers?session_key=${sessionKey - 1}`,
+            { headers },
+          );
+          if (prevRes.ok) {
+            const prev = await prevRes.json();
+            if (prev.length > 0) {
+              drivers = prev;
+              console.log(
+                `[openf1-mqtt] Loaded ${drivers.length} drivers from previous session`,
+              );
+            }
+          }
+        } catch {
+          /* ignore, keep empty */
+        }
+      } else {
+        console.log(`[openf1-mqtt] Loaded ${drivers.length} drivers`);
+      }
       // Replace entirely so that retained MQTT messages for drivers from past
       // sessions (e.g. RIC) don't persist into the current session.
       currentStateRef.drivers = {};
