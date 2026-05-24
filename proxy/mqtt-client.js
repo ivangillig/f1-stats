@@ -50,6 +50,8 @@ let isRunning = false;
 let reconnectTimeout = null;
 let carDataDirty = false;
 let carDataTimer = null;
+let locationDirty = false;
+let locationTimer = null;
 
 /**
  * Obtain OAuth2 access token from OpenF1
@@ -129,7 +131,8 @@ function processMessage(topic, message) {
         break;
       case "location":
         handleLocation(data);
-        break;
+        locationDirty = true;
+        return; // skip per-message broadcast — location uses a dedicated 250ms timer
       case "car_data":
         handleCarData(data);
         carDataDirty = true;
@@ -800,6 +803,14 @@ export async function startMQTT(broadcast, stateRef) {
     }
   }, 500);
 
+  // Broadcast location at 250ms — location is ~3.7 Hz per driver (74 Hz with 20 drivers)
+  locationTimer = setInterval(() => {
+    if (locationDirty && broadcastFn && currentStateRef) {
+      broadcastFn("update", currentStateRef);
+      locationDirty = false;
+    }
+  }, 250);
+
   await connect();
   return true;
 }
@@ -821,6 +832,12 @@ export function stopMQTT() {
     carDataTimer = null;
   }
   carDataDirty = false;
+
+  if (locationTimer) {
+    clearInterval(locationTimer);
+    locationTimer = null;
+  }
+  locationDirty = false;
 
   if (client) {
     client.end(true);

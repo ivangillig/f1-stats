@@ -12,20 +12,23 @@
 import { ensureValidToken, hasMQTTCredentials } from "./mqtt-client.js";
 import { ensureTimingEntry, updateBestLap, flagToTrackStatus, detectSafetyCar } from "./state-utils.js";
 
-// Azerbaijan 2024 GP - Session Key (Colapinto P8!)
-const SESSION_KEY = 9598;
-const CIRCUIT_KEY = 144; // Baku
-const TOTAL_LAPS = 51; // Azerbaijan GP has 51 laps
+// Session key — configurable via REPLAY_SESSION_KEY env var (defaults to Baku 2024)
+const SESSION_KEY = parseInt(process.env.REPLAY_SESSION_KEY || "9598");
+let CIRCUIT_KEY = null; // Loaded from API at startup
+let TOTAL_LAPS = 70; // Default; updated from lap data as race progresses
 
 // Replay speed multiplier (1x = real-time, 10x = 10 seconds per real second)
 const REPLAY_SPEED = 1;
 
 // Paid tier doubles the rate limit (60 req/min, 6 req/s) vs free (30 req/min, 3 req/s).
-// 4 requests per cycle → paid: 4s interval, free: 8s interval.
+// 6 requests per cycle (pos, intervals, laps, location, race_control, team_radio).
+// Uses recursive setTimeout (not setInterval) so cycles never overlap.
+// Free: 6 req × ~2s each = ~12s per cycle, +3s gap = 15s between cycles ≈ 24 req/min
+// Paid: 6 req × ~0.4s each = ~2.4s per cycle, +1.6s gap = 4s between cycles ≈ 90 req/min (well under 60 req/min cap with spacing)
 const PAID_POLL_INTERVAL_MS = 4000;
-const FREE_POLL_INTERVAL_MS = 8000;
+const FREE_POLL_INTERVAL_MS = 15000;
 const PAID_REQUEST_DELAY_MS = 200;
-const FREE_REQUEST_DELAY_MS = 1500;
+const FREE_REQUEST_DELAY_MS = 1800;
 
 // Set at startReplay() based on whether credentials are available
 let POLL_INTERVAL_MS = FREE_POLL_INTERVAL_MS;
@@ -48,6 +51,9 @@ let lastPollTime = null; // Last race time we polled up to
 
 // Pit stop windows loaded at startup: { "driverNum": [{ entryMs, exitMs }] }
 const pitData = {};
+
+// Stint data loaded at startup: { "driverNum": [{ compound, lap_start, lap_end, tyre_age_at_start }] }
+const stintsData = {};
 
 // Fetch with error handling and 429 retry backoff
 async function fetchJSON(url, retries = 4) {
@@ -95,211 +101,67 @@ async function fetchJSON(url, retries = 4) {
   return [];
 }
 
-// Static session data for Baku 2024 Race (session_key: 9598)
-// Hardcoded to avoid hammering the OpenF1 free tier at startup
-const STATIC_SESSION = {
-  session_key: 9598,
-  meeting_key: 1245,
-  session_name: "Race",
-  session_type: "Race",
-  location: "Baku",
-  circuit_short_name: "Baku",
-  circuit_key: CIRCUIT_KEY,
-  country_name: "Azerbaijan",
-  country_code: "AZE",
-  date_start: "2024-09-15T11:33:23+00:00", // Actual race green flag
-};
+async function fetchSessionInfo() {
+  console.log(`[Replay] Fetching session ${SESSION_KEY} from OpenF1...`);
+  const sessions = await fetchJSON(`${API_BASE}/sessions?session_key=${SESSION_KEY}`);
+  if (!sessions || sessions.length === 0)
+    throw new Error(`Session ${SESSION_KEY} not found in OpenF1`);
+  const session = sessions[0];
+  CIRCUIT_KEY = session.circuit_key;
+  console.log(`[Replay] Session: ${session.location} — ${session.session_name} (circuit_key: ${CIRCUIT_KEY})`);
 
-const STATIC_DRIVERS = [
-  {
-    driver_number: 1,
-    name_acronym: "VER",
-    full_name: "Max Verstappen",
-    team_name: "Red Bull Racing",
-    team_colour: "3671C6",
-  },
-  {
-    driver_number: 11,
-    name_acronym: "PER",
-    full_name: "Sergio Perez",
-    team_name: "Red Bull Racing",
-    team_colour: "3671C6",
-  },
-  {
-    driver_number: 16,
-    name_acronym: "LEC",
-    full_name: "Charles Leclerc",
-    team_name: "Ferrari",
-    team_colour: "E8002D",
-  },
-  {
-    driver_number: 55,
-    name_acronym: "SAI",
-    full_name: "Carlos Sainz",
-    team_name: "Ferrari",
-    team_colour: "E8002D",
-  },
-  {
-    driver_number: 44,
-    name_acronym: "HAM",
-    full_name: "Lewis Hamilton",
-    team_name: "Mercedes",
-    team_colour: "27F4D2",
-  },
-  {
-    driver_number: 63,
-    name_acronym: "RUS",
-    full_name: "George Russell",
-    team_name: "Mercedes",
-    team_colour: "27F4D2",
-  },
-  {
-    driver_number: 4,
-    name_acronym: "NOR",
-    full_name: "Lando Norris",
-    team_name: "McLaren",
-    team_colour: "FF8000",
-  },
-  {
-    driver_number: 81,
-    name_acronym: "PIA",
-    full_name: "Oscar Piastri",
-    team_name: "McLaren",
-    team_colour: "FF8000",
-  },
-  {
-    driver_number: 14,
-    name_acronym: "ALO",
-    full_name: "Fernando Alonso",
-    team_name: "Aston Martin",
-    team_colour: "229971",
-  },
-  {
-    driver_number: 18,
-    name_acronym: "STR",
-    full_name: "Lance Stroll",
-    team_name: "Aston Martin",
-    team_colour: "229971",
-  },
-  {
-    driver_number: 10,
-    name_acronym: "GAS",
-    full_name: "Pierre Gasly",
-    team_name: "Alpine",
-    team_colour: "FF87BC",
-  },
-  {
-    driver_number: 31,
-    name_acronym: "OCO",
-    full_name: "Esteban Ocon",
-    team_name: "Alpine",
-    team_colour: "FF87BC",
-  },
-  {
-    driver_number: 23,
-    name_acronym: "ALB",
-    full_name: "Alexander Albon",
-    team_name: "Williams",
-    team_colour: "64C4FF",
-  },
-  {
-    driver_number: 2,
-    name_acronym: "SAR",
-    full_name: "Logan Sargeant",
-    team_name: "Williams",
-    team_colour: "64C4FF",
-  },
-  {
-    driver_number: 77,
-    name_acronym: "BOT",
-    full_name: "Valtteri Bottas",
-    team_name: "Kick Sauber",
-    team_colour: "52E252",
-  },
-  {
-    driver_number: 24,
-    name_acronym: "ZHO",
-    full_name: "Guanyu Zhou",
-    team_name: "Kick Sauber",
-    team_colour: "52E252",
-  },
-  {
-    driver_number: 20,
-    name_acronym: "MAG",
-    full_name: "Kevin Magnussen",
-    team_name: "Haas F1 Team",
-    team_colour: "B6BABD",
-  },
-  {
-    driver_number: 27,
-    name_acronym: "HUL",
-    full_name: "Nico Hulkenberg",
-    team_name: "Haas F1 Team",
-    team_colour: "B6BABD",
-  },
-  {
-    driver_number: 3,
-    name_acronym: "RIC",
-    full_name: "Daniel Ricciardo",
-    team_name: "RB",
-    team_colour: "6692FF",
-  },
-  {
-    driver_number: 22,
-    name_acronym: "TSU",
-    full_name: "Yuki Tsunoda",
-    team_name: "RB",
-    team_colour: "6692FF",
-  },
-  {
-    driver_number: 43,
-    name_acronym: "COL",
-    full_name: "Franco Colapinto",
-    team_name: "Alpine",
-    team_colour: "FF87BC",
-  },
-];
+  await new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
+  const drivers = await fetchJSON(`${API_BASE}/drivers?session_key=${SESSION_KEY}`);
+  console.log(`[Replay] Drivers: ${drivers.length}`);
 
-// Starting grid for Baku 2024 Race
-const STATIC_STARTING_GRID = {
-  16: 1,
-  55: 2,
-  44: 3,
-  63: 4,
-  1: 5,
-  81: 6,
-  4: 7,
-  43: 8,
-  14: 9,
-  18: 10,
-  11: 11,
-  10: 12,
-  31: 13,
-  23: 14,
-  77: 15,
-  24: 16,
-  20: 17,
-  27: 18,
-  3: 19,
-  22: 20,
-};
-
-function fetchSessionInfo() {
-  console.log(
-    `[Replay] Using static session data for ${STATIC_SESSION.location}...`,
-  );
-  console.log(
-    `[Replay] Session: ${STATIC_SESSION.location} - ${STATIC_SESSION.session_name}`,
-  );
-  console.log(`[Replay] Drivers: ${STATIC_DRIVERS.length}`);
-  return Promise.resolve({ session: STATIC_SESSION, drivers: STATIC_DRIVERS });
+  return {
+    session: {
+      session_key: SESSION_KEY,
+      meeting_key: session.meeting_key,
+      session_name: session.session_name,
+      session_type: session.session_type,
+      location: session.location,
+      circuit_short_name: session.circuit_short_name || session.location,
+      circuit_key: CIRCUIT_KEY,
+      country_name: session.country_name,
+      country_code: session.country_code,
+      date_start: session.date_start,
+      date_end: null,
+      meeting_name: session.meeting_name || session.location,
+    },
+    drivers,
+  };
 }
 
-function fetchStartingGrid() {
-  console.log(
-    `[Replay] Using static starting grid: ${Object.keys(STATIC_STARTING_GRID).length} drivers`,
+async function fetchStartingGrid() {
+  const grid = await fetchJSON(`${API_BASE}/starting_grid?session_key=${SESSION_KEY}`);
+  const result = {};
+  grid.forEach((g) => {
+    if (g.driver_number && g.position) result[String(g.driver_number)] = g.position;
+  });
+  console.log(`[Replay] Starting grid: ${Object.keys(result).length} drivers`);
+  return result;
+}
+
+
+async function findRaceStart(sessionDateStart) {
+  // Use the earliest lap 1 date_start across all drivers — that's when lights went out.
+  // Falls back to session date_start if no lap data yet.
+  const laps = await fetchJSON(
+    `${API_BASE}/laps?session_key=${SESSION_KEY}&lap_number=1`,
   );
-  return Promise.resolve(STATIC_STARTING_GRID);
+  if (laps && laps.length > 0) {
+    const dates = laps
+      .map((l) => l.date_start && new Date(l.date_start).getTime())
+      .filter(Boolean);
+    if (dates.length > 0) {
+      const start = new Date(Math.min(...dates));
+      console.log(`[Replay] Race start (from lap 1 data): ${start.toISOString()}`);
+      return start;
+    }
+  }
+  console.log(`[Replay] Race start (fallback to session date_start): ${sessionDateStart}`);
+  return new Date(sessionDateStart);
 }
 
 async function fetchPitData() {
@@ -327,8 +189,74 @@ function isDriverInPit(driverNum, currentTime) {
   return stops.some((s) => now >= s.entryMs && now <= s.exitMs);
 }
 
+async function fetchStintData() {
+  console.log(`[Replay] Loading stint/tire data...`);
+  const stints = await fetchJSON(`${API_BASE}/stints?session_key=${SESSION_KEY}`);
+  Object.keys(stintsData).forEach((k) => delete stintsData[k]);
+  stints.forEach((s) => {
+    const num = String(s.driver_number);
+    if (!stintsData[num]) stintsData[num] = [];
+    stintsData[num].push({
+      compound: s.compound ? s.compound.toUpperCase() : "UNKNOWN",
+      lap_start: s.lap_start || 1,
+      lap_end: s.lap_end || null,
+      tyre_age_at_start: s.tyre_age_at_start || 0,
+      stint_number: s.stint_number || 1,
+    });
+  });
+  console.log(`[Replay] Loaded stints for ${Object.keys(stintsData).length} drivers`);
+}
+
+// All weather records for the session, sorted by date ascending
+let weatherRecords = [];
+
+async function fetchAllWeather() {
+  console.log(`[Replay] Loading weather data...`);
+  const records = await fetchJSON(`${API_BASE}/weather?session_key=${SESSION_KEY}`);
+  weatherRecords = (records || []).sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (weatherRecords.length > 0) {
+    const w = weatherRecords[0];
+    console.log(`[Replay] Weather: ${weatherRecords.length} records. Start: ${w.air_temperature}°C air, ${w.track_temperature}°C track`);
+  }
+}
+
+function updateWeather(state, currentRaceTime) {
+  if (weatherRecords.length === 0) return;
+  const now = currentRaceTime.getTime();
+  // Find the latest record at or before the current race time
+  let latest = weatherRecords[0];
+  for (const w of weatherRecords) {
+    if (new Date(w.date).getTime() <= now) latest = w;
+    else break;
+  }
+  state.weather = {
+    air_temperature: latest.air_temperature,
+    track_temperature: latest.track_temperature,
+    humidity: latest.humidity,
+    pressure: latest.pressure,
+    rainfall: latest.rainfall,
+    wind_speed: latest.wind_speed,
+    wind_direction: latest.wind_direction,
+  };
+}
+
+function updateActiveStints(state) {
+  Object.keys(state.timing).forEach((num) => {
+    const driverStints = stintsData[num];
+    if (!driverStints || driverStints.length === 0) return;
+    const currentLap = state.timing[num].lap_number || 1;
+    const active = driverStints.find(
+      (s) => currentLap >= s.lap_start && (!s.lap_end || currentLap <= s.lap_end),
+    );
+    if (active) {
+      state.timing[num].compound = active.compound;
+      state.timing[num].tyre_age =
+        Math.max(0, currentLap - active.lap_start) + active.tyre_age_at_start;
+    }
+  });
+}
+
 // Fetch incremental data for a time window — sequential to respect rate limits.
-// Skips location (not needed for timing board) and team_radio (low priority).
 async function fetchTimeWindow(sessionKey, startTime, endTime) {
   const s = startTime.toISOString();
   const e = endTime.toISOString();
@@ -346,18 +274,19 @@ async function fetchTimeWindow(sessionKey, startTime, endTime) {
     `${API_BASE}/laps?session_key=${sessionKey}&date_start>=${s}&date_start<${e}`,
   );
   await delay();
+  const locations = await fetchJSON(
+    `${API_BASE}/location?session_key=${sessionKey}&date>=${s}&date<${e}`,
+  );
+  await delay();
   const raceControl = await fetchJSON(
     `${API_BASE}/race_control?session_key=${sessionKey}&date>=${s}&date<${e}`,
   );
+  await delay();
+  const teamRadio = await fetchJSON(
+    `${API_BASE}/team_radio?session_key=${sessionKey}&date>=${s}&date<${e}`,
+  );
 
-  return {
-    positions,
-    intervals,
-    laps,
-    locations: [],
-    raceControl,
-    teamRadio: [],
-  };
+  return { positions, intervals, laps, locations, raceControl, teamRadio };
 }
 
 // Build initial state structure
@@ -366,30 +295,22 @@ function buildInitialState(session, drivers, startingGrid) {
     session: {
       session_key: SESSION_KEY,
       session_name: session.session_name || session.session_type || "Race",
-      session_type: "Race",
-      circuit_key: CIRCUIT_KEY,
-      circuit_short_name: session.circuit_short_name || session.location || "Baku",
-      country_name: session.country_name || "Azerbaijan",
-      country_code: session.country_code || "AZE",
+      session_type: session.session_type || "Race",
+      circuit_key: session.circuit_key,
+      circuit_short_name: session.circuit_short_name || session.location,
+      country_name: session.country_name,
+      country_code: session.country_code,
       date_start: session.date_start,
       date_end: null,
-      location: session.location || "Baku",
-      meeting_name: session.meeting_name || "Azerbaijan Grand Prix",
+      location: session.location,
+      meeting_name: session.meeting_name || session.location,
     },
     drivers: {},
     timing: {},
     location: {},
     lap_count: { current: 1, total: TOTAL_LAPS },
     track_status: { flag: "GREEN" },
-    weather: {
-      air_temperature: 28,
-      track_temperature: 35,
-      humidity: 45,
-      pressure: 1015,
-      rainfall: false,
-      wind_speed: 4.2,
-      wind_direction: 180,
-    },
+    weather: null,
     race_control_messages: [],
     team_radio: [],
     clock: { remaining: "0:00:00", utc: new Date().toISOString() },
@@ -548,22 +469,34 @@ export async function startReplay(broadcast, stateRef) {
     console.log(`[Replay] Free tier — using ${POLL_INTERVAL_MS}ms interval`);
   }
 
+  const startupDelay = () => new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
+
   try {
-    // Sequential fetches to avoid rate limiting (free tier: 3 req/s, 30 req/min)
+    // Sequential startup fetches with delays to stay within rate limits
     const sessionInfo = await fetchSessionInfo();
+    await startupDelay();
     const startingGrid = await fetchStartingGrid();
+    await startupDelay();
     await fetchPitData();
+    await startupDelay();
+    await fetchStintData();
+    await startupDelay();
+    await fetchAllWeather();
+    await startupDelay();
 
     const { session, drivers } = sessionInfo;
     sessionData = session;
     driversData = drivers;
 
-    raceStartTime = new Date(session.date_start);
-    console.log(`[Replay] Race start: ${raceStartTime.toISOString()}`);
+    raceStartTime = await findRaceStart(session.date_start);
 
     // Build initial state with starting grid
     const initialState = buildInitialState(session, drivers, startingGrid);
     Object.assign(currentStateRef, initialState);
+
+    // Apply initial tire compounds and weather
+    updateActiveStints(currentStateRef);
+    updateWeather(currentStateRef, raceStartTime);
 
     // Broadcast initial state
     broadcastFn("initial", currentStateRef);
@@ -577,12 +510,19 @@ export async function startReplay(broadcast, stateRef) {
       `[Replay] Polling every ${POLL_INTERVAL_MS}ms for ${POLL_WINDOW_SECONDS}s windows`,
     );
 
-    replayInterval = setInterval(async () => {
+    // Use recursive setTimeout so each cycle only starts after the previous completes,
+    // preventing overlapping requests that blow the rate limit.
+    const schedulePoll = async () => {
+      if (!replayStarted) return;
       await pollAndBroadcast();
-    }, POLL_INTERVAL_MS);
+      if (replayStarted) {
+        replayInterval = setTimeout(schedulePoll, POLL_INTERVAL_MS);
+      }
+    };
 
-    // Do first poll immediately
+    // Do first poll immediately, then schedule subsequent ones
     await pollAndBroadcast();
+    replayInterval = setTimeout(schedulePoll, POLL_INTERVAL_MS);
 
     console.log("[Replay] Replay started!");
     return true;
@@ -644,6 +584,12 @@ async function pollAndBroadcast() {
     currentStateRef.timing[num].in_pit = isDriverInPit(num, currentRaceTime);
   });
 
+  // Update active tire compound per driver based on current lap
+  updateActiveStints(currentStateRef);
+
+  // Update weather based on current race time
+  updateWeather(currentStateRef, currentRaceTime);
+
   // Update clock
   const hours = Math.floor(raceSeconds / 3600);
   const minutes = Math.floor((raceSeconds % 3600) / 60);
@@ -673,7 +619,7 @@ async function pollAndBroadcast() {
 // Stop replay
 export function stopReplay() {
   if (replayInterval) {
-    clearInterval(replayInterval);
+    clearTimeout(replayInterval);
     replayInterval = null;
   }
   replayStarted = false;
@@ -683,6 +629,8 @@ export function stopReplay() {
   replayStartRealTime = null;
   lastPollTime = null;
   Object.keys(pitData).forEach((k) => delete pitData[k]);
+  Object.keys(stintsData).forEach((k) => delete stintsData[k]);
+  weatherRecords = [];
   console.log("[Replay] Replay stopped");
 }
 

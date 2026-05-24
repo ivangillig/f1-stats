@@ -284,7 +284,7 @@ export default function TopBar({
               >
                 {t("topbar.laps")} {session.currentLap}
                 {session.totalLaps > 0 &&
-                  ` ${t("topbar.of")} ${session.totalLaps}`}
+                  ` / ${session.totalLaps}`}
               </span>
             )}
           </div>

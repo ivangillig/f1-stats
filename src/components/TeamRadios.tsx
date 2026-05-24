@@ -1,7 +1,7 @@
 "use client";
 
 import { RadioCapture, Driver } from "@/types/f1";
-import { DRIVERS, TEAM_COLORS } from "@/lib/constants";
+import { TEAM_COLORS } from "@/lib/constants";
 import { useState, useRef, useEffect } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import DriverTag from "./DriverTag";
@@ -185,11 +185,9 @@ export default function TeamRadios({ radios, drivers }: TeamRadiosProps) {
   };
 
   const getDriverInfo = (racingNumber: string) => {
-    const driverData = DRIVERS[racingNumber];
-    if (!driverData) {
-      return { code: racingNumber, team: "Unknown" };
-    }
-    return driverData;
+    const driver = drivers.find((d) => d.driverNumber === racingNumber);
+    if (!driver) return { code: racingNumber, team: "Unknown" };
+    return { code: driver.code, team: driver.team };
   };
 
   return (

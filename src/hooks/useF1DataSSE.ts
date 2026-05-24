@@ -12,7 +12,7 @@ import {
   RaceControlMessage,
   CarData,
 } from "@/types/f1";
-import { DRIVERS, CIRCUIT_TO_COUNTRY } from "@/lib/constants";
+import { CIRCUIT_TO_COUNTRY } from "@/lib/constants";
 
 // Use NEXT_PUBLIC_PROXY_URL if set (preferred — direct connection, no Next.js rewrite needed).
 // Falls back to /api/proxy (Next.js rewrite) for backwards compatibility.
@@ -354,17 +354,11 @@ export function useF1DataSSE(): F1DataState {
         Object.entries(timingData).forEach(([num, entry]: [string, any]) => {
           const existing = driversMap.get(num);
 
-          // Resolve driver identity: API cache → hardcoded fallback
           const apiInfo = driverListRef.current[num];
-          const apiCode = apiInfo?.code || num;
-          const hardcodedByCode = Object.values(DRIVERS).find(
-            (d) => d.code === apiCode,
-          );
-          const hardcoded = hardcodedByCode || DRIVERS[num];
           const driverInfo = {
-            name: apiInfo?.name || hardcoded?.name || `Driver ${num}`,
-            team: apiInfo?.team || hardcoded?.team || "Unknown",
-            code: apiInfo?.code || hardcoded?.code || num,
+            name: apiInfo?.name || `Driver ${num}`,
+            team: apiInfo?.team || "Unknown",
+            code: apiInfo?.code || num,
             teamColor: apiInfo?.teamColor || "",
           };
 

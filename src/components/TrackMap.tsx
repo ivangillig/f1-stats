@@ -37,30 +37,6 @@ interface TrackMapProps {
 const SPACE = 1000;
 const ROTATION_FIX = 90;
 
-const DRIVER_PHOTO_CODES = new Set([
-  "VER",
-  "HAM",
-  "LEC",
-  "NOR",
-  "PIA",
-  "RUS",
-  "ALO",
-  "STR",
-  "SAI",
-  "GAS",
-  "OCO",
-  "HUL",
-  "BOT",
-  "ALB",
-  "PER",
-  "LAW",
-  "HAD",
-  "ANT",
-  "BEA",
-  "BOR",
-  "COL",
-]);
-
 // Helper functions
 const rad = (deg: number) => deg * (Math.PI / 180);
 
@@ -312,6 +288,7 @@ export default function TrackMap({
   const [animatedPositions, setAnimatedPositions] = useState<
     Map<string, { x: number; y: number; inPit: boolean }>
   >(new Map());
+  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
 
   // Calculate target positions based on driver data (this is the "goal" for animation)
   const targetPositions = useMemo(() => {
@@ -320,41 +297,68 @@ export default function TrackMap({
 
     const pitLaneEndIndex = Math.min(Math.floor(points.length * 0.05), 50);
     const miniSectorIndexes = mapData?.miniSectorsIndexes || [];
+    const totalPoints = points.length;
 
     const targets = new Map<string, { targetIndex: number; inPit: boolean }>();
     let pitIndex = 0;
+    const pitDriverCount = Math.max(
+      20,
+      drivers.filter((d) => d.inPit || (!d.bestLap && !d.lastLap)).length,
+    );
+
+    const gpsDrivers = drivers.filter(
+      (d) => (d.trackX || d.trackY) && !(d.trackX === 0 && d.trackY === 0),
+    ).length;
+    if (gpsDrivers > 0) {
+      console.log(`[TrackMap] GPS positioning: ${gpsDrivers}/${drivers.length} drivers`);
+    }
 
     drivers.forEach((driver) => {
+      const hasNoLocationData =
+        (!driver.trackX && !driver.trackY) ||
+        (driver.trackX === 0 && driver.trackY === 0);
+
       const hasNoTrackData =
-        !driver.trackX &&
-        !driver.trackY &&
+        hasNoLocationData &&
         (driver.trackProgress === undefined || driver.trackProgress === 0);
 
-      // When session is not active (demo/replay), show all drivers in pit lane
-      // When session IS active, use normal logic (inPit flag or no track data)
       const shouldBeInPit =
         !isSessionActive ||
         driver.inPit ||
         (hasNoTrackData && !driver.bestLap && !driver.lastLap);
 
       if (shouldBeInPit) {
-        // Position in pit lane
-        const pitProgress =
-          pitIndex /
-          Math.max(
-            20,
-            drivers.filter((d) => d.inPit || (!d.bestLap && !d.lastLap)).length,
-          );
-        const trackIdx = Math.floor(pitProgress * pitLaneEndIndex);
+        const trackIdx = Math.floor((pitIndex / pitDriverCount) * pitLaneEndIndex);
         pitIndex++;
-        targets.set(driver.driverNumber, {
-          targetIndex: trackIdx,
-          inPit: true,
-        });
+        targets.set(driver.driverNumber, { targetIndex: trackIdx, inPit: true });
         return;
       }
 
-      // Calculate position from mini sectors
+      // Primary: GPS coordinates from OpenF1 MQTT (v1/location), ~3.7 Hz
+      if (!hasNoLocationData) {
+        const rotated = rotate(
+          driver.trackX!,
+          driver.trackY!,
+          rotation,
+          centerX,
+          centerY,
+        );
+        let minDist = Infinity;
+        let nearestIdx = 0;
+        for (let i = 0; i < totalPoints; i++) {
+          const dx = points[i].x - rotated.x;
+          const dy = points[i].y - rotated.y;
+          const dist = dx * dx + dy * dy;
+          if (dist < minDist) {
+            minDist = dist;
+            nearestIdx = i;
+          }
+        }
+        targets.set(driver.driverNumber, { targetIndex: nearestIdx, inPit: false });
+        return;
+      }
+
+      // Fallback: mini-sectors from SignalR (~4s granularity)
       if (
         driver.miniSectors &&
         driver.miniSectors.length > 0 &&
@@ -368,35 +372,22 @@ export default function TrackMap({
           completedMiniSectors > 0 &&
           completedMiniSectors <= miniSectorIndexes.length
         ) {
-          const targetIndex = miniSectorIndexes[completedMiniSectors - 1] || 0;
-          targets.set(driver.driverNumber, { targetIndex, inPit: false });
+          targets.set(driver.driverNumber, {
+            targetIndex: miniSectorIndexes[completedMiniSectors - 1] || 0,
+            inPit: false,
+          });
           return;
         }
       }
 
-      // Use trackProgress if available
-      if (driver.trackProgress !== undefined && driver.trackProgress > 0) {
-        const trackIndex = Math.floor(driver.trackProgress * points.length);
-        targets.set(driver.driverNumber, {
-          targetIndex: trackIndex,
-          inPit: false,
-        });
-        return;
-      }
-
-      // Fallback: use position
-      const trackIndex =
-        Math.floor(
-          ((driver.position - 1) * points.length) / (drivers.length + 5),
-        ) % points.length;
-      targets.set(driver.driverNumber, {
-        targetIndex: trackIndex,
-        inPit: false,
-      });
+      // No usable data — park in pit lane
+      const trackIdx = Math.floor((pitIndex / pitDriverCount) * pitLaneEndIndex);
+      pitIndex++;
+      targets.set(driver.driverNumber, { targetIndex: trackIdx, inPit: true });
     });
 
     return targets;
-  }, [drivers, points, bounds, mapData, isSessionActive]);
+  }, [drivers, points, bounds, mapData, isSessionActive, rotation, centerX, centerY]);
 
   // Helper to interpolate between two track points
   const getInterpolatedPoint = useCallback(
@@ -727,7 +718,7 @@ export default function TrackMap({
             const teamColor =
               driver.teamColor || TEAM_COLORS[driver.team] || "#666666";
             const isHovered = driver.driverNumber === hoveredDriverNumber;
-            const hasPhoto = DRIVER_PHOTO_CODES.has(driver.code);
+            const hasPhoto = !failedPhotos.has(driver.code);
 
             return (
               <g
@@ -776,6 +767,9 @@ export default function TrackMap({
                       height={224}
                       clipPath={`url(#clip-photo-${driver.driverNumber})`}
                       preserveAspectRatio="xMidYMin slice"
+                      onError={() =>
+                        setFailedPhotos((prev) => { const s = new Set(prev); s.add(driver.code); return s; })
+                      }
                       style={{
                         opacity: isHovered ? 1 : 0,
                         transition: "opacity 0.15s ease",
