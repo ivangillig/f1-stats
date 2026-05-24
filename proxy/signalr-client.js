@@ -155,9 +155,15 @@ function processTimingData(data, isSnapshot = false) {
     //   but some InPit:false updates were missed during a brief disconnect).
     if (driverData.InPit === true) {
       entry.in_pit = true;
+      entry.is_pit_out_lap = false; // entering pit again cancels any prior pit-out state
       changed = true;
     } else if (driverData.InPit === false || driverData.PitOut === true) {
       entry.in_pit = false;
+      if (driverData.PitOut === true) {
+        // Driver just exited the pit — show OUT badge immediately.
+        // MQTT v1/laps will eventually overwrite this when the pit-out lap completes.
+        entry.is_pit_out_lap = true;
+      }
       changed = true;
     } else if (isSnapshot && entry.in_pit) {
       // Snapshot is authoritative: car not shown as InPit:true → must be on track.
