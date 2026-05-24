@@ -14,6 +14,7 @@ interface DriverRowProps {
   onHover?: (driverNumber: string | null) => void;
   isPinned?: boolean;
   onPin?: (driverNumber: string | null) => void;
+  gapPrimary?: "gap" | "interval";
 }
 
 // Empty time format placeholder
@@ -222,6 +223,7 @@ export default function DriverRow({
   onHover,
   isPinned,
   onPin,
+  gapPrimary = "gap",
 }: DriverRowProps) {
   const { t } = useLanguage();
 
@@ -397,15 +399,19 @@ export default function DriverRow({
       <div className="text-right leading-none">
         <div
           className="text-lg text-foreground font-f1 font-medium leading-none tracking-tight"
-          title={t("driver.gapToLeader")}
+          title={t(gapPrimary === "gap" ? "driver.gapToLeader" : "driver.intervalToAhead")}
         >
-          {driver.position === 1 ? "—" : driver.gap || "—"}
+          {gapPrimary === "gap"
+            ? driver.position === 1 ? "—" : driver.gap || "—"
+            : driver.interval || "—"}
         </div>
         <div
           className="text-xs text-zinc-500 font-f1 mt-0.5 tracking-tight"
-          title={t("driver.intervalToAhead")}
+          title={t(gapPrimary === "gap" ? "driver.intervalToAhead" : "driver.gapToLeader")}
         >
-          {driver.interval || ""}
+          {gapPrimary === "gap"
+            ? driver.interval || ""
+            : driver.position === 1 ? "—" : driver.gap || ""}
         </div>
       </div>
 

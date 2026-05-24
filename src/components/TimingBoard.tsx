@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import DriverRow from "./DriverRow";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { AnimatePresence, motion } from "framer-motion";
+import { ArrowUpDown } from "lucide-react";
 
 interface TimingBoardProps {
   drivers: Driver[];
@@ -42,6 +43,7 @@ export default function TimingBoard({
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const [pinnedPos, setPinnedPos] = useState<PinnedPos>("visible");
+  const [gapPrimary, setGapPrimary] = useState<"gap" | "interval">("gap");
   const [cardBounds, setCardBounds] = useState<{
     top: number;
     bottom: number;
@@ -170,7 +172,14 @@ export default function TimingBoard({
             <div className="text-center">{t("timing.drs")}</div>
             <div>{t("timing.tire")}</div>
             <div className="text-center">{t("timing.position")}</div>
-            <div className="text-right">{t("timing.gap")}</div>
+            <button
+              className="text-right flex items-center justify-end gap-1 w-full cursor-pointer hover:text-foreground transition-colors"
+              title={t(gapPrimary === "gap" ? "timing.gapToggleTooltip" : "timing.intervalToggleTooltip")}
+              onClick={() => setGapPrimary((p) => (p === "gap" ? "interval" : "gap"))}
+            >
+              {t(gapPrimary === "gap" ? "timing.gap" : "timing.interval")}
+              <ArrowUpDown size={9} className="opacity-50 shrink-0" />
+            </button>
             <div className="text-right">{t("timing.last")}</div>
             <div className="text-center">{t("timing.s1")}</div>
             <div className="text-center">{t("timing.s2")}</div>
@@ -202,6 +211,7 @@ export default function TimingBoard({
                         onHover={onDriverHover}
                         isPinned={isPinned}
                         onPin={onDriverPin}
+                        gapPrimary={gapPrimary}
                       />
                     </motion.div>
                   );
@@ -240,6 +250,7 @@ export default function TimingBoard({
             onPin={onDriverPin}
             isHovered={false}
             onHover={() => {}}
+            gapPrimary={gapPrimary}
           />
         </div>
       )}
