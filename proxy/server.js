@@ -85,7 +85,9 @@ async function tryUpgradeToLive() {
       const sessionLive = await checkActiveSession();
       if (!sessionLive) return;
 
-      console.log("[proxy] Watchdog: live session detected — stopping replay, starting MQTT+SignalR");
+      console.log(
+        "[proxy] Watchdog: live session detected — stopping replay, starting MQTT+SignalR",
+      );
       stopReplay();
       clearCurrentState();
 
@@ -98,7 +100,9 @@ async function tryUpgradeToLive() {
       // No MQTT credentials — try live-polling (it checks for active session internally)
       const ok = await startLivePolling(broadcastSSE, currentState);
       if (ok) {
-        console.log("[proxy] Watchdog: live session detected — stopping replay, starting live-polling");
+        console.log(
+          "[proxy] Watchdog: live session detected — stopping replay, starting live-polling",
+        );
         stopReplay();
         clearCurrentState();
         stopSessionWatchdog();
@@ -130,7 +134,9 @@ async function startFallbackNoLive() {
   console.log("[proxy] No live session — checking live-polling...");
   const success = await startLivePolling(broadcastSSE, currentState);
   if (!success) {
-    console.log("[proxy] No active session — starting replay (watchdog will upgrade to live)");
+    console.log(
+      "[proxy] No active session — starting replay (watchdog will upgrade to live)",
+    );
     startReplay(broadcastSSE, currentState);
     startSessionWatchdog();
   }
