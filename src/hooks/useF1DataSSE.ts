@@ -600,15 +600,27 @@ export function useF1DataSSE(): F1DataState {
               // (early laps, first poll window).
               const parseGap = (g: string) => {
                 if (!g) return 0; // leader (empty string = 0 gap)
-                if (g.toUpperCase().includes("LAP")) return 9999; // lapped cars go to the end
+                if (g.toUpperCase().includes("LAP")) {
+                  // "+1 LAP" → 10000, "+2 LAPS" → 11000, etc.
+                  const laps = parseInt(g, 10) || 1;
+                  return 9000 + laps * 1000;
+                }
                 if (g.startsWith("+")) return parseFloat(g.slice(1)) || 0;
-                return 9999; // any other non-numeric → end
+                return 99999; // any other non-numeric → end
               };
               // A driver "has gap data" if their gap string is non-empty, OR
               // if they are the known leader (position === 1, gap deliberately "").
               const aHasGap = a.gap !== "" || a.position === 1;
               const bHasGap = b.gap !== "" || b.position === 1;
-              if (aHasGap && bHasGap) return parseGap(a.gap) - parseGap(b.gap);
+              if (aHasGap && bHasGap) {
+                const gapDiff = parseGap(a.gap) - parseGap(b.gap);
+                if (gapDiff !== 0) return gapDiff;
+                // Same gap bucket (e.g. both "+1 LAP") → fall back to position
+                const posA = a.position;
+                const posB = b.position;
+                if (posA > 0 && posB > 0) return posA - posB;
+                return 0;
+              }
               if (aHasGap) return -1;
               if (bHasGap) return 1;
               // Neither has gap — fall back to API position (starting grid order)
