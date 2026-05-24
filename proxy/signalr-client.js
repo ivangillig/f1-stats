@@ -35,6 +35,7 @@ const SUBSCRIBE_TOPICS = [
   "TimingStats",
   "TrackStatus",
   "ExtrapolatedClock",
+  "LapCount",
 ];
 
 const COMMON_HEADERS = {
@@ -305,11 +306,28 @@ function processTimingStats(data) {
   }
 }
 
+/**
+ * LapCount — current and total laps for Race/Sprint sessions.
+ * Format: { CurrentLap: 24, TotalLaps: 68 }
+ */
+function processLapCount(data) {
+  if (!currentStateRef || !data) return;
+  const current = data.CurrentLap ?? data.currentLap;
+  const total = data.TotalLaps ?? data.totalLaps;
+  if (current != null || total != null) {
+    if (!currentStateRef.lap_count) currentStateRef.lap_count = { current: 0, total: 0 };
+    if (current != null) currentStateRef.lap_count.current = current;
+    if (total != null) currentStateRef.lap_count.total = total;
+    if (broadcastFn) broadcastFn("update", currentStateRef);
+  }
+}
+
 function handleFeedMessage(topic, data, isSnapshot = false) {
   if (topic === "TimingData") processTimingData(data, isSnapshot);
   else if (topic === "TimingStats") processTimingStats(data);
   else if (topic === "TrackStatus") processTrackStatus(data);
   else if (topic === "ExtrapolatedClock") processExtrapolatedClock(data);
+  else if (topic === "LapCount") processLapCount(data);
 }
 
 // ── Connection ───────────────────────────────────────────────────────────────
