@@ -23,7 +23,7 @@ import { ensureTimingEntry } from "./state-utils.js";
 
 const SIGNALR_HOST = "livetiming.formula1.com";
 const CONNECTION_DATA = encodeURIComponent(
-  JSON.stringify([{ name: "streaming" }]),
+  JSON.stringify([{ name: "Streaming" }]),
 );
 const NEGOTIATE_URL = `https://${SIGNALR_HOST}/signalr/negotiate?clientProtocol=1.5&connectionData=${CONNECTION_DATA}`;
 const WS_BASE = `wss://${SIGNALR_HOST}/signalr/connect`;
@@ -340,7 +340,7 @@ async function connect() {
       // Subscribe to topics
       ws.send(
         JSON.stringify({
-          H: "streaming",
+          H: "Streaming",
           M: "Subscribe",
           A: [SUBSCRIBE_TOPICS],
           I: 1,

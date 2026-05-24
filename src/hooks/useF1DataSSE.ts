@@ -89,13 +89,17 @@ function segmentStatus(code: number): SectorStatus {
   return "none";
 }
 
-// Derive overall sector colour from its segment array
-function sectorStatusFromSegments(segs: number[]): SectorStatus {
-  if (segs.length === 0) return "none";
-  if (segs.some((s) => s === 2051)) return "purple";
-  if (segs.some((s) => s === 2049)) return "green";
-  if (segs.some((s) => s !== 0)) return "yellow";
-  return "none";
+// Derive sector time colour from actual timing data.
+// Purple = beats or matches the session record; green = personal best; yellow = slower.
+function computeSectorTimeStatus(
+  current: number | null | undefined,
+  personal: number | null | undefined,
+  sessionBest: number,
+): SectorStatus {
+  if (current == null) return "none";
+  if (sessionBest < Infinity && current <= sessionBest) return "purple";
+  if (personal == null || current <= personal) return "green";
+  return "yellow";
 }
 
 export function useF1DataSSE(): F1DataState {
@@ -418,18 +422,31 @@ export function useF1DataSSE(): F1DataState {
               ? allSegs.filter((s) => s !== 0).length / allSegs.length
               : 0;
 
-          // Sector-level status from segments, falling back to existing
+          // Sector-level status based on actual timing data (not mini-segments).
+          // Only one driver can hold the session record per sector.
           const s1Status =
-            hasSegs && segs1.length > 0
-              ? sectorStatusFromSegments(segs1)
+            entry.sector_1 != null
+              ? computeSectorTimeStatus(
+                  entry.sector_1,
+                  entry.best_sector_1,
+                  overallBestSectors.s1,
+                )
               : existing?.sector1Status || "none";
           const s2Status =
-            hasSegs && segs2.length > 0
-              ? sectorStatusFromSegments(segs2)
+            entry.sector_2 != null
+              ? computeSectorTimeStatus(
+                  entry.sector_2,
+                  entry.best_sector_2,
+                  overallBestSectors.s2,
+                )
               : existing?.sector2Status || "none";
           const s3Status =
-            hasSegs && segs3.length > 0
-              ? sectorStatusFromSegments(segs3)
+            entry.sector_3 != null
+              ? computeSectorTimeStatus(
+                  entry.sector_3,
+                  entry.best_sector_3,
+                  overallBestSectors.s3,
+                )
               : existing?.sector3Status || "none";
 
           const driver: Driver = {
