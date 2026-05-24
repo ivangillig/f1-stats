@@ -227,33 +227,29 @@ export default function TrackMap({
   const isYellowFlag = trackStatus?.status === 2;
   const isGreenFlag = trackStatus?.status === 1;
 
-  // Detect yellow flag sectors from recent race control messages
+  // Detect yellow flag sectors from race control messages.
+  // Uses flag-transition logic (YELLOW → add, CLEAR/GREEN → remove) so it works
+  // correctly in both live mode and replay (where message timestamps are historical
+  // and a time-based window would incorrectly discard all messages).
   const yellowFlagSectors = useMemo(() => {
     // If green flag is active, no yellow sectors should show
     if (isGreenFlag) return new Set<number>();
 
     const sectors = new Set<number>();
-    const now = Date.now();
-    const recentThreshold = 30000; // Consider messages from last 30 seconds
 
-    // Sort messages by time (oldest first) to process in order
+    // Sort messages by time (oldest first) to replay transitions in order
     const sortedMessages = [...raceControlMessages].sort(
       (a, b) => new Date(a.utc).getTime() - new Date(b.utc).getTime(),
     );
 
     sortedMessages.forEach((msg) => {
-      const msgTime = new Date(msg.utc).getTime();
-      const isRecent = now - msgTime < recentThreshold;
-
-      if (!isRecent) return;
-
       // Check if it's a yellow flag message with sector info
       if (msg.flag === "YELLOW" && msg.sector) {
         sectors.add(msg.sector);
       }
 
-      // Also check message content for sector info (e.g., "YELLOW FLAG IN SECTOR 2")
-      if (msg.message) {
+      // Also parse sector from message text (e.g. "YELLOW IN TRACK SECTOR 15")
+      if (msg.flag === "YELLOW" && msg.message) {
         const sectorMatch =
           msg.message.match(/YELLOW.*SECTOR\s*(\d+)/i) ||
           msg.message.match(/SECTOR\s*(\d+).*YELLOW/i);
@@ -262,15 +258,17 @@ export default function TrackMap({
         }
       }
 
-      // Clear sector if green/clear flag in that sector
+      // Clear sector when an explicit CLEAR/GREEN comes for that sector
       if ((msg.flag === "CLEAR" || msg.flag === "GREEN") && msg.sector) {
         sectors.delete(msg.sector);
       }
 
-      // Clear all if track goes green
+      // Clear all sectors on a full green / track clear message
       if (
+        msg.flag === "GREEN" ||
         msg.message?.includes("GREEN LIGHT") ||
-        msg.message?.includes("TRACK CLEAR")
+        msg.message?.includes("TRACK CLEAR") ||
+        msg.message?.includes("ALL CLEAR")
       ) {
         sectors.clear();
       }
