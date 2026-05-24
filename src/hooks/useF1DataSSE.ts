@@ -572,6 +572,8 @@ export function useF1DataSSE(): F1DataState {
         const sortedDrivers = Array.from(driversMap.values())
           .filter((d) => d.driverNumber)
           .sort((a, b) => {
+            if (a.retired && !b.retired) return 1;
+            if (!a.retired && b.retired) return -1;
             if (a.knockedOut && !b.knockedOut) return 1;
             if (!a.knockedOut && b.knockedOut) return -1;
 

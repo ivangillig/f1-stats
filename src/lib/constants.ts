@@ -26,7 +26,6 @@ export const TEAM_LOGOS: Record<string, string> = {
   "Haas F1 Team": "/images/teams/haas.png",
 };
 
-
 export const TIRE_COMPOUNDS: Record<string, { color: string; name: string }> = {
   SOFT: { color: "#FF3333", name: "Soft" },
   MEDIUM: { color: "#FFD700", name: "Medium" },
@@ -43,7 +42,7 @@ export const TRACK_STATUS: Record<
   2: { name: "Yellow Flag", color: "#ffb900", key: "yellow" },
   4: { name: "Safety Car", color: "#FFA500", key: "scDeployed" },
   5: { name: "Red Flag", color: "#FF0000", key: "red" },
-  6: { name: "VSC Deployed", color: "#FFA500", key: "vscDeployed" },
+  6: { name: "Virtual Safety Car", color: "#FFA500", key: "vscDeployed" },
   7: { name: "Chequered Flag", color: "#3A3A3A", key: "chequered" },
 };
 

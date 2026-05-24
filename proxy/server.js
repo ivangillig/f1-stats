@@ -61,6 +61,45 @@ function broadcastSSE(event, data) {
   });
 }
 
+// ── Retirement inference ──────────────────────────────────────────────────────
+// SignalR's Retired field is only sent as a live delta event. If the proxy
+// restarts mid-race and a driver had already retired, the field won't appear
+// in the next snapshot. We infer retirement from two signals:
+//   1. gap_to_leader === null && interval === null (timing drops off)
+//   2. driver's lap_number is >5 behind the leader (stuck on an old lap)
+// Runs every 30 s during live sessions. Only applies to Race/Sprint.
+function inferRetiredDrivers() {
+  if (!currentState.timing) return;
+  const sessionType = currentState.session?.session_type;
+  if (sessionType !== "Race" && sessionType !== "Sprint") return;
+
+  const entries = Object.values(currentState.timing);
+  if (entries.length === 0) return;
+
+  const leaderLap = Math.max(...entries.map((e) => e.lap_number || 0));
+  if (leaderLap < 5) return; // too early to infer
+
+  let changed = false;
+  for (const entry of entries) {
+    if (entry.retired) continue;
+    if (!entry.lap_number) continue;
+    const lapsBehind = leaderLap - entry.lap_number;
+    const gapGone =
+      (entry.gap_to_leader === null || entry.gap_to_leader === undefined) &&
+      (entry.interval === null || entry.interval === undefined);
+    if (lapsBehind > 5 || (gapGone && lapsBehind > 2 && !entry.in_pit)) {
+      console.log(
+        `[proxy] Inferred retirement: ${entry.code || entry.driver_number} (lap ${entry.lap_number} vs leader ${leaderLap}, gapGone=${gapGone})`,
+      );
+      entry.retired = true;
+      changed = true;
+    }
+  }
+  if (changed) broadcastSSE("update", currentState);
+}
+
+setInterval(inferRetiredDrivers, 30_000);
+
 // ── Session watchdog ──────────────────────────────────────────────────────────
 // When the proxy falls back to replay because no live session existed at startup,
 // this watchdog polls every 60 s. When a session appears, it stops replay and

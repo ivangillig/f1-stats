@@ -182,6 +182,15 @@ function processTimingData(data, isSnapshot = false) {
       changed = true;
     }
 
+    // Retired — driver has stopped/retired from the race.
+    if (driverData.Retired === true) {
+      entry.retired = true;
+      changed = true;
+    } else if (driverData.Retired === false) {
+      entry.retired = false;
+      changed = true;
+    }
+
     const sectors = driverData.Sectors;
     if (!sectors || typeof sectors !== "object") continue;
 

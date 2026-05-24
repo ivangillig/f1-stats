@@ -245,8 +245,10 @@ export default function DriverRow({
 
     // Fallback: parse from sessionName
     const session = sessionName?.toLowerCase() || "";
-    if (session.includes("q1") || session.includes("qualifying 1")) return pos >= 16;
-    if (session.includes("q2") || session.includes("qualifying 2")) return pos >= 11;
+    if (session.includes("q1") || session.includes("qualifying 1"))
+      return pos >= 16;
+    if (session.includes("q2") || session.includes("qualifying 2"))
+      return pos >= 11;
     return false;
   };
 
@@ -304,7 +306,7 @@ export default function DriverRow({
         "grid gap-3 px-3 py-1 items-center cursor-default",
         "border-b border-border/50 transition-colors",
         isHovered || isPinned ? "bg-muted/50" : "hover:bg-muted/30",
-        driver.retired && "opacity-40",
+        driver.retired && "opacity-40 bg-zinc-900/50",
         eliminated && "opacity-40 bg-zinc-900/50",
         !eliminated && inEliminationZone && "bg-red-950/60",
       )}
@@ -328,7 +330,7 @@ export default function DriverRow({
         }}
       >
         <span className="text-xl mr-2 font-black font-mono tabular-nums leading-none w-9 text-center text-white">
-          {driver.position}
+          {driver.retired ? "RET" : driver.position}
         </span>
         <div
           className="flex items-center justify-center h-[30px] px-2 rounded-sm text-lg font-black font-mono my-[4px]"
@@ -367,7 +369,11 @@ export default function DriverRow({
       */}
 
       {/* PIT indicator */}
-      <PitIndicator inPit={driver.inPit} isPitOutLap={driver.isPitOutLap} t={t} />
+      <PitIndicator
+        inPit={driver.inPit}
+        isPitOutLap={driver.isPitOutLap}
+        t={t}
+      />
 
       {/* Tire with L and PIT */}
       <TireCompound
@@ -399,19 +405,31 @@ export default function DriverRow({
       <div className="text-right leading-none">
         <div
           className="text-lg text-foreground font-f1 font-medium leading-none tracking-tight"
-          title={t(gapPrimary === "gap" ? "driver.gapToLeader" : "driver.intervalToAhead")}
+          title={t(
+            gapPrimary === "gap"
+              ? "driver.gapToLeader"
+              : "driver.intervalToAhead",
+          )}
         >
           {gapPrimary === "gap"
-            ? driver.position === 1 ? "—" : driver.gap || "—"
+            ? driver.position === 1
+              ? "—"
+              : driver.gap || "—"
             : driver.interval || "—"}
         </div>
         <div
           className="text-xs text-zinc-500 font-f1 mt-0.5 tracking-tight"
-          title={t(gapPrimary === "gap" ? "driver.intervalToAhead" : "driver.gapToLeader")}
+          title={t(
+            gapPrimary === "gap"
+              ? "driver.intervalToAhead"
+              : "driver.gapToLeader",
+          )}
         >
           {gapPrimary === "gap"
             ? driver.interval || ""
-            : driver.position === 1 ? "—" : driver.gap || ""}
+            : driver.position === 1
+              ? "—"
+              : driver.gap || ""}
         </div>
       </div>
 

@@ -710,6 +710,36 @@ export default function TrackMap({
           />
         )}
 
+        {/* Full track VSC overlay (status 6) */}
+        {trackStatus?.status === 6 && (
+          <path
+            stroke="#ffb900"
+            strokeWidth={220}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            fill="transparent"
+            opacity={0.45}
+            d={`M${points[0].x},${points[0].y} ${points
+              .map((point) => `L${point.x},${point.y}`)
+              .join(" ")} Z`}
+          />
+        )}
+
+        {/* Full track SC overlay (status 4) */}
+        {trackStatus?.status === 4 && (
+          <path
+            stroke="#FFA500"
+            strokeWidth={220}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            fill="transparent"
+            opacity={0.5}
+            d={`M${points[0].x},${points[0].y} ${points
+              .map((point) => `L${point.x},${point.y}`)
+              .join(" ")} Z`}
+          />
+        )}
+
         {/* Corner numbers */}
         {corners.map((corner) => (
           <text
