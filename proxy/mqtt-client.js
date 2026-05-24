@@ -350,10 +350,13 @@ function handleRaceControl(data, opts = {}) {
       currentStateRef.track_status = { flag: "CHEQUERED" };
     }
 
-    // Safety car overrides flag-based status
-    const scStatus = detectSafetyCar(data.message);
-    if (scStatus) {
-      currentStateRef.track_status = { flag: scStatus };
+    // Safety car overrides flag-based status — but only when SignalR hasn't
+    // claimed authoritative control (live mode: SignalR is faster and more reliable).
+    if (!currentStateRef._signalrTrackStatusSet) {
+      const scStatus = detectSafetyCar(data.message);
+      if (scStatus) {
+        currentStateRef.track_status = { flag: scStatus };
+      }
     }
   }
 }
@@ -557,9 +560,15 @@ async function fetchHistoricalData(sessionKey) {
       if (!currentStateRef._signalrTrackStatusSet) {
         const msgs = raceControl;
         // Safety car takes priority
+        // Find most recent SC-related message (deployed OR ending), then check if still active
         const lastSC = [...msgs]
           .reverse()
-          .find((m) => detectSafetyCar(m.message));
+          .find(
+            (m) =>
+              m.message &&
+              (m.message.includes("SAFETY CAR") ||
+                m.message.includes("VIRTUAL SAFETY CAR")),
+          );
         const lastFlag = [...msgs]
           .reverse()
           .find((m) => m.flag && m.scope === "Track");

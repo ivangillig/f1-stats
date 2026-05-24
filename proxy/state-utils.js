@@ -87,7 +87,13 @@ export function flagToTrackStatus(flag) {
  */
 export function detectSafetyCar(message) {
   if (!message) return null;
-  if (message.includes("VIRTUAL SAFETY CAR")) return "VSC";
-  if (message.includes("SAFETY CAR")) return "SC";
+  if (message.includes("VIRTUAL SAFETY CAR")) {
+    if (message.includes("ENDING")) return null;
+    return "VSC";
+  }
+  if (message.includes("SAFETY CAR")) {
+    if (message.includes("ENDING")) return null;
+    return "SC";
+  }
   return null;
 }

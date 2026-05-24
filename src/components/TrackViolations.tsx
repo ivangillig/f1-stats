@@ -7,6 +7,7 @@ import DriverTag from "./DriverTag";
 interface TrackViolationsProps {
   messages: RaceControlMessage[];
   drivers: Driver[];
+  sessionName?: string;
 }
 
 // Extract driver number from message like "CAR 10 (GAS)" or "CAR 22 (TSU)"
@@ -18,8 +19,14 @@ function extractCarNumber(message: string): string | null {
 export default function TrackViolations({
   messages,
   drivers,
+  sessionName,
 }: TrackViolationsProps) {
   const { t } = useLanguage();
+
+  // In qualifying, track limits result in deleted times; in race, they're violations
+  const isQualifying = sessionName
+    ? /qualifying|sprint.?quali/i.test(sessionName)
+    : false;
 
   // Count track limit violations per driver
   const violations: Record<string, number> = {};
@@ -63,9 +70,13 @@ export default function TrackViolations({
                 <DriverTag code={code} team={team} size="sm" showLogo={false} />
                 <span className="text-sm text-zinc-300">
                   {count}{" "}
-                  {count === 1
-                    ? t("violations.violation")
-                    : t("violations.violations")}
+                  {isQualifying
+                    ? count === 1
+                      ? t("violations.deleted")
+                      : t("violations.deletedPlural")
+                    : count === 1
+                      ? t("violations.violation")
+                      : t("violations.violations")}
                 </span>
               </div>
             );

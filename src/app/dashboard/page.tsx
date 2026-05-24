@@ -236,46 +236,49 @@ export default function DashboardPage() {
               </div>
 
               <div className="flex-1 min-h-0 overflow-hidden">
-                {activeTab === "map" && (() => {
-                  const activeNum = hoveredDriverNumber ?? pinnedDriverNumber;
-                  const activeDriver = activeNum
-                    ? drivers.find((d) => d.driverNumber === activeNum)
-                    : null;
-                  const activeTelemetry = activeNum ? carData[activeNum] : null;
-                  return (
-                    <div className="h-full flex flex-col">
-                      <div className="flex-1 min-h-0">
-                        <TrackMap
-                          drivers={drivers}
-                          circuitKey={sessionInfo.circuitKey}
-                          trackStatus={trackStatus}
-                          raceControlMessages={raceControlMessages}
-                          isSessionActive={sessionInfo.isLive}
-                          qualifyingPart={sessionInfo.qualifyingPart}
-                          hoveredDriverNumber={activeNum}
-                          weather={weather}
-                        />
+                {activeTab === "map" &&
+                  (() => {
+                    const activeNum = hoveredDriverNumber ?? pinnedDriverNumber;
+                    const activeDriver = activeNum
+                      ? drivers.find((d) => d.driverNumber === activeNum)
+                      : null;
+                    const activeTelemetry = activeNum
+                      ? carData[activeNum]
+                      : null;
+                    return (
+                      <div className="h-full flex flex-col">
+                        <div className="flex-1 min-h-0">
+                          <TrackMap
+                            drivers={drivers}
+                            circuitKey={sessionInfo.circuitKey}
+                            trackStatus={trackStatus}
+                            raceControlMessages={raceControlMessages}
+                            isSessionActive={sessionInfo.isLive}
+                            qualifyingPart={sessionInfo.qualifyingPart}
+                            hoveredDriverNumber={activeNum}
+                            weather={weather}
+                          />
+                        </div>
+                        <AnimatePresence>
+                          {activeDriver && activeTelemetry && (
+                            <motion.div
+                              key="car-telemetry"
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 80, opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.15 }}
+                              className="shrink-0 overflow-hidden"
+                            >
+                              <CarTelemetry
+                                driver={activeDriver}
+                                data={activeTelemetry}
+                              />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
-                      <AnimatePresence>
-                        {activeDriver && activeTelemetry && (
-                          <motion.div
-                            key="car-telemetry"
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 80, opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.15 }}
-                            className="shrink-0 overflow-hidden"
-                          >
-                            <CarTelemetry
-                              driver={activeDriver}
-                              data={activeTelemetry}
-                            />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
                 {activeTab === "control" && (
                   <RaceControl messages={raceControlMessages} />
                 )}
@@ -283,6 +286,7 @@ export default function DashboardPage() {
                   <TrackViolations
                     messages={raceControlMessages}
                     drivers={drivers}
+                    sessionName={sessionInfo.sessionName}
                   />
                 )}
                 {activeTab === "radio" && (

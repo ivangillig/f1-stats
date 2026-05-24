@@ -594,8 +594,9 @@ export function useF1DataSSE(): F1DataState {
               // (early laps, first poll window).
               const parseGap = (g: string) => {
                 if (!g) return 0; // leader (empty string = 0 gap)
+                if (g.toUpperCase().includes("LAP")) return 9999; // lapped cars go to the end
                 if (g.startsWith("+")) return parseFloat(g.slice(1)) || 0;
-                return 9999; // "LAP" or lapped cars go to the end
+                return 9999; // any other non-numeric → end
               };
               // A driver "has gap data" if their gap string is non-empty, OR
               // if they are the known leader (position === 1, gap deliberately "").

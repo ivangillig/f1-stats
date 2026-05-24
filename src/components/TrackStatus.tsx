@@ -22,6 +22,12 @@ export default function TrackStatus({ status }: TrackStatusProps) {
       if (messageUpper === "ALLCLEAR" || messageUpper === "ALL CLEAR") {
         return t("status.allClear");
       }
+      if (messageUpper === "SC") {
+        return t("status.scDeployed");
+      }
+      if (messageUpper === "VSC") {
+        return t("status.vscDeployed");
+      }
 
       // Luego verificar contenidos
       if (messageUpper.includes("GREEN")) {

@@ -243,13 +243,15 @@ export default function TrackMap({
     );
 
     sortedMessages.forEach((msg) => {
+      const isYellow = msg.flag === "YELLOW" || msg.flag === "DOUBLE YELLOW";
+
       // Check if it's a yellow flag message with sector info
-      if (msg.flag === "YELLOW" && msg.sector) {
+      if (isYellow && msg.sector) {
         sectors.add(msg.sector);
       }
 
       // Also parse sector from message text (e.g. "YELLOW IN TRACK SECTOR 15")
-      if (msg.flag === "YELLOW" && msg.message) {
+      if (isYellow && msg.message) {
         const sectorMatch =
           msg.message.match(/YELLOW.*SECTOR\s*(\d+)/i) ||
           msg.message.match(/SECTOR\s*(\d+).*YELLOW/i);

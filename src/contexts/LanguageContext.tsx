@@ -112,6 +112,8 @@ const translations = {
     "violations.noViolations": "No hay violaciones",
     "violations.violation": "Violación",
     "violations.violations": "Violaciones",
+    "violations.deleted": "Tiempo eliminado",
+    "violations.deletedPlural": "Tiempos eliminados",
 
     // TrackMap
     "map.loading": "Cargando mapa...",
@@ -132,9 +134,11 @@ const translations = {
     "error.connection": "Conectando al servidor...",
     "error.reconnecting": "Reconectando...",
     "mode.replayLabel": "Modo Demo:",
-    "mode.replayDesc": "Datos en vivo no disponibles. Mostrando sesión grabada.",
+    "mode.replayDesc":
+      "Datos en vivo no disponibles. Mostrando sesión grabada.",
     "mode.standbyLabel": "Esperando sesión en vivo",
-    "mode.standbyDesc": "El proxy se conectará automáticamente cuando inicie la sesión.",
+    "mode.standbyDesc":
+      "El proxy se conectará automáticamente cuando inicie la sesión.",
 
     // Track status
     "status.allClear": "Despejado",
@@ -176,14 +180,16 @@ const translations = {
     "landing.liveNow": "En Curso",
     "landing.weekendSchedule": "Este Fin de Semana",
     "landing.enterDemo": "Entrar al Modo Demo",
-    "landing.replayInfo": "Reproduciendo: Azerbaijan GP 2024 · Baku City Circuit",
+    "landing.replayInfo":
+      "Reproduciendo: Azerbaijan GP 2024 · Baku City Circuit",
     "landing.scheduleUnavailable": "Calendario no disponible",
     "landing.countdown.days": "Días",
     "landing.countdown.hours": "Horas",
     "landing.countdown.minutes": "Min",
     "landing.countdown.seconds": "Seg",
     "landing.waitingSignal": "Esperando datos de sesión en vivo",
-    "landing.sessionAboutToStart": "Se conectará automáticamente cuando comience la sesión",
+    "landing.sessionAboutToStart":
+      "Se conectará automáticamente cuando comience la sesión",
   },
   en: {
     // TopBar
@@ -281,6 +287,8 @@ const translations = {
     "violations.noViolations": "No violations",
     "violations.violation": "Violation",
     "violations.violations": "Violations",
+    "violations.deleted": "Time deleted",
+    "violations.deletedPlural": "Times deleted",
 
     // TrackMap
     "map.loading": "Loading map...",
@@ -352,7 +360,8 @@ const translations = {
     "landing.countdown.minutes": "Min",
     "landing.countdown.seconds": "Sec",
     "landing.waitingSignal": "Waiting for live session data",
-    "landing.sessionAboutToStart": "Will connect automatically when the session begins",
+    "landing.sessionAboutToStart":
+      "Will connect automatically when the session begins",
   },
 };
 
