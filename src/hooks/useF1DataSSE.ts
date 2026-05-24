@@ -574,6 +574,10 @@ export function useF1DataSSE(): F1DataState {
           .sort((a, b) => {
             if (a.retired && !b.retired) return 1;
             if (!a.retired && b.retired) return -1;
+            // Both retired → more laps completed = ranked higher (retired later)
+            if (a.retired && b.retired) {
+              return (b.currentLap || 0) - (a.currentLap || 0);
+            }
             if (a.knockedOut && !b.knockedOut) return 1;
             if (!a.knockedOut && b.knockedOut) return -1;
 
