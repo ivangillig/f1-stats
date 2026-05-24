@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Map, Flag, AlertTriangle, Radio } from "lucide-react";
 import AlertStrip from "@/components/AlertStrip";
 import Image from "next/image";
 import TopBar from "@/components/TopBar";
@@ -204,26 +205,31 @@ export default function DashboardPage() {
               <div className="flex shrink-0 border-b border-zinc-800 bg-zinc-950/40">
                 {(
                   [
-                    { id: "map", label: "Mapa" },
-                    { id: "control", label: "Control de Carrera" },
-                    { id: "violations", label: "Violaciones" },
-                    { id: "radio", label: "Radio" },
+                    { id: "map",        label: "Mapa",    icon: Map,           color: "#38bdf8" }, // sky
+                    { id: "control",    label: "Control", icon: Flag,          color: "#facc15" }, // yellow
+                    { id: "violations", label: "Límites", icon: AlertTriangle, color: "#f97316" }, // orange
+                    { id: "radio",      label: "Radio",   icon: Radio,         color: "#a78bfa" }, // violet
                   ] as const
                 ).map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`relative px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                    className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
                       activeTab === tab.id
                         ? "text-zinc-100"
-                        : "text-zinc-400 hover:text-zinc-200"
+                        : "text-zinc-500 hover:text-zinc-300"
                     }`}
                   >
+                    <tab.icon
+                      size={13}
+                      style={{ color: tab.color }}
+                    />
                     {tab.label}
                     {activeTab === tab.id && (
                       <motion.div
                         layoutId="tab-indicator"
-                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                        className="absolute bottom-0 left-0 right-0 h-0.5"
+                        style={{ backgroundColor: tab.color }}
                         transition={{
                           type: "spring",
                           stiffness: 400,
