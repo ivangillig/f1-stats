@@ -308,7 +308,9 @@ export default function TrackMap({
       (d) => (d.trackX || d.trackY) && !(d.trackX === 0 && d.trackY === 0),
     ).length;
     if (gpsDrivers > 0) {
-      console.log(`[TrackMap] GPS positioning: ${gpsDrivers}/${drivers.length} drivers`);
+      console.log(
+        `[TrackMap] GPS positioning: ${gpsDrivers}/${drivers.length} drivers`,
+      );
     }
 
     drivers.forEach((driver) => {
@@ -326,9 +328,14 @@ export default function TrackMap({
         (hasNoTrackData && !driver.bestLap && !driver.lastLap);
 
       if (shouldBeInPit) {
-        const trackIdx = Math.floor((pitIndex / pitDriverCount) * pitLaneEndIndex);
+        const trackIdx = Math.floor(
+          (pitIndex / pitDriverCount) * pitLaneEndIndex,
+        );
         pitIndex++;
-        targets.set(driver.driverNumber, { targetIndex: trackIdx, inPit: true });
+        targets.set(driver.driverNumber, {
+          targetIndex: trackIdx,
+          inPit: true,
+        });
         return;
       }
 
@@ -352,7 +359,10 @@ export default function TrackMap({
             nearestIdx = i;
           }
         }
-        targets.set(driver.driverNumber, { targetIndex: nearestIdx, inPit: false });
+        targets.set(driver.driverNumber, {
+          targetIndex: nearestIdx,
+          inPit: false,
+        });
         return;
       }
 
@@ -379,13 +389,24 @@ export default function TrackMap({
       }
 
       // No usable data — park in pit lane
-      const trackIdx = Math.floor((pitIndex / pitDriverCount) * pitLaneEndIndex);
+      const trackIdx = Math.floor(
+        (pitIndex / pitDriverCount) * pitLaneEndIndex,
+      );
       pitIndex++;
       targets.set(driver.driverNumber, { targetIndex: trackIdx, inPit: true });
     });
 
     return targets;
-  }, [drivers, points, bounds, mapData, isSessionActive, rotation, centerX, centerY]);
+  }, [
+    drivers,
+    points,
+    bounds,
+    mapData,
+    isSessionActive,
+    rotation,
+    centerX,
+    centerY,
+  ]);
 
   // Helper to interpolate between two track points
   const getInterpolatedPoint = useCallback(
@@ -766,7 +787,11 @@ export default function TrackMap({
                       clipPath={`url(#clip-photo-${driver.driverNumber})`}
                       preserveAspectRatio="xMidYMin slice"
                       onError={() =>
-                        setFailedPhotos((prev) => { const s = new Set(prev); s.add(driver.code); return s; })
+                        setFailedPhotos((prev) => {
+                          const s = new Set(prev);
+                          s.add(driver.code);
+                          return s;
+                        })
                       }
                       style={{
                         opacity: isHovered ? 1 : 0,
