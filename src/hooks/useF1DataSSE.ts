@@ -568,20 +568,32 @@ export function useF1DataSSE(): F1DataState {
               if (timeB === Infinity) return -1;
               return timeA - timeB;
             } else {
-              // Race/Sprint: prefer explicit API position, fall back to gap ordering
-              // when position is 0/missing (proxy may have started mid-race)
+              // Race/Sprint: sort by gap_to_leader when available — it is
+              // self-consistent because gap and interval come from the same
+              // API call. The position field can lag or disagree with gap data
+              // (OpenF1 /v1/position only fires on changes, so a stale position
+              // event can place a driver ahead of someone with a smaller gap).
+              // Fall back to position only when gap data hasn't arrived yet
+              // (early laps, first poll window).
+              const parseGap = (g: string) => {
+                if (!g) return 0; // leader (empty string = 0 gap)
+                if (g.startsWith("+")) return parseFloat(g.slice(1)) || 0;
+                return 9999; // "LAP" or lapped cars go to the end
+              };
+              // A driver "has gap data" if their gap string is non-empty, OR
+              // if they are the known leader (position === 1, gap deliberately "").
+              const aHasGap = a.gap !== "" || a.position === 1;
+              const bHasGap = b.gap !== "" || b.position === 1;
+              if (aHasGap && bHasGap) return parseGap(a.gap) - parseGap(b.gap);
+              if (aHasGap) return -1;
+              if (bHasGap) return 1;
+              // Neither has gap — fall back to API position (starting grid order)
               const posA = a.position;
               const posB = b.position;
               if (posA > 0 && posB > 0) return posA - posB;
               if (posA > 0) return -1;
               if (posB > 0) return 1;
-              // Both have no position — rank by gap_to_leader string ("+X.XXX")
-              const parseGap = (g: string) => {
-                if (!g) return 0; // leader
-                if (g.startsWith("+")) return parseFloat(g.slice(1)) || 0;
-                return 9999; // "LAP" or lapped cars go to the end
-              };
-              return parseGap(a.gap) - parseGap(b.gap);
+              return 0;
             }
           });
 
