@@ -315,7 +315,8 @@ function processLapCount(data) {
   const current = data.CurrentLap ?? data.currentLap;
   const total = data.TotalLaps ?? data.totalLaps;
   if (current != null || total != null) {
-    if (!currentStateRef.lap_count) currentStateRef.lap_count = { current: 0, total: 0 };
+    if (!currentStateRef.lap_count)
+      currentStateRef.lap_count = { current: 0, total: 0 };
     if (current != null) currentStateRef.lap_count.current = current;
     if (total != null) currentStateRef.lap_count.total = total;
     if (broadcastFn) broadcastFn("update", currentStateRef);
