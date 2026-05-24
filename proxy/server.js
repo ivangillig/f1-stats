@@ -100,6 +100,7 @@ async function tryUpgradeToLive() {
       if (ok) {
         console.log("[proxy] Watchdog: live session detected — stopping replay, starting live-polling");
         stopReplay();
+        clearCurrentState();
         stopSessionWatchdog();
       }
     }
@@ -123,14 +124,14 @@ function stopSessionWatchdog() {
   }
 }
 
-// No live session found — enter standby. Never start replay automatically:
-// replay only runs when explicitly set via PROXY_MODE=replay.
-// The watchdog will switch to live the moment a session appears.
+// No live session found — start replay so the dashboard always has data.
+// The watchdog will upgrade to a live source the moment a session appears.
 async function startFallbackNoLive() {
   console.log("[proxy] No live session — checking live-polling...");
   const success = await startLivePolling(broadcastSSE, currentState);
   if (!success) {
-    console.log("[proxy] No active session — entering standby (watchdog monitoring)");
+    console.log("[proxy] No active session — starting replay (watchdog will upgrade to live)");
+    startReplay(broadcastSSE, currentState);
     startSessionWatchdog();
   }
 }
