@@ -53,7 +53,9 @@ export default function DashboardPage() {
       ) {
         const isInterestingMessage =
           !newestMessage.message.includes("CLEAR IN TRACK SECTOR") &&
-          !newestMessage.message.includes("TRACK SURFACE SLIPPERY");
+          !newestMessage.message.includes("TRACK SURFACE SLIPPERY") &&
+          !newestMessage.message.includes("WAVED BLUE FLAG") &&
+          !newestMessage.message.includes("BLUE FLAG");
         if (isInterestingMessage) {
           lastShownMessageRef.current = newestMessage.message;
           setLatestRaceControlMessage({
