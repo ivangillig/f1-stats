@@ -327,6 +327,7 @@ export default function TrackMap({
       const shouldBeInPit =
         !isSessionActive ||
         driver.inPit ||
+        driver.retired ||
         (hasNoTrackData && !driver.bestLap && !driver.lastLap);
 
       if (shouldBeInPit) {
