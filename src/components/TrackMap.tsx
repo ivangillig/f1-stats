@@ -682,6 +682,31 @@ export default function TrackMap({
             .join(" ")} Z`}
         />
 
+        {/* Start/finish line — perpendicular to track at points[0] */}
+        {(() => {
+          const p0 = points[0];
+          const p1 = points[1];
+          const dx = p1.x - p0.x;
+          const dy = p1.y - p0.y;
+          const len = Math.sqrt(dx * dx + dy * dy) || 1;
+          // Perpendicular unit vector
+          const px = -dy / len;
+          const py = dx / len;
+          const half = 350;
+          return (
+            <line
+              x1={p0.x + px * half}
+              y1={p0.y + py * half}
+              x2={p0.x - px * half}
+              y2={p0.y - py * half}
+              stroke="white"
+              strokeWidth={20}
+              strokeLinecap="round"
+              opacity={0.9}
+            />
+          );
+        })()}
+
         {/* Yellow flag mini sectors overlay */}
         {Array.from(yellowFlagSectors).map((sectorNum) => (
           <path
