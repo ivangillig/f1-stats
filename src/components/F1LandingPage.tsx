@@ -217,7 +217,7 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
 
       {/* Language toggle + active viewers */}
       <div className="absolute top-4 right-6 z-20 flex items-center gap-3">
-        {activeViewers !== null && activeViewers > 0 && (
+        {activeViewers != null && activeViewers > 0 && (
           <span
             className="flex items-center gap-1.5 text-[11px] text-zinc-500 tracking-wide"
             style={f1Font}
