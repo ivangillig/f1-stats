@@ -214,7 +214,6 @@ export default function TimingBoard({
                     >
                       <DriverRow
                         driver={driver}
-                        sessionName={sessionName}
                         qualifyingPart={qualifyingPart}
                         eliminationCutoff={eliminationCutoff}
                         isHovered={hoveredDriverNumber === driver.driverNumber}
@@ -254,7 +253,6 @@ export default function TimingBoard({
         >
           <DriverRow
             driver={pinnedDriver}
-            sessionName={sessionName}
             qualifyingPart={qualifyingPart}
             eliminationCutoff={eliminationCutoff}
             isPinned
