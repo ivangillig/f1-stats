@@ -73,7 +73,7 @@ function HumidityGauge({ value }: { value: number }) {
 
 export default function WeatherOverlay({ weather }: { weather: WeatherData }) {
   return (
-    <div className="absolute top-2 left-2 z-10 flex gap-3">
+    <div className="hidden sm:flex absolute top-2 left-2 z-10 gap-3">
       <TemperatureGauge value={Math.round(weather.trackTemp)} label="TRC" min={10} max={60} />
       <TemperatureGauge value={Math.round(weather.airTemp)} label="AIR" min={5} max={45} />
       <HumidityGauge value={Math.round(weather.humidity)} />

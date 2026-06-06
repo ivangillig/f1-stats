@@ -153,51 +153,60 @@ export default function TopBar({
 
   return (
     <header className="w-full border-b border-zinc-800 bg-zinc-950">
-      <div className="flex items-center justify-between px-4 py-3 gap-4">
-        {/* Left side - Logo, session, and indicators */}
-        <div className="flex items-center gap-4 flex-shrink-0">
+      <div className="flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 gap-2 sm:gap-4">
+        {/* Left side - Logo + session */}
+        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 min-w-0">
           {/* Logo */}
-          <a href="/" className="flex items-center gap-2 mr-4">
+          <a href="/" className="flex items-center gap-2 flex-shrink-0">
             <img
               src="/images/logo.png"
               alt="F1 Stats"
-              className="h-14 w-auto"
+              className="h-10 sm:h-14 w-auto"
             />
             <span
-              className="font-bold tracking-tight text-2xl"
+              className="hidden sm:inline font-bold tracking-tight text-2xl"
               style={{ fontFamily: "'Formula1 Display', sans-serif" }}
             >
               F1 Stats
             </span>
           </a>
 
+          {/* Vertical divider — mobile only, between logo and flag */}
+          <div className="sm:hidden w-px h-7 bg-zinc-700 flex-shrink-0" />
+
           {/* Session info with country flag */}
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-2 sm:gap-3 text-sm min-w-0">
             <img
-              src={`https://flagcdn.com/w80/${getCountryCode(
-                session.country,
-              )}.png`}
+              src={`https://flagcdn.com/w80/${getCountryCode(session.country)}.png`}
               alt={session.country}
-              className="h-10 w-auto rounded-sm shadow-md"
+              className="h-7 sm:h-10 w-auto rounded-sm shadow-md flex-shrink-0"
               title={session.country}
               onError={(e) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <div className="flex flex-col">
-              <span className="text-white font-bold text-base">
+            <div className="flex flex-col min-w-0">
+              <span className="text-white font-bold text-sm sm:text-base truncate">
                 {session.name === "No Active Session"
                   ? t("session.noActive")
                   : session.name || t("session.noActive")}
               </span>
-              <span className="text-zinc-400 text-sm">
+              {/* Mobile: lap counter or remaining time stacked below city name */}
+              <span className="sm:hidden text-zinc-300 text-xs font-bold tabular-nums">
+                {isRace && session.currentLap > 0
+                  ? `${t("topbar.laps")} ${session.currentLap}${session.totalLaps > 0 ? ` / ${session.totalLaps}` : ""}`
+                  : !isRace && session.remainingTime
+                    ? session.remainingTime
+                    : null}
+              </span>
+              <span className="hidden sm:block text-zinc-400 text-sm truncate">
                 {session.track || session.country}
               </span>
             </div>
             {session.type && (
               <Badge
                 variant="secondary"
-                className={`text-sm font-bold ml-2 ${
+                className={`hidden sm:inline-flex text-sm font-bold ml-2 ${
                   session.type === "Race"
                     ? "bg-red-500/20 text-red-400"
                     : session.type === "Qualifying"
@@ -207,15 +216,11 @@ export default function TopBar({
                         : "bg-zinc-500/20 text-zinc-400"
                 }`}
               >
-                {/* Use sessionName if available (e.g., "Practice 3"), translate the type part */}
                 {session.sessionName
                   ? session.sessionName
                       .replace("Practice", t("session.practice"))
                       .replace("Qualifying", t("session.qualifying"))
-                      .replace(
-                        "Sprint Qualifying",
-                        t("session.sprintQualifying"),
-                      )
+                      .replace("Sprint Qualifying", t("session.sprintQualifying"))
                       .replace("Sprint", t("session.sprint"))
                       .replace("Race", t("session.race"))
                   : session.type === "Practice"
@@ -235,16 +240,15 @@ export default function TopBar({
           </div>
         </div>
 
-        {/* Center - Race Control Banner */}
+        {/* Center - Race Control Banner (desktop only) */}
         {latestRaceControlMessage &&
           (() => {
             const bannerText = latestRaceControlMessage.category
               ? `${latestRaceControlMessage.category}: ${latestRaceControlMessage.message}`
               : latestRaceControlMessage.message;
             return (
-              <div className="flex-1 min-w-0 overflow-hidden flex items-center justify-center px-4 animate-in fade-in slide-in-from-top-2 duration-500">
+              <div className="hidden lg:flex flex-1 min-w-0 overflow-hidden items-center justify-center px-4 animate-in fade-in slide-in-from-top-2 duration-500">
                 <div className="bg-zinc-100 text-black rounded flex items-stretch max-w-3xl w-full shadow-lg overflow-hidden">
-                  {/* FIA Logo Section - Blue background block */}
                   <div className="flex-shrink-0 bg-[#003063] px-4 flex items-center justify-center">
                     <img
                       src="/images/fia-footer-logo.png"
@@ -252,7 +256,6 @@ export default function TopBar({
                       className="h-7 w-auto object-contain brightness-0 invert"
                     />
                   </div>
-                  {/* Message Section */}
                   <div
                     className="flex items-center flex-1 min-w-0 px-5 py-3"
                     style={{ fontFamily: "'Formula1 Display', sans-serif" }}
@@ -269,10 +272,10 @@ export default function TopBar({
             );
           })()}
 
-        {/* Right side - Time, Laps, and Track Status */}
-        <div className="flex items-center gap-4 flex-shrink-0">
-          {/* Session time and laps */}
-          <div className="flex items-center gap-3">
+        {/* Right side - Time/Laps + Track Status */}
+        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+          {/* Session time and laps — hidden on mobile (shown below city name instead) */}
+          <div className="hidden sm:flex items-center gap-2 sm:gap-3">
             {!isRace && session.remainingTime && (
               <div className="font-mono text-4xl font-bold tabular-nums text-white">
                 {session.remainingTime}
@@ -284,16 +287,15 @@ export default function TopBar({
                 title="Current Lap / Total Laps"
               >
                 {t("topbar.laps")} {session.currentLap}
-                {session.totalLaps > 0 &&
-                  ` / ${session.totalLaps}`}
+                {session.totalLaps > 0 && ` / ${session.totalLaps}`}
               </span>
             )}
           </div>
 
-          {/* Track Status Flag */}
+          {/* Track Status */}
           {(trackStatus.message || "").toUpperCase() === "CHEQUERED" ? (
             <div
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border-2"
+              className="flex items-center gap-2 px-2 sm:px-4 py-1 sm:py-2 rounded-lg border-2"
               style={{
                 background:
                   "repeating-conic-gradient(#111 0% 25%, #e8e8e8 0% 50%) 0 0 / 14px 14px",
@@ -304,7 +306,7 @@ export default function TopBar({
               title={statusInfo.name}
             >
               <span
-                className="text-sm font-bold uppercase tracking-wider px-2 py-0.5 rounded"
+                className="text-xs sm:text-sm font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded"
                 style={{ color: "#fff", backgroundColor: "rgba(0,0,0,0.65)" }}
               >
                 {getTrackStatusText()}
@@ -312,7 +314,7 @@ export default function TopBar({
             </div>
           ) : (
             <div
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border-2"
+              className="flex items-center gap-2 px-2 sm:px-4 py-1 sm:py-2 rounded-lg border-2"
               style={{
                 backgroundColor: effectiveColor,
                 borderColor: effectiveColor,
@@ -321,7 +323,7 @@ export default function TopBar({
               title={statusInfo.name}
             >
               <span
-                className="text-sm font-bold uppercase tracking-wider"
+                className="text-xs sm:text-sm font-bold uppercase tracking-wider"
                 style={{ color: "white" }}
               >
                 {getTrackStatusText()}
@@ -329,16 +331,17 @@ export default function TopBar({
             </div>
           )}
 
-          {/* Language Toggle */}
-          <LanguageToggle />
+          {/* Language Toggle — desktop only */}
+          <div className="hidden sm:block">
+            <LanguageToggle />
+          </div>
 
-          {/* Viewers count */}
+          {/* Viewers count — desktop only */}
           {viewers > 0 && (
             <div
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-800/50 border border-zinc-700"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-800/50 border border-zinc-700"
               title={t("viewers.watching") || "Watching now"}
             >
-              {/* Eye icon */}
               <svg
                 className="w-4 h-4 text-red-500"
                 fill="currentColor"

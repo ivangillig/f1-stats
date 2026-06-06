@@ -7,6 +7,7 @@ import AlertStrip from "@/components/AlertStrip";
 import Image from "next/image";
 import TopBar from "@/components/TopBar";
 import TimingBoard from "@/components/TimingBoard";
+import MobileTimingBoard from "@/components/MobileTimingBoard";
 import TrackMap from "@/components/TrackMap";
 import TeamRadios from "@/components/TeamRadios";
 import RaceControl from "@/components/RaceControl";
@@ -35,6 +36,7 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<
     "map" | "control" | "violations" | "radio"
   >("map");
+  const [tableExpanded, setTableExpanded] = useState(false);
   const [hoveredDriverNumber, setHoveredDriverNumber] = useState<string | null>(
     null,
   );
@@ -215,7 +217,23 @@ export default function DashboardPage() {
         <StatusBanner banner={activeBanner} />
 
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 p-2">
-          <div className="h-[42vh] lg:h-auto flex-none overflow-x-auto min-h-0">
+          {/* Mobile timing board */}
+          <div className={`lg:hidden min-h-0 ${tableExpanded ? "flex-1" : "flex-[60]"}`}>
+            <MobileTimingBoard
+              drivers={drivers}
+              sessionName={sessionInfo.sessionName}
+              qualifyingPart={sessionInfo.qualifyingPart}
+              hoveredDriverNumber={hoveredDriverNumber}
+              onDriverHover={setHoveredDriverNumber}
+              pinnedDriverNumber={pinnedDriverNumber}
+              onDriverPin={setPinnedDriverNumber}
+              expanded={tableExpanded}
+              onToggleExpand={() => setTableExpanded((v) => !v)}
+            />
+          </div>
+
+          {/* Desktop timing board */}
+          <div className="hidden lg:block lg:flex-none min-h-0 overflow-x-auto">
             <TimingBoard
               drivers={drivers}
               sessionName={sessionInfo.sessionName}
@@ -227,124 +245,104 @@ export default function DashboardPage() {
             />
           </div>
 
-          <div
-            className="flex-1 min-h-0 flex flex-col gap-1"
-            style={{ minWidth: 220 }}
-          >
-            <div className="relative flex-1 min-h-0 border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden flex flex-col">
-              <div className="flex shrink-0 border-b border-zinc-800 bg-zinc-950/40">
-                {(
-                  [
-                    { id: "map", label: "Mapa", icon: Map, color: "#38bdf8" }, // sky
-                    {
-                      id: "control",
-                      label: "Control",
-                      icon: Flag,
-                      color: "#facc15",
-                    }, // yellow
-                    {
-                      id: "violations",
-                      label: "Límites",
-                      icon: AlertTriangle,
-                      color: "#f97316",
-                    }, // orange
-                    {
-                      id: "radio",
-                      label: "Radio",
-                      icon: Radio,
-                      color: "#a78bfa",
-                    }, // violet
-                  ] as const
-                ).map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
-                      activeTab === tab.id
-                        ? "text-zinc-100"
-                        : "text-zinc-500 hover:text-zinc-300"
-                    }`}
-                  >
-                    <tab.icon size={13} style={{ color: tab.color }} />
-                    {tab.label}
-                    {activeTab === tab.id && (
-                      <motion.div
-                        layoutId="tab-indicator"
-                        className="absolute bottom-0 left-0 right-0 h-0.5"
-                        style={{ backgroundColor: tab.color }}
-                        transition={{
-                          type: "spring",
-                          stiffness: 400,
-                          damping: 35,
+          {/* Tab panel — full when split, icon-only strip when tableExpanded */}
+          {(() => {
+            const tabs = [
+              { id: "map",        label: "Mapa",    icon: Map,           color: "#38bdf8" },
+              { id: "control",    label: "Control", icon: Flag,          color: "#facc15" },
+              { id: "violations", label: "Límites", icon: AlertTriangle, color: "#f97316" },
+              { id: "radio",      label: "Radio",   icon: Radio,         color: "#a78bfa" },
+            ] as const;
+
+            return (
+              <div
+                className={`${tableExpanded ? "flex-none lg:flex-1" : "flex-[40] lg:flex-1"} min-h-0 flex flex-col gap-1`}
+                style={{ minWidth: tableExpanded ? undefined : 220 }}
+              >
+                <div className={`border border-zinc-800 rounded-lg bg-zinc-900/50 overflow-hidden flex flex-col ${tableExpanded ? "flex-none" : "flex-1 min-h-0"}`}>
+                  {/* Tab bar */}
+                  <div className="flex shrink-0 border-b border-zinc-800 bg-zinc-950/40">
+                    {tabs.map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => {
+                          setActiveTab(tab.id);
+                          if (tableExpanded) setTableExpanded(false);
                         }}
-                      />
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex-1 min-h-0 overflow-hidden">
-                {activeTab === "map" &&
-                  (() => {
-                    const activeNum = hoveredDriverNumber ?? pinnedDriverNumber;
-                    const activeDriver = activeNum
-                      ? drivers.find((d) => d.driverNumber === activeNum)
-                      : null;
-                    const activeTelemetry = activeNum
-                      ? carData[activeNum]
-                      : null;
-                    return (
-                      <div className="h-full flex flex-col">
-                        <div className="flex-1 min-h-0">
-                          <TrackMap
-                            drivers={drivers}
-                            circuitKey={sessionInfo.circuitKey}
-                            trackStatus={trackStatus}
-                            raceControlMessages={raceControlMessages}
-                            isSessionActive={sessionInfo.isLive}
-                            qualifyingPart={sessionInfo.qualifyingPart}
-                            hoveredDriverNumber={activeNum}
-                            weather={weather}
+                        className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors flex-1 justify-center lg:flex-none lg:justify-start ${
+                          activeTab === tab.id ? "text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+                        }`}
+                      >
+                        <tab.icon size={13} style={{ color: tab.color }} />
+                        <span className={tableExpanded ? "hidden" : "hidden sm:inline"}>{tab.label}</span>
+                        {activeTab === tab.id && (
+                          <motion.div
+                            layoutId="tab-indicator"
+                            className="absolute bottom-0 left-0 right-0 h-0.5"
+                            style={{ backgroundColor: tab.color }}
+                            transition={{ type: "spring", stiffness: 400, damping: 35 }}
                           />
-                        </div>
-                        <AnimatePresence>
-                          {activeDriver && activeTelemetry && (
-                            <motion.div
-                              key="car-telemetry"
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 80, opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.15 }}
-                              className="shrink-0 overflow-hidden"
-                            >
-                              <CarTelemetry
-                                driver={activeDriver}
-                                data={activeTelemetry}
-                              />
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    );
-                  })()}
-                {activeTab === "control" && (
-                  <RaceControl messages={raceControlMessages} />
-                )}
-                {activeTab === "violations" && (
-                  <TrackViolations
-                    messages={raceControlMessages}
-                    drivers={drivers}
-                    sessionName={sessionInfo.sessionName}
-                  />
-                )}
-                {activeTab === "radio" && (
-                  <TeamRadios radios={teamRadios} drivers={drivers} />
-                )}
-              </div>
-            </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
 
-            {latestAlert && <AlertStrip alert={latestAlert} />}
-          </div>
+                  {/* Tab content — hidden when table is expanded */}
+                  {!tableExpanded && (
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      {activeTab === "map" &&
+                        (() => {
+                          const activeNum = hoveredDriverNumber ?? pinnedDriverNumber;
+                          const activeDriver = activeNum ? drivers.find((d) => d.driverNumber === activeNum) : null;
+                          const activeTelemetry = activeNum ? carData[activeNum] : null;
+                          return (
+                            <div className="h-full flex flex-col">
+                              <div className="flex-1 min-h-0">
+                                <TrackMap
+                                  drivers={drivers}
+                                  circuitKey={sessionInfo.circuitKey}
+                                  trackStatus={trackStatus}
+                                  raceControlMessages={raceControlMessages}
+                                  isSessionActive={sessionInfo.isLive}
+                                  qualifyingPart={sessionInfo.qualifyingPart}
+                                  hoveredDriverNumber={activeNum}
+                                  weather={weather}
+                                />
+                              </div>
+                              <AnimatePresence>
+                                {activeDriver && activeTelemetry && (
+                                  <motion.div
+                                    key="car-telemetry"
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 80, opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="shrink-0 overflow-hidden"
+                                  >
+                                    <CarTelemetry driver={activeDriver} data={activeTelemetry} />
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        })()}
+                      {activeTab === "control" && <RaceControl messages={raceControlMessages} />}
+                      {activeTab === "violations" && (
+                        <TrackViolations
+                          messages={raceControlMessages}
+                          drivers={drivers}
+                          sessionName={sessionInfo.sessionName}
+                        />
+                      )}
+                      {activeTab === "radio" && <TeamRadios radios={teamRadios} drivers={drivers} />}
+                    </div>
+                  )}
+                </div>
+
+                {latestAlert && !tableExpanded && <AlertStrip alert={latestAlert} />}
+              </div>
+            );
+          })()}
         </div>
       </main>
 
