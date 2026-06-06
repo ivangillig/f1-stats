@@ -1,0 +1,33 @@
+name: Deploy f1-stats
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: self-hosted    
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env from secrets
+        run: |
+          echo "PROXY_MODE=${{ vars.PROXY_MODE }}" > .env
+          echo "F1_SSE_HOST=${{ vars.F1_SSE_HOST }}" >> .env
+          echo "F1_SSE_PATH=${{ vars.F1_SSE_PATH }}" >> .env
+          echo "OPENF1_USERNAME=${{ secrets.OPENF1_USERNAME }}" >> .env
+          echo "OPENF1_PASSWORD=${{ secrets.OPENF1_PASSWORD }}" >> .env
+          echo "F1_SSE_SECURE=${{ vars.F1_SSE_SECURE }}" >> .env
+          echo "REPLAY_SESSION_KEY=${{ vars.REPLAY_SESSION_KEY }}" >> .env
+          echo "F1_LIVETIMING_TOKEN=${{ secrets.F1_LIVETIMING_TOKEN }}" >> .env
+          echo "NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}" >> .env
+          echo "NEXT_PUBLIC_PROXY_URL=${{ vars.NEXT_PUBLIC_PROXY_URL }}" >> .env
+          echo "PROXY_PUBLIC_URL=${{ vars.PROXY_PUBLIC_URL }}" >> .env
+
+      - name: Build and deploy
+        run: |
+          docker compose build
+          docker compose up -d --remove-orphans
+          docker image prune -f
