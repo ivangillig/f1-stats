@@ -200,7 +200,14 @@ function handleSession(data) {
     country_name: data.country_name,
     country_code: data.country_code,
     date_start: data.date_start,
-    date_end: data.date_end || null,
+    // Only store date_end if it's more than 30 min in the past (session truly over).
+    // OpenF1 can set date_end prematurely during red flags or delays — storing it
+    // would make isLive=false on the frontend and dump all cars to the pit lane.
+    date_end: (() => {
+      if (!data.date_end) return null;
+      const d = new Date(data.date_end);
+      return d < new Date(Date.now() - 30 * 60 * 1000) ? data.date_end : null;
+    })(),
     location: data.location,
     meeting_name: data.meeting_name || data.location,
   };

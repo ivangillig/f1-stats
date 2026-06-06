@@ -325,7 +325,6 @@ export default function TrackMap({
         (driver.trackProgress === undefined || driver.trackProgress === 0);
 
       const shouldBeInPit =
-        !isSessionActive ||
         driver.inPit ||
         driver.retired ||
         (hasNoTrackData && !driver.bestLap && !driver.lastLap);
@@ -400,16 +399,7 @@ export default function TrackMap({
     });
 
     return targets;
-  }, [
-    drivers,
-    points,
-    bounds,
-    mapData,
-    isSessionActive,
-    rotation,
-    centerX,
-    centerY,
-  ]);
+  }, [drivers, points, bounds, mapData, rotation, centerX, centerY]);
 
   // Helper to interpolate between two track points
   const getInterpolatedPoint = useCallback(
