@@ -1,6 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  compiler: {
+    // Strip console.log/debug in production builds; keep error and warn.
+    removeConsole: process.env.NODE_ENV === "production"
+      ? { exclude: ["error", "warn"] }
+      : false,
+  },
   // Disable gzip so the /api/proxy SSE rewrite streams events immediately.
   // With compression on, Next buffers text/event-stream frames and the
   // browser hangs on "waiting for data". Compression for normal assets

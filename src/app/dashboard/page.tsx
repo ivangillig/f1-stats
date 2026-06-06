@@ -13,6 +13,7 @@ import RaceControl from "@/components/RaceControl";
 import TrackViolations from "@/components/TrackViolations";
 import CarTelemetry from "@/components/CarTelemetry";
 import Footer from "@/components/Footer";
+import StatusBanner, { BannerConfig } from "@/components/StatusBanner";
 import { useF1DataSSE } from "@/hooks/useF1DataSSE";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -122,6 +123,51 @@ export default function DashboardPage() {
     };
   })();
 
+  // Priority order: signalrDegraded > replay > standby > reconnecting
+  // Only one banner is shown at a time; standby/replay suppress the generic reconnecting message.
+  const activeBanner: BannerConfig | null = (() => {
+    if (signalrDegraded)
+      return {
+        id: "signalr",
+        bg: "bg-yellow-500/10",
+        border: "border-yellow-500/30",
+        text: "text-yellow-200",
+        dot: "bg-yellow-400",
+        label: t("mode.signalrDegradedLabel"),
+        desc: t("mode.signalrDegradedDesc"),
+      };
+    if (proxyMode === "replay")
+      return {
+        id: "replay",
+        bg: "bg-yellow-500/10",
+        border: "border-yellow-500/30",
+        text: "text-yellow-200",
+        dot: "bg-yellow-400",
+        label: t("mode.replayLabel"),
+        desc: t("mode.replayDesc"),
+      };
+    if (proxyMode === "standby")
+      return {
+        id: "standby",
+        bg: "bg-blue-500/10",
+        border: "border-blue-500/30",
+        text: "text-blue-200",
+        dot: "bg-blue-400",
+        label: t("mode.standbyLabel"),
+        desc: t("mode.standbyDesc"),
+      };
+    if (error === "RECONNECTING")
+      return {
+        id: "reconnecting",
+        bg: "bg-yellow-500/10",
+        border: "border-yellow-500/30",
+        text: "text-yellow-200",
+        dot: "bg-yellow-400",
+        label: t("error.reconnecting"),
+      };
+    return null;
+  })();
+
   if (error === "OFFLINE") {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-10">
@@ -166,37 +212,7 @@ export default function DashboardPage() {
       />
 
       <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {error === "RECONNECTING" && proxyMode !== "replay" && (
-          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm shrink-0">
-            {t("error.reconnecting")}
-          </div>
-        )}
-
-        {proxyMode === "replay" && (
-          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm flex items-center gap-2 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
-            <span className="font-semibold">{t("mode.replayLabel")}</span>
-            <span className="text-yellow-200/70">{t("mode.replayDesc")}</span>
-          </div>
-        )}
-        {proxyMode === "standby" && (
-          <div className="bg-blue-500/10 border-b border-blue-500/30 text-blue-200 px-4 py-2 text-sm flex items-center gap-2 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
-            <span className="font-semibold">{t("mode.standbyLabel")}</span>
-            <span className="text-blue-200/70">{t("mode.standbyDesc")}</span>
-          </div>
-        )}
-        {signalrDegraded && (
-          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm flex items-center gap-2 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
-            <span className="font-semibold">
-              {t("mode.signalrDegradedLabel")}
-            </span>
-            <span className="text-yellow-200/70">
-              {t("mode.signalrDegradedDesc")}
-            </span>
-          </div>
-        )}
+        <StatusBanner banner={activeBanner} />
 
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 p-2">
           <div className="h-[42vh] lg:h-auto flex-none overflow-x-auto min-h-0">

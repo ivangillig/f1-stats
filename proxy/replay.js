@@ -5,15 +5,20 @@
  * Instead of loading all data upfront, we poll the API every few seconds
  * simulating how a live session would work.
  *
- * Azerbaijan GP 2024 (15 Sep 2024) - Session Key: 9598
- * Colapinto P8 - 4 points!
+ * Session priority: latest completed race from OpenF1 > REPLAY_SESSION_KEY env var > Baku 2024 (fallback).
  */
 
 import { ensureValidToken, hasMQTTCredentials } from "./mqtt-client.js";
-import { ensureTimingEntry, updateBestLap, flagToTrackStatus, detectSafetyCar } from "./state-utils.js";
+import {
+  ensureTimingEntry,
+  updateBestLap,
+  flagToTrackStatus,
+  detectSafetyCar,
+} from "./state-utils.js";
 
-// Session key — configurable via REPLAY_SESSION_KEY env var (defaults to Baku 2024)
-const SESSION_KEY = parseInt(process.env.REPLAY_SESSION_KEY || "9598");
+// Session key — resolved at startup: latest race from OpenF1 > env var override > Baku 2024
+let SESSION_KEY = 0;
+const ENV_SESSION_KEY = parseInt(process.env.REPLAY_SESSION_KEY || "0");
 let CIRCUIT_KEY = null; // Loaded from API at startup
 let TOTAL_LAPS = 70; // Default; updated from lap data as race progresses
 
@@ -101,17 +106,60 @@ async function fetchJSON(url, retries = 4) {
   return [];
 }
 
+async function resolveSessionKey() {
+  // 1. Try latest completed Race or Sprint from OpenF1
+  try {
+    const year = new Date().getFullYear();
+    const sessions = await fetchJSON(
+      `${API_BASE}/sessions?date_start>=${year - 1}-01-01`,
+    );
+    const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+    const completed = sessions.filter(
+      (s) =>
+        s.date_end &&
+        new Date(s.date_end) < cutoff &&
+        (s.session_type === "Race" || s.session_type === "Sprint"),
+    );
+    if (completed.length > 0) {
+      const latest = completed[completed.length - 1];
+      SESSION_KEY = latest.session_key;
+      console.log(
+        `[Replay] Latest ${latest.session_type}: ${latest.location} (session_key ${SESSION_KEY})`,
+      );
+      return;
+    }
+    console.warn(`[Replay] No completed Race/Sprint sessions found from OpenF1`);
+  } catch (err) {
+    console.warn(`[Replay] Could not resolve latest session: ${err.message}`);
+  }
+  // 2. Fall back to env var if set
+  if (ENV_SESSION_KEY > 0) {
+    SESSION_KEY = ENV_SESSION_KEY;
+    console.log(`[Replay] Using session from env var: ${SESSION_KEY}`);
+    return;
+  }
+  // 3. Hardcoded fallback: Baku 2024
+  SESSION_KEY = 9598;
+  console.log(`[Replay] Falling back to default session ${SESSION_KEY}`);
+}
+
 async function fetchSessionInfo() {
   console.log(`[Replay] Fetching session ${SESSION_KEY} from OpenF1...`);
-  const sessions = await fetchJSON(`${API_BASE}/sessions?session_key=${SESSION_KEY}`);
+  const sessions = await fetchJSON(
+    `${API_BASE}/sessions?session_key=${SESSION_KEY}`,
+  );
   if (!sessions || sessions.length === 0)
     throw new Error(`Session ${SESSION_KEY} not found in OpenF1`);
   const session = sessions[0];
   CIRCUIT_KEY = session.circuit_key;
-  console.log(`[Replay] Session: ${session.location} — ${session.session_name} (circuit_key: ${CIRCUIT_KEY})`);
+  console.log(
+    `[Replay] Session: ${session.location} — ${session.session_name} (circuit_key: ${CIRCUIT_KEY})`,
+  );
 
   await new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
-  const drivers = await fetchJSON(`${API_BASE}/drivers?session_key=${SESSION_KEY}`);
+  const drivers = await fetchJSON(
+    `${API_BASE}/drivers?session_key=${SESSION_KEY}`,
+  );
   console.log(`[Replay] Drivers: ${drivers.length}`);
 
   return {
@@ -134,15 +182,17 @@ async function fetchSessionInfo() {
 }
 
 async function fetchStartingGrid() {
-  const grid = await fetchJSON(`${API_BASE}/starting_grid?session_key=${SESSION_KEY}`);
+  const grid = await fetchJSON(
+    `${API_BASE}/starting_grid?session_key=${SESSION_KEY}`,
+  );
   const result = {};
   grid.forEach((g) => {
-    if (g.driver_number && g.position) result[String(g.driver_number)] = g.position;
+    if (g.driver_number && g.position)
+      result[String(g.driver_number)] = g.position;
   });
   console.log(`[Replay] Starting grid: ${Object.keys(result).length} drivers`);
   return result;
 }
-
 
 async function findRaceStart(sessionDateStart) {
   // Use the earliest lap 1 date_start across all drivers — that's when lights went out.
@@ -156,11 +206,15 @@ async function findRaceStart(sessionDateStart) {
       .filter(Boolean);
     if (dates.length > 0) {
       const start = new Date(Math.min(...dates));
-      console.log(`[Replay] Race start (from lap 1 data): ${start.toISOString()}`);
+      console.log(
+        `[Replay] Race start (from lap 1 data): ${start.toISOString()}`,
+      );
       return start;
     }
   }
-  console.log(`[Replay] Race start (fallback to session date_start): ${sessionDateStart}`);
+  console.log(
+    `[Replay] Race start (fallback to session date_start): ${sessionDateStart}`,
+  );
   return new Date(sessionDateStart);
 }
 
@@ -191,7 +245,9 @@ function isDriverInPit(driverNum, currentTime) {
 
 async function fetchStintData() {
   console.log(`[Replay] Loading stint/tire data...`);
-  const stints = await fetchJSON(`${API_BASE}/stints?session_key=${SESSION_KEY}`);
+  const stints = await fetchJSON(
+    `${API_BASE}/stints?session_key=${SESSION_KEY}`,
+  );
   Object.keys(stintsData).forEach((k) => delete stintsData[k]);
   stints.forEach((s) => {
     const num = String(s.driver_number);
@@ -204,7 +260,9 @@ async function fetchStintData() {
       stint_number: s.stint_number || 1,
     });
   });
-  console.log(`[Replay] Loaded stints for ${Object.keys(stintsData).length} drivers`);
+  console.log(
+    `[Replay] Loaded stints for ${Object.keys(stintsData).length} drivers`,
+  );
 }
 
 // All weather records for the session, sorted by date ascending
@@ -212,11 +270,17 @@ let weatherRecords = [];
 
 async function fetchAllWeather() {
   console.log(`[Replay] Loading weather data...`);
-  const records = await fetchJSON(`${API_BASE}/weather?session_key=${SESSION_KEY}`);
-  weatherRecords = (records || []).sort((a, b) => new Date(a.date) - new Date(b.date));
+  const records = await fetchJSON(
+    `${API_BASE}/weather?session_key=${SESSION_KEY}`,
+  );
+  weatherRecords = (records || []).sort(
+    (a, b) => new Date(a.date) - new Date(b.date),
+  );
   if (weatherRecords.length > 0) {
     const w = weatherRecords[0];
-    console.log(`[Replay] Weather: ${weatherRecords.length} records. Start: ${w.air_temperature}°C air, ${w.track_temperature}°C track`);
+    console.log(
+      `[Replay] Weather: ${weatherRecords.length} records. Start: ${w.air_temperature}°C air, ${w.track_temperature}°C track`,
+    );
   }
 }
 
@@ -246,7 +310,8 @@ function updateActiveStints(state) {
     if (!driverStints || driverStints.length === 0) return;
     const currentLap = state.timing[num].lap_number || 1;
     const active = driverStints.find(
-      (s) => currentLap >= s.lap_start && (!s.lap_end || currentLap <= s.lap_end),
+      (s) =>
+        currentLap >= s.lap_start && (!s.lap_end || currentLap <= s.lap_end),
     );
     if (active) {
       state.timing[num].compound = active.compound;
@@ -326,7 +391,7 @@ function buildInitialState(session, drivers, startingGrid) {
       team_colour: driver.team_colour || "FFFFFF",
     };
     const entry = ensureTimingEntry(state, num);
-    entry.position = startingGrid[num] || (Object.keys(state.drivers).length);
+    entry.position = startingGrid[num] || Object.keys(state.drivers).length;
   });
 
   return state;
@@ -334,7 +399,8 @@ function buildInitialState(session, drivers, startingGrid) {
 
 // Process fetched data and update state
 function processData(data, state) {
-  const { positions, intervals, laps, locations, raceControl, teamRadio } = data;
+  const { positions, intervals, laps, locations, raceControl, teamRadio } =
+    data;
 
   positions.forEach((pos) => {
     const num = String(pos.driver_number);
@@ -347,10 +413,10 @@ function processData(data, state) {
     const entry = ensureTimingEntry(state, num);
     const gap = parseFloat(int.gap_to_leader);
     const isLeader = int.gap_to_leader === 0 || int.gap_to_leader == null;
-    entry.gap_to_leader = isLeader ? null : (!isNaN(gap) ? gap : null);
+    entry.gap_to_leader = isLeader ? null : !isNaN(gap) ? gap : null;
     if (isLeader) entry.position = 1;
     const ivl = parseFloat(int.interval);
-    entry.interval = (!isNaN(ivl) && int.interval !== 0) ? ivl : null;
+    entry.interval = !isNaN(ivl) && int.interval !== 0 ? ivl : null;
   });
 
   laps.forEach((lap) => {
@@ -364,7 +430,11 @@ function processData(data, state) {
     }
     if (lap.lap_duration && lap.lap_duration < 150) {
       entry.last_lap = lap.lap_duration;
-      entry.last_lap_is_pb = updateBestLap(entry, lap.lap_duration, lap.is_pit_out_lap);
+      entry.last_lap_is_pb = updateBestLap(
+        entry,
+        lap.lap_duration,
+        lap.is_pit_out_lap,
+      );
     }
     if (lap.duration_sector_1) entry.sector_1 = lap.duration_sector_1;
     if (lap.duration_sector_2) entry.sector_2 = lap.duration_sector_2;
@@ -392,7 +462,9 @@ function processData(data, state) {
   if (raceControl && raceControl.length > 0) {
     raceControl.forEach((msg) => {
       const msgId = `${msg.date}_${msg.message}`;
-      const exists = state.race_control_messages.some((m) => `${m.date}_${m.message}` === msgId);
+      const exists = state.race_control_messages.some(
+        (m) => `${m.date}_${m.message}` === msgId,
+      );
       if (!exists) {
         state.race_control_messages.push({
           date: msg.date,
@@ -412,13 +484,17 @@ function processData(data, state) {
     });
 
     // Update track status from latest track-scope flag
-    const lastFlagMsg = [...raceControl].reverse().find((m) => m.flag && m.scope === "Track");
+    const lastFlagMsg = [...raceControl]
+      .reverse()
+      .find((m) => m.flag && m.scope === "Track");
     if (lastFlagMsg) {
       const flagStatus = flagToTrackStatus(lastFlagMsg.flag);
       if (flagStatus) state.track_status.flag = flagStatus;
     }
     // Safety car
-    const lastSCMsg = [...raceControl].reverse().find((m) => m.category === "SafetyCar");
+    const lastSCMsg = [...raceControl]
+      .reverse()
+      .find((m) => m.category === "SafetyCar");
     if (lastSCMsg) {
       const sc = detectSafetyCar(lastSCMsg.message);
       if (sc) state.track_status.flag = sc;
@@ -428,7 +504,9 @@ function processData(data, state) {
   // team radio
   if (teamRadio && teamRadio.length > 0) {
     teamRadio.forEach((radio) => {
-      const exists = state.team_radio.some((r) => r.recording_url === radio.recording_url);
+      const exists = state.team_radio.some(
+        (r) => r.recording_url === radio.recording_url,
+      );
       if (!exists) {
         state.team_radio.push({
           date: radio.date,
@@ -439,7 +517,9 @@ function processData(data, state) {
           state.team_radio = state.team_radio.slice(-30);
         }
         const driver = state.drivers[String(radio.driver_number)];
-        console.log(`[Replay] Team Radio: ${driver?.name_acronym || radio.driver_number}`);
+        console.log(
+          `[Replay] Team Radio: ${driver?.name_acronym || radio.driver_number}`,
+        );
       }
     });
   }
@@ -463,7 +543,9 @@ export async function startReplay(broadcast, stateRef) {
     POLL_INTERVAL_MS = PAID_POLL_INTERVAL_MS;
     REQUEST_DELAY_MS = PAID_REQUEST_DELAY_MS;
     POLL_WINDOW_SECONDS = (PAID_POLL_INTERVAL_MS / 1000) * REPLAY_SPEED;
-    console.log(`[Replay] Paid tier detected — using ${POLL_INTERVAL_MS}ms interval`);
+    console.log(
+      `[Replay] Paid tier detected — using ${POLL_INTERVAL_MS}ms interval`,
+    );
   } else {
     POLL_INTERVAL_MS = FREE_POLL_INTERVAL_MS;
     REQUEST_DELAY_MS = FREE_REQUEST_DELAY_MS;
@@ -471,9 +553,14 @@ export async function startReplay(broadcast, stateRef) {
     console.log(`[Replay] Free tier — using ${POLL_INTERVAL_MS}ms interval`);
   }
 
-  const startupDelay = () => new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
+  const startupDelay = () =>
+    new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
 
   try {
+    // Resolve which session to replay (env override or latest race from OpenF1)
+    await resolveSessionKey();
+    await startupDelay();
+
     // Sequential startup fetches with delays to stay within rate limits
     const sessionInfo = await fetchSessionInfo();
     await startupDelay();
