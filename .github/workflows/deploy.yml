@@ -4,9 +4,13 @@ on:
   push:
     branches: [ main ]
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
-    runs-on: self-hosted    
+    runs-on: self-hosted
     environment: production
 
     steps:
@@ -14,7 +18,8 @@ jobs:
 
       - name: Create .env from secrets
         run: |
-          echo "PROXY_MODE=${{ vars.PROXY_MODE }}" > .env
+          echo "NODE_ENV=${{ vars.NODE_ENV }}" > .env
+          echo "PROXY_MODE=${{ vars.PROXY_MODE }}" >> .env
           echo "F1_SSE_HOST=${{ vars.F1_SSE_HOST }}" >> .env
           echo "F1_SSE_PATH=${{ vars.F1_SSE_PATH }}" >> .env
           echo "OPENF1_USERNAME=${{ secrets.OPENF1_USERNAME }}" >> .env
@@ -24,7 +29,9 @@ jobs:
           echo "F1_LIVETIMING_TOKEN=${{ secrets.F1_LIVETIMING_TOKEN }}" >> .env
           echo "NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}" >> .env
           echo "NEXT_PUBLIC_PROXY_URL=${{ vars.NEXT_PUBLIC_PROXY_URL }}" >> .env
-          echo "PROXY_PUBLIC_URL=${{ vars.PROXY_PUBLIC_URL }}" >> .env
+
+      - name: Ensure docker network exists
+        run: docker network create apps || true
 
       - name: Build and deploy
         run: |
