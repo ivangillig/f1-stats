@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
@@ -47,10 +47,11 @@ export default function HomePage() {
   const { loading, isLive } = useNextF1Session();
   const [replaySession, setReplaySession] = useState<ReplaySession | null>(null);
   const [activeViewers, setActiveViewers] = useState<number | null>(null);
+  const clientId = useRef(`landing-${Math.random().toString(36).slice(2)}`);
 
   useEffect(() => {
     const poll = () => {
-      fetch(`${PROXY_URL}/health`)
+      fetch(`${PROXY_URL}/health?clientId=${clientId.current}`)
         .then((r) => r.json())
         .then((data) => {
           if (data.replaySession) setReplaySession(data.replaySession);
@@ -71,10 +72,11 @@ export default function HomePage() {
     if (!isLive) return;
 
     const check = () => {
-      fetch(`${PROXY_URL}/health`)
+      fetch(`${PROXY_URL}/health?clientId=${clientId.current}`)
         .then((r) => r.json())
         .then((data) => {
           if (data.replaySession) setReplaySession(data.replaySession);
+          if (typeof data.clients === "number") setActiveViewers(data.clients);
           if (data.status === "ok" && data.mode !== "replay") {
             router.push("/dashboard");
           }

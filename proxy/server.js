@@ -29,6 +29,15 @@ const PROXY_MODE = process.env.PROXY_MODE || "auto";
 let currentState = {};
 // Map<clientId, res> — deduplicates reconnects and StrictMode double-mounts
 let sseClients = new Map();
+// Map<clientId, lastSeenMs> — landing page viewers tracked via /health ping
+const LANDING_TTL_MS = 35000; // 15s poll + buffer
+const landingViewers = new Map();
+function pruneLandingViewers() {
+  const cutoff = Date.now() - LANDING_TTL_MS;
+  for (const [id, ts] of landingViewers) {
+    if (ts < cutoff) landingViewers.delete(id);
+  }
+}
 
 // Deep merge objects
 function deepMerge(target, source) {
@@ -193,8 +202,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  const reqUrl = new URL(req.url, "http://localhost");
+
   // Health check
-  if (req.url === "/health") {
+  if (reqUrl.pathname === "/health") {
+    const landingClientId = reqUrl.searchParams.get("clientId");
+    if (landingClientId) {
+      landingViewers.set(landingClientId, Date.now());
+      pruneLandingViewers();
+    }
     let mode = "unknown";
     if (isLivePollingRunning()) mode = "live-polling";
     else if (isMQTTRunning()) mode = "mqtt-live";
@@ -205,10 +221,11 @@ const server = http.createServer(async (req, res) => {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
     });
+    pruneLandingViewers();
     const health = {
       status: "ok",
       mode,
-      clients: sseClients.size,
+      clients: sseClients.size + landingViewers.size,
       hasState: Object.keys(currentState).length > 0,
       mqttAvailable: hasMQTTCredentials(),
       mqttRunning: isMQTTRunning(),
@@ -228,7 +245,6 @@ const server = http.createServer(async (req, res) => {
   }
 
   // SSE endpoint
-  const reqUrl = new URL(req.url, "http://localhost");
   if (reqUrl.pathname === "/api/sse") {
     const clientId =
       reqUrl.searchParams.get("clientId") ||
@@ -287,8 +303,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Sessions proxy — forwards to OpenF1 with auth credentials when available
-  if (req.url.startsWith("/api/sessions")) {
-    const reqUrl = new URL(req.url, "http://localhost");
+  if (reqUrl.pathname.startsWith("/api/sessions")) {
     const queryString = reqUrl.search;
     const upstreamUrl = `https://api.openf1.org/v1/sessions${queryString}`;
     try {

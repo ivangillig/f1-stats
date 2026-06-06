@@ -219,8 +219,9 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
       <div className="absolute top-4 right-6 z-20 flex items-center gap-3">
         {activeViewers != null && activeViewers > 0 && (
           <span
-            className="flex items-center gap-1.5 text-[11px] text-zinc-500 tracking-wide"
+            className="flex items-center gap-1.5 text-[11px] text-zinc-500 tracking-wide cursor-default"
             style={f1Font}
+            title={t("viewers.watching")}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             {activeViewers}
