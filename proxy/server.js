@@ -143,6 +143,14 @@ async function tryUpgradeToLive() {
       if (ok) {
         startSignalR(broadcastSSE, currentState);
         stopSessionWatchdog();
+      } else {
+        // False positive: session just crossed the 30-min grace window between
+        // the watchdog check and the MQTT connect attempt. Restart replay so
+        // the dashboard isn't left with an empty state.
+        console.log(
+          "[proxy] Watchdog: MQTT found no active session — restarting replay",
+        );
+        startReplay(broadcastSSE, currentState);
       }
     } else {
       // No MQTT credentials — try live-polling (it checks for active session internally)
