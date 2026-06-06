@@ -8,8 +8,8 @@ import { Pin } from "lucide-react";
 
 interface DriverRowProps {
   driver: Driver;
-  sessionName?: string;
   qualifyingPart?: number;
+  eliminationCutoff?: number | null;
   isHovered?: boolean;
   onHover?: (driverNumber: string | null) => void;
   isPinned?: boolean;
@@ -217,8 +217,8 @@ function SectorCell({
 
 export default function DriverRow({
   driver,
-  sessionName,
   qualifyingPart,
+  eliminationCutoff,
   isHovered,
   onHover,
   isPinned,
@@ -230,29 +230,10 @@ export default function DriverRow({
   // Use teamColor from API first, then fallback to hardcoded TEAM_COLORS
   const teamColor = driver.teamColor || TEAM_COLORS[driver.team] || "#888";
 
-  // Check if driver is in elimination zone for Qualifying (at risk of being eliminated)
-  const isInEliminationZone = (): boolean => {
-    const pos = driver.position;
-
-    // Both regular Q and Sprint Q eliminate 5 per round: 20→15→10
-    // Use qualifyingPart if available (1=Q1/SQ1, 2=Q2/SQ2, 3=Q3/SQ3)
-    if (qualifyingPart) {
-      if (qualifyingPart === 1) return pos >= 16; // positions 16-20 in danger
-      if (qualifyingPart === 2) return pos >= 11; // positions 11-15 in danger
-      // Q3/SQ3: no elimination zone
-      return false;
-    }
-
-    // Fallback: parse from sessionName
-    const session = sessionName?.toLowerCase() || "";
-    if (session.includes("q1") || session.includes("qualifying 1"))
-      return pos >= 16;
-    if (session.includes("q2") || session.includes("qualifying 2"))
-      return pos >= 11;
-    return false;
-  };
-
-  const inEliminationZone = isInEliminationZone();
+  // eliminationCutoff is computed in TimingBoard from actual active driver count
+  // so it's always correct regardless of grid size or session type.
+  const inEliminationZone =
+    eliminationCutoff != null && driver.position >= eliminationCutoff;
   // Use knockedOut from API - it's set when driver is eliminated from qualifying
   const eliminated = driver.knockedOut;
 

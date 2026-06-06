@@ -38,6 +38,15 @@ export default function TimingBoard({
   const s2Count = firstDriver?.sector2SegmentCount || 6;
   const s3Count = firstDriver?.sector3SegmentCount || 6;
 
+  // Elimination cutoff: 6 cars eliminated per round (2026 grid has 22 cars).
+  // Q1: 22 active → cutoff 17. Q2: 16 active → cutoff 11. Q3: no cutoff.
+  // Uses actual non-knocked-out driver count so it's always correct.
+  const eliminationCutoff = (() => {
+    if (!qualifyingPart || qualifyingPart === 3) return null;
+    const activeDrivers = drivers.filter((d) => !d.knockedOut).length;
+    return activeDrivers - 6 + 1;
+  })();
+
   const prevPinnedRef = useRef<string | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -207,6 +216,7 @@ export default function TimingBoard({
                         driver={driver}
                         sessionName={sessionName}
                         qualifyingPart={qualifyingPart}
+                        eliminationCutoff={eliminationCutoff}
                         isHovered={hoveredDriverNumber === driver.driverNumber}
                         onHover={onDriverHover}
                         isPinned={isPinned}
@@ -246,6 +256,7 @@ export default function TimingBoard({
             driver={pinnedDriver}
             sessionName={sessionName}
             qualifyingPart={qualifyingPart}
+            eliminationCutoff={eliminationCutoff}
             isPinned
             onPin={onDriverPin}
             isHovered={false}
