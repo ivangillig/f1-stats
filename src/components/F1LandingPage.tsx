@@ -6,8 +6,17 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useNextF1Session, OpenF1Session } from "@/hooks/useNextF1Session";
 import { COUNTRY_CODES } from "@/lib/constants";
 
+interface ReplaySession {
+  meetingName: string;
+  sessionName: string;
+  circuitName: string;
+  location: string;
+}
+
 interface Props {
   onEnterDemo: () => void;
+  replaySession?: ReplaySession | null;
+  activeViewers?: number | null;
 }
 
 const f1Font = { fontFamily: "'Formula1 Display', sans-serif" } as const;
@@ -166,7 +175,7 @@ const stagger = (i: number) => ({
   transition: { delay: 0.1 + i * 0.1, duration: 0.5, ease: "easeOut" as const },
 });
 
-export default function F1LandingPage({ onEnterDemo }: Props) {
+export default function F1LandingPage({ onEnterDemo, replaySession, activeViewers }: Props) {
   const { t, language } = useLanguage();
   const { nextSession, weekendSessions, loading, countdown } =
     useNextF1Session();
@@ -206,8 +215,17 @@ export default function F1LandingPage({ onEnterDemo }: Props) {
         }}
       />
 
-      {/* Language toggle overlay */}
-      <div className="absolute top-4 right-6 z-20">
+      {/* Language toggle + active viewers */}
+      <div className="absolute top-4 right-6 z-20 flex items-center gap-3">
+        {activeViewers !== null && activeViewers > 0 && (
+          <span
+            className="flex items-center gap-1.5 text-[11px] text-zinc-500 tracking-wide"
+            style={f1Font}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            {activeViewers}
+          </span>
+        )}
         <LanguageToggle />
       </div>
 
@@ -404,7 +422,9 @@ export default function F1LandingPage({ onEnterDemo }: Props) {
           </motion.span>
         </motion.button>
         <p className="text-[11px] text-zinc-600 tracking-wide" style={f1Font}>
-          {t("landing.replayInfo")}
+          {replaySession
+            ? `${replaySession.meetingName} · ${replaySession.sessionName} · ${replaySession.circuitName}`
+            : t("landing.replayInfo")}
         </p>
       </motion.footer>
     </div>

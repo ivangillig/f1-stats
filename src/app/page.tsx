@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Image from "next/image";
@@ -8,6 +8,13 @@ import F1LandingPage from "@/components/F1LandingPage";
 import { useNextF1Session } from "@/hooks/useNextF1Session";
 
 const PROXY_URL = process.env.NEXT_PUBLIC_PROXY_URL || "/api/proxy";
+
+interface ReplaySession {
+  meetingName: string;
+  sessionName: string;
+  circuitName: string;
+  location: string;
+}
 
 function LoadingSplash() {
   return (
@@ -38,6 +45,23 @@ function LoadingSplash() {
 export default function HomePage() {
   const router = useRouter();
   const { loading, isLive } = useNextF1Session();
+  const [replaySession, setReplaySession] = useState<ReplaySession | null>(null);
+  const [activeViewers, setActiveViewers] = useState<number | null>(null);
+
+  useEffect(() => {
+    const poll = () => {
+      fetch(`${PROXY_URL}/health`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.replaySession) setReplaySession(data.replaySession);
+          if (typeof data.clients === "number") setActiveViewers(data.clients);
+        })
+        .catch(() => {});
+    };
+    poll();
+    const id = setInterval(poll, 15000);
+    return () => clearInterval(id);
+  }, []);
 
   // When the session start time arrives, poll the proxy health until it confirms
   // live data is flowing (mode !== "replay"), then redirect to the dashboard.
@@ -50,6 +74,7 @@ export default function HomePage() {
       fetch(`${PROXY_URL}/health`)
         .then((r) => r.json())
         .then((data) => {
+          if (data.replaySession) setReplaySession(data.replaySession);
           if (data.status === "ok" && data.mode !== "replay") {
             router.push("/dashboard");
           }
@@ -64,5 +89,11 @@ export default function HomePage() {
 
   if (loading) return <LoadingSplash />;
 
-  return <F1LandingPage onEnterDemo={() => router.push("/dashboard")} />;
+  return (
+    <F1LandingPage
+      onEnterDemo={() => router.push("/dashboard")}
+      replaySession={replaySession}
+      activeViewers={activeViewers}
+    />
+  );
 }
