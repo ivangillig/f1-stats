@@ -40,10 +40,12 @@ function pad(n: number) {
 function CountdownBox({ value, label }: { value: number; label: string }) {
   const str = pad(value);
   return (
-    <div className="flex flex-col items-center gap-2.5">
+    <div className="flex flex-col items-center gap-1.5 sm:gap-2.5">
       <div
-        className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 relative overflow-hidden"
+        className="w-13 h-13 sm:w-20 sm:h-20 md:w-24 md:h-24 relative overflow-hidden"
         style={{
+          width: "clamp(3rem,14vw,6rem)",
+          height: "clamp(3rem,14vw,6rem)",
           background: "rgba(255,255,255,0.03)",
           border: "1px solid rgba(255,255,255,0.07)",
           borderBottom: "2px solid hsl(var(--primary))",
@@ -56,15 +58,15 @@ function CountdownBox({ value, label }: { value: number; label: string }) {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 14, opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute inset-0 flex items-center justify-center text-4xl sm:text-5xl md:text-6xl text-white tabular-nums leading-none"
-            style={{ ...f1Font, fontWeight: 700 }}
+            className="absolute inset-0 flex items-center justify-center text-3xl sm:text-5xl md:text-6xl text-white tabular-nums leading-none"
+            style={{ ...f1Font, fontWeight: 700, fontSize: "clamp(1.5rem,7vw,3.75rem)" }}
           >
             {str}
           </motion.span>
         </AnimatePresence>
       </div>
       <span
-        className="text-[9px] tracking-[0.3em] text-zinc-500 uppercase"
+        className="text-[8px] sm:text-[9px] tracking-[0.3em] text-zinc-500 uppercase"
         style={f1Font}
       >
         {label}
@@ -100,7 +102,7 @@ function ScheduleRow({
 
   return (
     <div
-      className={`flex items-center gap-3 px-3 sm:px-4 py-1.5 sm:py-2.5 transition-colors ${
+      className={`flex items-center gap-3 px-3 sm:px-4 py-1 sm:py-2.5 transition-colors ${
         isNext
           ? "border-l-2 border-primary bg-primary/10"
           : "border-l-2 border-transparent"
@@ -193,7 +195,7 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
 
   return (
     <div
-      className="min-h-screen bg-background flex flex-col overflow-hidden relative"
+      className="h-svh bg-background flex flex-col overflow-hidden relative"
       style={{
         backgroundImage: `
           repeating-linear-gradient(
@@ -231,7 +233,7 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
       </div>
 
       {/* Main */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-4 sm:py-6 gap-4 sm:gap-6">
+      <main className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-center px-4 py-2 sm:py-6 gap-2 sm:gap-6">
         {/* "PRÓXIMA CARRERA" label */}
         <motion.div className="flex items-center gap-3" {...stagger(0)}>
           <div className="w-10 h-px bg-primary opacity-70" />
@@ -259,7 +261,7 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
                   src={`https://flagcdn.com/w80/${countryCode}.png`}
                   srcSet={`https://flagcdn.com/w160/${countryCode}.png 2x`}
                   alt={nextSession!.country_name}
-                  className="h-10 sm:h-12 rounded shadow-lg shadow-black/50"
+                  className="h-8 sm:h-12 rounded shadow-lg shadow-black/50"
                 />
               </motion.div>
             )}
@@ -304,18 +306,18 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
 
             {!countdown.isPast && (
               <motion.div
-                className="flex items-start gap-3 sm:gap-4 md:gap-5"
+                className="flex items-start gap-2 sm:gap-4 md:gap-5"
                 {...stagger(4)}
               >
                 {countdownUnits.map((unit, i) => (
                   <div
                     key={i}
-                    className="flex items-start gap-3 sm:gap-4 md:gap-5"
+                    className="flex items-start gap-2 sm:gap-4 md:gap-5"
                   >
                     <CountdownBox value={unit.value} label={unit.label} />
                     {i < 3 && (
                       <span
-                        className="text-2xl md:text-3xl text-zinc-700 font-bold mt-8 md:mt-10 select-none"
+                        className="text-xl sm:text-2xl md:text-3xl text-zinc-700 font-bold mt-6 sm:mt-8 md:mt-10 select-none"
                         style={f1Font}
                       >
                         :
@@ -373,7 +375,7 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6, duration: 0.5 }}
               >
-                <div className="flex items-center gap-3 mb-1 sm:mb-3">
+                <div className="flex items-center gap-3 mb-0.5 sm:mb-3">
                   <div className="h-px flex-1 bg-zinc-800/60" />
                   <span
                     className="text-[10px] tracking-[0.3em] text-zinc-600 uppercase flex-none"
@@ -401,7 +403,7 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
 
       {/* CTA */}
       <motion.footer
-        className="relative z-10 shrink-0 flex flex-col items-center gap-3 sm:gap-3 py-5 sm:py-8 px-4"
+        className="relative z-10 shrink-0 flex flex-col items-center gap-2 sm:gap-3 py-3 sm:py-8 px-4"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.75, duration: 0.5 }}
