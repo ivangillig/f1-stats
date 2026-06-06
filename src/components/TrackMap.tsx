@@ -295,9 +295,9 @@ export default function TrackMap({
     if (!points || points.length === 0 || !bounds)
       return new Map<string, { targetIndex: number; inPit: boolean }>();
 
-    const pitLaneEndIndex = Math.min(Math.floor(points.length * 0.05), 50);
     const miniSectorIndexes = mapData?.miniSectorsIndexes || [];
     const totalPoints = points.length;
+    const pitLaneEndIndex = Math.min(Math.floor(totalPoints * 0.05), 50);
 
     const targets = new Map<string, { targetIndex: number; inPit: boolean }>();
     let pitIndex = 0;
@@ -306,38 +306,16 @@ export default function TrackMap({
       drivers.filter((d) => d.inPit || (!d.bestLap && !d.lastLap)).length,
     );
 
-    const gpsDrivers = drivers.filter(
-      (d) => (d.trackX || d.trackY) && !(d.trackX === 0 && d.trackY === 0),
-    ).length;
-    if (gpsDrivers > 0) {
-      console.log(
-        `[TrackMap] GPS positioning: ${gpsDrivers}/${drivers.length} drivers`,
-      );
-    }
-
     drivers.forEach((driver) => {
       const hasNoLocationData =
         (!driver.trackX && !driver.trackY) ||
         (driver.trackX === 0 && driver.trackY === 0);
 
-      const hasNoTrackData =
-        hasNoLocationData &&
-        (driver.trackProgress === undefined || driver.trackProgress === 0);
-
-      const shouldBeInPit =
-        driver.inPit ||
-        driver.retired ||
-        (hasNoTrackData && !driver.bestLap && !driver.lastLap);
-
-      if (shouldBeInPit) {
-        const trackIdx = Math.floor(
-          (pitIndex / pitDriverCount) * pitLaneEndIndex,
-        );
+      // Trust SignalR exclusively — no heuristics
+      if (driver.inPit || driver.retired) {
+        const trackIdx = Math.floor((pitIndex / pitDriverCount) * pitLaneEndIndex);
         pitIndex++;
-        targets.set(driver.driverNumber, {
-          targetIndex: trackIdx,
-          inPit: true,
-        });
+        targets.set(driver.driverNumber, { targetIndex: trackIdx, inPit: true });
         return;
       }
 
@@ -390,12 +368,13 @@ export default function TrackMap({
         }
       }
 
-      // No usable data — park in pit lane
-      const trackIdx = Math.floor(
-        (pitIndex / pitDriverCount) * pitLaneEndIndex,
-      );
-      pitIndex++;
-      targets.set(driver.driverNumber, { targetIndex: trackIdx, inPit: true });
+      // No GPS or mini-sector data — place on track by position order
+      const pos = driver.position || 99;
+      const progress = 1 - (pos - 1) / Math.max(drivers.length, 1);
+      targets.set(driver.driverNumber, {
+        targetIndex: Math.floor(progress * totalPoints),
+        inPit: false,
+      });
     });
 
     return targets;
@@ -439,7 +418,6 @@ export default function TrackMap({
     // Base speed: complete a lap in ~85 seconds
     const baseSpeed = totalPoints / 85;
 
-    // Pit lane offset calculation
     const pitOffset = 500;
 
     const newPositions = new Map<
@@ -461,70 +439,52 @@ export default function TrackMap({
         animatedPositionsRef.current.set(driverNumber, current);
       }
 
-      // Handle pit status change
+      // Handle pit status change — always mark as changed so the SVG updates immediately
       if (current.inPit !== target.inPit) {
         current.inPit = target.inPit;
-        if (target.inPit) {
-          current.currentIndex = target.targetIndex;
-        }
+        hasChanges = true;
       }
 
-      if (!target.inPit) {
-        // Calculate distance to target (always moving forward)
-        let diff = target.targetIndex - current.currentIndex;
+      // On-track cars: animate currentIndex toward targetIndex
+      let diff = target.targetIndex - current.currentIndex;
 
-        // Handle wrap-around (crossing start/finish)
-        while (diff < 0) diff += totalPoints;
-        while (diff > totalPoints) diff -= totalPoints;
+      // Handle wrap-around (crossing start/finish)
+      while (diff < 0) diff += totalPoints;
+      while (diff > totalPoints) diff -= totalPoints;
 
-        // If target jumped back significantly, it means new lap data - catch up faster
-        if (diff > totalPoints * 0.7) {
-          // Target is "behind" but actually ahead (new lap)
-          diff = totalPoints - diff;
-          if (diff < 0) diff += totalPoints;
-        }
-
-        // Smooth acceleration/deceleration based on distance to target
-        // When far from target, speed up; when close, match target speed
-        let targetVelocity = baseSpeed;
-
-        if (diff > totalPoints * 0.1) {
-          // Far behind - speed up significantly to catch up
-          targetVelocity = baseSpeed * 3;
-        } else if (diff > totalPoints * 0.03) {
-          // Moderately behind - speed up a bit
-          targetVelocity = baseSpeed * 1.5;
-        } else if (diff < 2) {
-          // Very close - slow down to avoid overshooting
-          targetVelocity = baseSpeed * 0.8;
-        }
-
-        // Smooth velocity changes (lerp)
-        current.velocity +=
-          (targetVelocity - current.velocity) * Math.min(deltaTime * 3, 1);
-
-        // Move forward
-        if (diff > 0.1) {
-          const step = current.velocity * deltaTime;
-          current.currentIndex = (current.currentIndex + step) % totalPoints;
-          hasChanges = true;
-        }
+      // If target jumped back significantly, it means new lap data - catch up faster
+      if (diff > totalPoints * 0.7) {
+        diff = totalPoints - diff;
+        if (diff < 0) diff += totalPoints;
       }
 
-      // Calculate screen position
+      let targetVelocity = baseSpeed;
+      if (diff > totalPoints * 0.1) {
+        targetVelocity = baseSpeed * 3;
+      } else if (diff > totalPoints * 0.03) {
+        targetVelocity = baseSpeed * 1.5;
+      } else if (diff < 2) {
+        targetVelocity = baseSpeed * 0.8;
+      }
+
+      current.velocity +=
+        (targetVelocity - current.velocity) * Math.min(deltaTime * 3, 1);
+
+      if (diff > 0.1) {
+        const step = current.velocity * deltaTime;
+        current.currentIndex = (current.currentIndex + step) % totalPoints;
+        hasChanges = true;
+      }
+
       const interpolated = getInterpolatedPoint(current.currentIndex);
-
       let x = interpolated.x;
       let y = interpolated.y;
 
       if (current.inPit) {
-        // Calculate perpendicular offset for pit lane
         const idx = Math.floor(current.currentIndex) % totalPoints;
         const nextIdx = (idx + 1) % totalPoints;
-        const point = points[idx];
-        const nextPoint = points[nextIdx];
-        const dx = nextPoint.x - point.x;
-        const dy = nextPoint.y - point.y;
+        const dx = points[nextIdx].x - points[idx].x;
+        const dy = points[nextIdx].y - points[idx].y;
         const len = Math.sqrt(dx * dx + dy * dy) || 1;
         x = interpolated.x + (dy / len) * pitOffset;
         y = interpolated.y - (dx / len) * pitOffset;
@@ -533,7 +493,6 @@ export default function TrackMap({
       newPositions.set(driverNumber, { x, y, inPit: current.inPit });
     });
 
-    // Batch update state only when there are changes
     if (hasChanges || newPositions.size !== animatedPositions.size) {
       setAnimatedPositions(newPositions);
     }
