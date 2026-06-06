@@ -166,7 +166,7 @@ export default function DashboardPage() {
       />
 
       <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {error === "RECONNECTING" && (
+        {error === "RECONNECTING" && proxyMode !== "replay" && (
           <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm shrink-0">
             {t("error.reconnecting")}
           </div>

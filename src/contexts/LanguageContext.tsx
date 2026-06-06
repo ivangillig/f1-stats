@@ -125,7 +125,11 @@ const translations = {
 
     // Footer
     "footer.madeWith": "Hecho con",
+    "footer.support": "Apoyar",
     "footer.version": "Versión",
+    "support.title": "Apoyá el proyecto",
+    "support.desc": "Si te gusta F1 Stats, podés ayudarme a cubrir los costos del servidor y las APIs de las que consumimos los datos.",
+    "support.close": "Cerrar",
     "footer.disclaimer":
       "Este sitio no está afiliado, asociado, autorizado, respaldado por, o de ninguna manera oficialmente conectado con Formula 1, FIA, o cualquiera de sus subsidiarias o afiliados.",
 
@@ -138,7 +142,7 @@ const translations = {
     "error.reconnecting": "Reconectando...",
     "mode.replayLabel": "Modo Demo:",
     "mode.replayDesc":
-      "Datos en vivo no disponibles. Mostrando sesión grabada.",
+      "No hay sesión en vivo. Mostrando sesión grabada — cuando comience una, verás telemetría real.",
     "mode.standbyLabel": "Esperando sesión en vivo",
     "mode.standbyDesc":
       "El proxy se conectará automáticamente cuando inicie la sesión.",
@@ -306,6 +310,10 @@ const translations = {
 
     // Footer
     "footer.madeWith": "Made with",
+    "footer.support": "Support",
+    "support.title": "Support the project",
+    "support.desc": "If you enjoy F1 Stats, you can help me cover the server and API costs that keep this running.",
+    "support.close": "Close",
     "footer.version": "Version",
     "footer.disclaimer":
       "This site is not affiliated, associated, authorized, endorsed by, or in any way officially connected with Formula 1, FIA, or any of its subsidiaries or affiliates.",
@@ -318,7 +326,7 @@ const translations = {
     "error.connection": "Connecting to server...",
     "error.reconnecting": "Reconnecting...",
     "mode.replayLabel": "Demo Mode:",
-    "mode.replayDesc": "Live data unavailable. Displaying recorded session.",
+    "mode.replayDesc": "No live session. Displaying recorded session — when one starts, you'll see real telemetry.",
     "mode.standbyLabel": "Waiting for live session",
     "mode.standbyDesc": "Will connect automatically when the session starts.",
     "mode.signalrDegradedLabel": "Live data degraded:",

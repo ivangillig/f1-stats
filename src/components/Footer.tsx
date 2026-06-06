@@ -1,6 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/contexts/LanguageContext";
+import SupportModal from "./SupportModal";
 
 export default function Footer() {
   const { t } = useLanguage();
@@ -24,12 +25,7 @@ export default function Footer() {
             GitHub
           </a>
           <span className="text-zinc-700">•</span>
-          <a
-            href="https://github.com/sponsors/ivangillig"
-            className="text-pink-400 hover:underline"
-          >
-            ♥ Sponsor
-          </a>
+          <SupportModal />
           <span className="text-zinc-700">•</span>
           v2.0.0
         </span>
