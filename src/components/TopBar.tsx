@@ -160,14 +160,14 @@ export default function TopBar({
           <a href="/" className="flex items-center gap-2 flex-shrink-0">
             <img
               src="/images/logo.png"
-              alt="F1 Stats"
+              alt="F1 RaceHub"
               className="h-10 sm:h-14 w-auto"
             />
             <span
-              className="hidden sm:inline font-bold tracking-tight text-2xl"
+              className="hidden sm:inline font-bold tracking-tight text-xl"
               style={{ fontFamily: "'Formula1 Display', sans-serif" }}
             >
-              F1 Stats
+              F1 RaceHub
             </span>
           </a>
 

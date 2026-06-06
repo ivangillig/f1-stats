@@ -58,7 +58,7 @@ export default function OpengraphImage() {
             letterSpacing: "-0.02em",
           }}
         >
-          F1 Stats
+          F1 RaceHub
         </div>
         <div
           style={{

@@ -131,7 +131,7 @@ const translations = {
     "footer.support": "Apoyar",
     "footer.version": "Versión",
     "support.title": "Apoyá el proyecto",
-    "support.desc": "Si te gusta F1 Stats, podés ayudarme a cubrir los costos del servidor y las APIs de las que consumimos los datos.",
+    "support.desc": "Si te gusta F1 RaceHub, podés ayudarme a cubrir los costos del servidor y las APIs de las que consumimos los datos.",
     "support.close": "Cerrar",
     "footer.disclaimer":
       "Este sitio no está afiliado, asociado, autorizado, respaldado por, o de ninguna manera oficialmente conectado con Formula 1, FIA, o cualquiera de sus subsidiarias o afiliados.",
@@ -141,7 +141,7 @@ const translations = {
     "error.retrying":
       "Cuando el servicio esté operativo serás redirigido automáticamente",
     "error.offlineBadge": "Fuera de línea",
-    "error.connection": "Conectando al servidor...",
+    "error.connection": "Cargando telemetría de demo...",
     "error.reconnecting": "Reconectando...",
     "mode.replayLabel": "Modo Demo:",
     "mode.replayDesc":
@@ -318,7 +318,7 @@ const translations = {
     "footer.madeWith": "Made with",
     "footer.support": "Support",
     "support.title": "Support the project",
-    "support.desc": "If you enjoy F1 Stats, you can help me cover the server and API costs that keep this running.",
+    "support.desc": "If you enjoy F1 RaceHub, you can help me cover the server and API costs that keep this running.",
     "support.close": "Close",
     "footer.version": "Version",
     "footer.disclaimer":
@@ -329,7 +329,7 @@ const translations = {
     "error.retrying":
       "You will be redirected automatically when the service is back online",
     "error.offlineBadge": "Offline",
-    "error.connection": "Connecting to server...",
+    "error.connection": "Loading demo telemetry...",
     "error.reconnecting": "Reconnecting...",
     "mode.replayLabel": "Demo Mode:",
     "mode.replayDesc": "No live session. Displaying recorded session — when one starts, you'll see real telemetry.",

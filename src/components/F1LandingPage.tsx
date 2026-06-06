@@ -17,6 +17,7 @@ interface Props {
   onEnterDemo: () => void;
   replaySession?: ReplaySession | null;
   activeViewers?: number | null;
+  proxyAvailable?: boolean;
 }
 
 const f1Font = { fontFamily: "'Formula1 Display', sans-serif" } as const;
@@ -177,7 +178,7 @@ const stagger = (i: number) => ({
   transition: { delay: 0.1 + i * 0.1, duration: 0.5, ease: "easeOut" as const },
 });
 
-export default function F1LandingPage({ onEnterDemo, replaySession, activeViewers }: Props) {
+export default function F1LandingPage({ onEnterDemo, replaySession, activeViewers, proxyAvailable = false }: Props) {
   const { t, language } = useLanguage();
   const { nextSession, weekendSessions, loading, countdown } =
     useNextF1Session();
@@ -402,34 +403,65 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
       </main>
 
       {/* CTA */}
-      <motion.footer
-        className="relative z-10 shrink-0 flex flex-col items-center gap-2 sm:gap-3 py-3 sm:py-8 px-4"
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.75, duration: 0.5 }}
-      >
-        <motion.button
-          onClick={onEnterDemo}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
-          className="group flex items-center gap-3 bg-primary hover:bg-primary/90 text-white px-6 sm:px-10 py-4 text-sm uppercase tracking-[0.12em] sm:tracking-[0.2em] transition-colors whitespace-nowrap"
-          style={{ ...f1Font, fontWeight: 700 }}
-        >
-          <span>{t("landing.enterDemo")}</span>
-          <motion.span
-            className="text-white/60 group-hover:text-white transition-colors"
-            animate={{ x: [0, 5, 0] }}
-            transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
-          >
-            →
-          </motion.span>
-        </motion.button>
-        <p className="text-[11px] text-zinc-600 tracking-wide" style={f1Font}>
-          {replaySession
-            ? `${replaySession.meetingName} · ${replaySession.sessionName} · ${replaySession.circuitName}`
-            : t("landing.replayInfo")}
-        </p>
-      </motion.footer>
+      <footer className="relative z-10 shrink-0 flex flex-col items-center gap-2 sm:gap-3 py-3 sm:py-8 px-4">
+        <AnimatePresence mode="wait">
+          {proxyAvailable && replaySession?.meetingName ? (
+            <motion.div
+              key="cta"
+              className="flex flex-col items-center gap-2"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <motion.button
+                onClick={onEnterDemo}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.97 }}
+                className="group flex items-center gap-3 bg-primary hover:bg-primary/90 text-white px-6 sm:px-10 py-4 text-sm uppercase tracking-[0.12em] sm:tracking-[0.2em] transition-colors whitespace-nowrap"
+                style={{ ...f1Font, fontWeight: 700 }}
+              >
+                <span>{t("landing.enterDemo")}</span>
+                <motion.span
+                  className="text-white/60 group-hover:text-white transition-colors"
+                  animate={{ x: [0, 5, 0] }}
+                  transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
+                >
+                  →
+                </motion.span>
+              </motion.button>
+              <p className="text-[11px] text-zinc-600 tracking-wide" style={f1Font}>
+                {replaySession
+                  ? `${replaySession.meetingName} · ${replaySession.sessionName} · ${replaySession.circuitName}`
+                  : t("landing.replayInfo")}
+              </p>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="connecting"
+              className="flex flex-col items-center gap-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="flex gap-1.5">
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-zinc-600"
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }}
+                  />
+                ))}
+              </div>
+              <p className="text-[11px] text-zinc-600 tracking-[0.2em] uppercase" style={f1Font}>
+                {t("error.connection")}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </footer>
     </div>
   );
 }

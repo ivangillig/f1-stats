@@ -47,6 +47,7 @@ export default function HomePage() {
   const { loading, isLive } = useNextF1Session();
   const [replaySession, setReplaySession] = useState<ReplaySession | null>(null);
   const [activeViewers, setActiveViewers] = useState<number | null>(null);
+  const [proxyAvailable, setProxyAvailable] = useState(false);
   const clientId = useRef(`landing-${Math.random().toString(36).slice(2)}`);
 
   useEffect(() => {
@@ -54,10 +55,11 @@ export default function HomePage() {
       fetch(`${PROXY_URL}/health?clientId=${clientId.current}`)
         .then((r) => r.json())
         .then((data) => {
+          setProxyAvailable(true);
           if (data.replaySession) setReplaySession(data.replaySession);
           if (typeof data.clients === "number") setActiveViewers(data.clients);
         })
-        .catch(() => {});
+        .catch(() => setProxyAvailable(false));
     };
     poll();
     const id = setInterval(poll, 15000);
@@ -96,6 +98,7 @@ export default function HomePage() {
       onEnterDemo={() => router.push("/dashboard")}
       replaySession={replaySession}
       activeViewers={activeViewers}
+      proxyAvailable={proxyAvailable}
     />
   );
 }

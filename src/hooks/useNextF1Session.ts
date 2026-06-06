@@ -53,26 +53,37 @@ export function useNextF1Session(): NextSessionState {
   });
 
   const fetchSessions = useCallback(() => {
-    // Use yesterday to catch sessions that started before midnight but are still running
-    // Route through proxy so credentials are used when OpenF1 restricts access during live sessions
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    fetch(`/api/proxy/api/sessions?date_start>=${yesterday}`)
-      .then((r) => r.json())
-      .then((data: OpenF1Session[]) => {
-        const now = Date.now();
-        const upcoming = data
-          .filter((s) => new Date(s.date_end).getTime() > now)
-          .sort((a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
+    // Fetch directly from OpenF1 — no auth needed for session schedule,
+    // and this way the landing works even when the proxy isn't running.
+    // Fall back to proxy URL if the direct fetch fails (e.g. CORS in some envs).
+    const direct = `https://api.openf1.org/v1/sessions?date_start>=${yesterday}`;
+    const fallback = `/api/proxy/api/sessions?date_start>=${yesterday}`;
 
-        const next = upcoming[0] ?? null;
-        setNextSession(next);
-        setWeekendSessions(
-          next ? upcoming.filter((s) => s.meeting_key === next.meeting_key) : []
-        );
-        setLoading(false);
-        if (next) setCountdown(computeCountdown(next.date_start));
-      })
-      .catch(() => setLoading(false));
+    const parse = (data: OpenF1Session[]) => {
+      const now = Date.now();
+      const upcoming = data
+        .filter((s) => new Date(s.date_end).getTime() > now)
+        .sort((a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
+      const next = upcoming[0] ?? null;
+      setNextSession(next);
+      setWeekendSessions(
+        next ? upcoming.filter((s) => s.meeting_key === next.meeting_key) : []
+      );
+      setLoading(false);
+      if (next) setCountdown(computeCountdown(next.date_start));
+    };
+
+    fetch(direct)
+      .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
+      .then(parse)
+      .catch(() =>
+        // Proxy fallback
+        fetch(fallback)
+          .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
+          .then(parse)
+          .catch(() => setLoading(false))
+      );
   }, []);
 
   useEffect(() => {
