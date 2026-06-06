@@ -229,6 +229,7 @@ export default function TopBar({
                           : session.type === "Sprint Qualifying"
                             ? t("session.sprintQualifying")
                             : session.type}
+                {session.qualifyingPart && ` · Q${session.qualifyingPart}`}
               </Badge>
             )}
           </div>

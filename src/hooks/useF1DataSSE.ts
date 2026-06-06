@@ -712,10 +712,13 @@ export function useF1DataSSE(): F1DataState {
           ? `(${Object.keys(data).length} keys)`
           : "(empty - waiting for data)",
       );
-      // Reset driver-related state so stale entries from a previous session don't persist
+      // Reset driver-related state so stale entries from a previous session don't persist.
+      // carDataRef (location) is intentionally NOT cleared: if this is a reconnect mid-session
+      // we keep last known positions so the map doesn't dump everyone to pit lane while
+      // waiting for the next MQTT location batch. processData below will overwrite with
+      // fresh positions as soon as they arrive.
       setDrivers([]);
       driverListRef.current = {};
-      carDataRef.current = {};
       maxSegCounts.current = { s1: 6, s2: 6, s3: 6 };
       sessionFastestLapRef.current = Infinity;
       sessionFastestDriverRef.current = null;
