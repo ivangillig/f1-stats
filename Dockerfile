@@ -9,9 +9,11 @@ RUN npm ci
 COPY . .
 
 # NEXT_PUBLIC_ vars are baked into the JS bundle at build time.
-# Pass NEXT_PUBLIC_PROXY_URL so the browser connects directly to the proxy
-# instead of going through the Next.js rewrite (which doesn't stream SSE properly).
-ARG NEXT_PUBLIC_PROXY_URL=http://localhost:4000
+# Leave NEXT_PUBLIC_PROXY_URL empty so the browser uses the same-origin
+# /api/proxy Next.js rewrite (→ INTERNAL_PROXY_URL, proxy stays internal).
+# Only set it to a PUBLIC https URL if you intentionally expose the proxy.
+# NEVER default it to localhost — it bakes into every visitor's browser.
+ARG NEXT_PUBLIC_PROXY_URL=
 ENV NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL}
 
 # Build the Next.js app

@@ -35,7 +35,11 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-http://localhost:4000}
+        # Empty by default: the browser then uses the same-origin /api/proxy
+        # Next.js rewrite (→ INTERNAL_PROXY_URL) instead of hitting the proxy
+        # directly. Only set this to a PUBLIC https URL if you intentionally
+        # expose the proxy. NEVER let it bake to localhost.
+        - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-}
     container_name: f1-dashboard
     restart: unless-stopped
     ports:
