@@ -1,6 +1,6 @@
-# F1 Live Dashboard
+# F1 RaceHub
 
-Dashboard en tiempo real para telemetría de Fórmula 1, construido con Next.js y Node.js. Consume datos de [OpenF1](https://openf1.org) vía MQTT (tier pago) o REST polling (tier gratuito), con modo replay para cuando no hay sesión activa.
+Dashboard en tiempo real para telemetría de Fórmula 1, construido con Next.js y Node.js. Consume datos de [OpenF1](https://openf1.org) vía MQTT (tier pago) y del feed oficial de F1 vía SignalR, con modo replay para cuando no hay sesión activa.
 
 ![F1 Dashboard](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
@@ -13,11 +13,11 @@ Dashboard en tiempo real para telemetría de Fórmula 1, construido con Next.js 
 - 🏎️ **Clasificación en vivo** — posiciones actualizadas en tiempo real
 - ⏱️ **Tiempos de sector** — con indicadores de colores (púrpura = mejor general, verde = mejor personal, amarillo = en progreso)
 - 🔴 **Estado de neumáticos** — compuesto y edad con indicadores visuales
-- 🏁 **Estado de pista** — verde, amarilla, safety car, VSC, red flag, etc.
-- 📊 **Info de sesión** — tiempo restante, vuelta actual, tipo de sesión
-- 🗺️ **Mapa de circuito** — posiciones de pilotos en tiempo real sobre el trazado
+- 🏁 **Estado de pista** — bandera verde, amarilla, safety car, VSC, red flag, a cuadros
+- 📊 **Info de sesión** — tiempo restante, vuelta actual (con cero padding), tipo de sesión
+- 🗺️ **Mapa de circuito** — posiciones de pilotos en tiempo real, avatar al hover con pointer hacia el dot
 - 📻 **Radio de equipos** — capturas de audio de comunicaciones
-- 🚨 **Race Control** — mensajes oficiales de dirección de carrera con banner animado
+- 🚨 **Race Control** — mensajes oficiales con banner animado estilo FIA
 - ⚠️ **Track Violations** — límites de pista y penalizaciones
 - 🌡️ **Datos meteorológicos** — temperatura de pista/aire, humedad, viento
 - 👁️ **Contador de espectadores** — visitantes en vivo deduplicados por sesión de browser
@@ -29,12 +29,15 @@ Browser (Next.js 14)
   └─ useF1DataSSE.ts (EventSource → /api/sse)
        └─ Next.js rewrite → proxy:4000
             └─ proxy/server.js (Node.js)
-                 ├─ mqtt-client.js    (OpenF1 MQTT — tier pago, fuente primaria)
-                 ├─ live-polling.js   (OpenF1 REST polling — tier gratuito, fallback)
-                 └─ replay.js         (OpenF1 datos históricos — cuando no hay sesión activa)
+                 ├─ mqtt-client.js     (OpenF1 MQTT — tier pago, fuente primaria en vivo)
+                 ├─ signalr-client.js  (F1 oficial SignalR — mini-sectores, clock, qualifying)
+                 ├─ live-polling.js    (OpenF1 REST polling — tier gratuito, fallback)
+                 └─ replay.js          (OpenF1 datos históricos — cuando no hay sesión activa)
 ```
 
 El proxy normaliza todas las fuentes en un único stream SSE. El frontend nunca habla directamente con las APIs de F1.
+
+En modo live, MQTT y SignalR corren en paralelo: SignalR tiene prioridad para mini-sectores, tiempos de sector en curso, estado de pista y clock; MQTT cubre location (mapa), neumáticos, team radio y clima.
 
 ## Inicio Rápido
 
@@ -70,20 +73,20 @@ Configurar `PROXY_MODE` en `proxy/.env`:
 
 | Modo | Fuente | Credenciales |
 |---|---|---|
-| `mqtt` | OpenF1 MQTT — push en tiempo real (tier pago) | Sí (`OPENF1_USERNAME` / `OPENF1_PASSWORD`) |
+| `mqtt` / `openf1` | OpenF1 MQTT — push en tiempo real (tier pago) | Sí (`OPENF1_USERNAME` / `OPENF1_PASSWORD`) |
 | `live-polling` | OpenF1 REST API — polling cada 4–8s (tier gratuito) | No |
 | `replay` | Datos históricos OpenF1 (GP de Azerbaiyán 2024) | No |
-| `auto` | MQTT → live-polling → replay (fallback automático) | Depende |
+| `auto` | Replay por defecto → sube a MQTT automáticamente cuando detecta sesión activa | Depende |
 
-Con `auto`, el proxy detecta si hay credenciales MQTT y si hay una sesión activa; si no, cae automáticamente a replay.
+Con `auto` (recomendado), el proxy arranca en replay y el watchdog sube a MQTT+SignalR en cuanto detecta una sesión en vivo. Al terminar la sesión vuelve a replay solo.
 
 ## Variables de Entorno
 
 ### Frontend (`.env`)
 
 ```env
-# URL del proxy (opcional, por defecto usa el rewrite de Next.js)
-NEXT_PUBLIC_PROXY_URL=http://localhost:4000
+# URL del proxy (dejar vacío en producción — usa el rewrite de Next.js)
+NEXT_PUBLIC_PROXY_URL=
 ```
 
 ### Proxy (`proxy/.env`)
@@ -94,6 +97,10 @@ PROXY_MODE=auto
 # Solo necesario para MQTT (OpenF1 tier pago)
 OPENF1_USERNAME=tu_usuario
 OPENF1_PASSWORD=tu_contraseña
+
+# Token JWT para F1 SignalR oficial (opcional pero recomendado)
+# Extraerlo de DevTools en formula1.com — expira cada ~4 días
+# F1_LIVETIMING_TOKEN=tu_token_jwt
 ```
 
 ## Scripts
@@ -129,7 +136,7 @@ OPENF1_PASSWORD=tu_contraseña
 
 - **Node.js 20**
 - **mqtt** — cliente MQTT para OpenF1 broker (`mqtt.openf1.org:8883`, TLS)
-- **ws** — WebSocket
+- **ws** — WebSocket para SignalR
 - **nodemon** — recarga en desarrollo
 
 ## Fuente de Datos
@@ -139,7 +146,9 @@ OPENF1_PASSWORD=tu_contraseña
 - **Tier gratuito** — REST API, ~30 req/min. Suficiente para live-polling y replay.
 - **Tier pago** — acceso MQTT para push en tiempo real y mayor rate limit (60 req/min).
 
-Los datos en vivo solo están disponibles durante sesiones oficiales (prácticas, clasificación, carrera). Fuera de sesión, el proxy sirve automáticamente una sesión grabada del GP de Azerbaiyán 2024.
+El feed oficial de F1 (`livetiming.formula1.com`) provee datos vía SignalR con latencia ~200ms: mini-sectores, tiempos de sector en curso, estado de pista, clock de sesión y estado de knockout en clasificación. Requiere token JWT extraído de formula1.com (expira cada ~4 días).
+
+Los datos en vivo solo están disponibles durante sesiones oficiales. Fuera de sesión, el proxy sirve automáticamente una sesión grabada del GP de Azerbaiyán 2024.
 
 ## Apoyar el proyecto
 

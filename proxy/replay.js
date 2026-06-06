@@ -25,14 +25,14 @@ let TOTAL_LAPS = 70; // Default; updated from lap data as race progresses
 // Replay speed multiplier (1x = real-time, 10x = 10 seconds per real second)
 const REPLAY_SPEED = 1;
 
-// Paid tier doubles the rate limit (60 req/min, 6 req/s) vs free (30 req/min, 3 req/s).
 // 6 requests per cycle (pos, intervals, laps, location, race_control, team_radio).
 // Uses recursive setTimeout (not setInterval) so cycles never overlap.
-// Free: 6 req × ~2s each = ~12s per cycle, +3s gap = 15s between cycles ≈ 24 req/min
-// Paid: 6 req × ~0.4s each = ~2.4s per cycle, +1.6s gap = 4s between cycles ≈ 90 req/min (well under 60 req/min cap with spacing)
-const PAID_POLL_INTERVAL_MS = 4000;
-const FREE_POLL_INTERVAL_MS = 15000;
-const PAID_REQUEST_DELAY_MS = 200;
+// Paid limit: 60 req/min = 1 req/s sustained. To avoid burst 429s we space
+//   requests at 800ms each: 6×0.8s = 4.8s for requests + 6s gap = ~10.8s/cycle → ~33 req/min
+// Free limit: 30 req/min = 0.5 req/s. 6×1.8s = 10.8s + 4s gap = ~15s/cycle → ~24 req/min
+const PAID_POLL_INTERVAL_MS = 6000;
+const FREE_POLL_INTERVAL_MS = 4000;
+const PAID_REQUEST_DELAY_MS = 800;
 const FREE_REQUEST_DELAY_MS = 1800;
 
 // Set at startReplay() based on whether credentials are available
