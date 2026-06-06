@@ -2,7 +2,7 @@ name: Deploy f1-stats
 
 on:
   push:
-    branches: [ main ]
+    branches: [ release/production ]
 
 concurrency:
   group: deploy-production
