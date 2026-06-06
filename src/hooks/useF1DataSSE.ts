@@ -33,6 +33,7 @@ interface F1DataState {
   isConnected: boolean;
   error: string | null;
   proxyMode: string | null;
+  signalrDegraded: boolean;
 }
 
 const defaultSessionInfo: SessionInfo = {
@@ -117,10 +118,14 @@ export function useF1DataSSE(): F1DataState {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proxyMode, setProxyMode] = useState<string | null>(null);
+  // True when there's a live session (mqtt-live) but the official SignalR
+  // timing feed is down — some data arrives delayed or is missing.
+  const [signalrDegraded, setSignalrDegraded] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const statusPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const clockIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectedRef = useRef(false);
 
@@ -842,6 +847,37 @@ export function useF1DataSSE(): F1DataState {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Periodic status poll — keeps proxyMode fresh and detects when the official
+  // SignalR timing feed is down during a live session. The main connect effect
+  // only reads /health once (then stops), so this is the source of truth for
+  // banners that need to react to mode/SignalR changes over time.
+  useEffect(() => {
+    const pollStatus = () => {
+      fetch(`${PROXY_URL}/health`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.status !== "ok") return;
+          setProxyMode(data.mode ?? null);
+          // Degraded only when we actually have a live session running on MQTT
+          // but SignalR isn't connected. In replay/standby a missing SignalR is
+          // expected, so we don't warn there.
+          setSignalrDegraded(
+            data.mode === "mqtt-live" && data.signalrRunning === false,
+          );
+        })
+        .catch(() => {});
+    };
+
+    pollStatus();
+    statusPollIntervalRef.current = setInterval(pollStatus, 15000);
+
+    return () => {
+      if (statusPollIntervalRef.current)
+        clearInterval(statusPollIntervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return {
     drivers,
     sessionInfo,
@@ -853,5 +889,6 @@ export function useF1DataSSE(): F1DataState {
     isConnected,
     error,
     proxyMode,
+    signalrDegraded,
   };
 }

@@ -20,6 +20,7 @@ services:
       - F1_SSE_SECURE=${F1_SSE_SECURE:-true}
       - REPLAY_SESSION_KEY=${REPLAY_SESSION_KEY:-11286}
       - NODE_ENV=${NODE_ENV:-development}
+      - F1_LIVETIMING_TOKEN=${F1_LIVETIMING_TOKEN}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
       interval: 30s

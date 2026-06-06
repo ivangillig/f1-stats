@@ -24,6 +24,26 @@ const MQTT_PORT = 8883;
 const TOKEN_URL = "https://api.openf1.org/token";
 const API_BASE = "https://api.openf1.org/v1";
 
+/**
+ * fetch() wrapper that retries on HTTP 429 (rate limit), honoring the
+ * Retry-After header. OpenF1 enforces a burst/concurrency limit, so firing
+ * many requests in parallel at startup non-deterministically 429s some of
+ * them — which previously left e.g. the drivers list (and thus team colors)
+ * empty. Retrying the failed ones resolves it.
+ *
+ * Jitter is added so simultaneously-throttled requests don't retry in lockstep
+ * and re-trip the limit. Non-429 responses (200, 404, etc.) return immediately.
+ */
+async function fetchWithRetry(url, options, retries = 3) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, options);
+    if (res.status !== 429 || attempt >= retries) return res;
+    const retryAfter = parseFloat(res.headers.get("retry-after")) || 1;
+    const jitterMs = Math.floor(Math.random() * 300);
+    await new Promise((r) => setTimeout(r, retryAfter * 1000 + jitterMs));
+  }
+}
+
 // Topics to subscribe (correspond to REST API endpoints)
 const TOPICS = [
   "v1/sessions",
@@ -534,14 +554,14 @@ async function fetchHistoricalData(sessionKey) {
       pitRes,
       posRes,
     ] = await Promise.all([
-      fetch(`${API_BASE}/race_control?session_key=${sessionKey}`, { headers }),
-      fetch(`${API_BASE}/team_radio?session_key=${sessionKey}`, { headers }),
-      fetch(`${API_BASE}/drivers?session_key=${sessionKey}`, { headers }),
-      fetch(`${API_BASE}/laps?session_key=${sessionKey}`, { headers }),
-      fetch(`${API_BASE}/intervals?session_key=${sessionKey}`, { headers }),
-      fetch(`${API_BASE}/stints?session_key=${sessionKey}`, { headers }),
-      fetch(`${API_BASE}/pit?session_key=${sessionKey}`, { headers }),
-      fetch(`${API_BASE}/position?session_key=${sessionKey}`, { headers }),
+      fetchWithRetry(`${API_BASE}/race_control?session_key=${sessionKey}`, { headers }),
+      fetchWithRetry(`${API_BASE}/team_radio?session_key=${sessionKey}`, { headers }),
+      fetchWithRetry(`${API_BASE}/drivers?session_key=${sessionKey}`, { headers }),
+      fetchWithRetry(`${API_BASE}/laps?session_key=${sessionKey}`, { headers }),
+      fetchWithRetry(`${API_BASE}/intervals?session_key=${sessionKey}`, { headers }),
+      fetchWithRetry(`${API_BASE}/stints?session_key=${sessionKey}`, { headers }),
+      fetchWithRetry(`${API_BASE}/pit?session_key=${sessionKey}`, { headers }),
+      fetchWithRetry(`${API_BASE}/position?session_key=${sessionKey}`, { headers }),
     ]);
 
     if (raceControlRes.ok) {
@@ -600,7 +620,7 @@ async function fetchHistoricalData(sessionKey) {
           `[openf1-mqtt] No drivers for session ${sessionKey} yet — falling back to previous session`,
         );
         try {
-          const prevRes = await fetch(
+          const prevRes = await fetchWithRetry(
             `${API_BASE}/drivers?session_key=${sessionKey - 1}`,
             { headers },
           );
@@ -623,6 +643,13 @@ async function fetchHistoricalData(sessionKey) {
       // sessions (e.g. RIC) don't persist into the current session.
       currentStateRef.drivers = {};
       drivers.forEach((driver) => handleDriver(driver));
+    } else {
+      // Drivers are critical (team colors, codes, names). If even the retried
+      // fetch failed, log it loudly — team colors will be missing until the
+      // v1/drivers MQTT topic pushes (which it rarely does mid-session).
+      console.warn(
+        `[openf1-mqtt] Failed to load drivers (status ${driversRes.status}) — team colors may be missing`,
+      );
     }
 
     // Sort ascending so best/last lap are accumulated correctly

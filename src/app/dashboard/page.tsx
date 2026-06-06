@@ -28,6 +28,7 @@ export default function DashboardPage() {
     carData,
     error,
     proxyMode,
+    signalrDegraded,
   } = useF1DataSSE();
 
   const [activeTab, setActiveTab] = useState<
@@ -183,6 +184,17 @@ export default function DashboardPage() {
             <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
             <span className="font-semibold">{t("mode.standbyLabel")}</span>
             <span className="text-blue-200/70">{t("mode.standbyDesc")}</span>
+          </div>
+        )}
+        {signalrDegraded && (
+          <div className="bg-yellow-500/10 border-b border-yellow-500/30 text-yellow-200 px-4 py-2 text-sm flex items-center gap-2 shrink-0">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse shrink-0" />
+            <span className="font-semibold">
+              {t("mode.signalrDegradedLabel")}
+            </span>
+            <span className="text-yellow-200/70">
+              {t("mode.signalrDegradedDesc")}
+            </span>
           </div>
         )}
 

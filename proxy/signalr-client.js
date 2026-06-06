@@ -22,11 +22,15 @@ import WebSocket from "ws";
 import { ensureTimingEntry } from "./state-utils.js";
 
 const SIGNALR_HOST = "livetiming.formula1.com";
-const CONNECTION_DATA = encodeURIComponent(
-  JSON.stringify([{ name: "Streaming" }]),
-);
-const NEGOTIATE_URL = `https://${SIGNALR_HOST}/signalr/negotiate?clientProtocol=1.5&connectionData=${CONNECTION_DATA}`;
-const WS_BASE = `wss://${SIGNALR_HOST}/signalr/connect`;
+// SignalR Core (modern ASP.NET Core SignalR). Since ~2025 F1 migrated here and
+// gated it behind auth — the old /signalr/ classic endpoint now returns 401 for
+// everyone. Access requires a JWT obtained from a formula1.com login, passed as
+// the `authToken` query param (see proxy/.env.example for how to get it).
+const NEGOTIATE_URL = `https://${SIGNALR_HOST}/signalrcore/negotiate?negotiateVersion=1`;
+const WS_BASE = `wss://${SIGNALR_HOST}/signalrcore`;
+
+// SignalR Core's JSON protocol delimits each message with the 0x1e record separator.
+const RS = "\x1e";
 
 // Topics: TimingData for live segments/sector times, TimingStats for personal best sectors,
 // TrackStatus and ExtrapolatedClock as fast overrides (OpenF1 MQTT doesn't provide these live)
@@ -48,6 +52,7 @@ let currentStateRef = null;
 let broadcastFn = null;
 let isRunning = false;
 let reconnectTimeout = null;
+let pingInterval = null;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -345,81 +350,121 @@ function handleFeedMessage(topic, data, isSnapshot = false) {
 async function connect() {
   if (!isRunning) return;
 
+  const token = process.env.F1_LIVETIMING_TOKEN;
+  if (!token) {
+    // No token → nothing to connect to (the classic endpoint is dead). Don't
+    // reconnect-spam; the dashboard falls back to MQTT and shows the degraded
+    // banner until a token is provided.
+    console.warn(
+      "[signalr] F1_LIVETIMING_TOKEN not set — F1 live timing unavailable (feed gated by F1 since 2025). Skipping SignalR.",
+    );
+    return;
+  }
+
   try {
-    // Step 1: Negotiate — get ConnectionToken
-    const negRes = await fetch(NEGOTIATE_URL, { headers: COMMON_HEADERS });
+    const authQS = `authToken=${encodeURIComponent(token)}`;
+
+    // Step 1: Negotiate (POST). Returns a connectionToken AND sets AWSALB sticky
+    // cookies. The WebSocket MUST send those cookies back, or the load balancer
+    // routes it to a different backend that doesn't know our connectionToken → 404.
+    const negRes = await fetch(`${NEGOTIATE_URL}&${authQS}`, {
+      method: "POST",
+      headers: COMMON_HEADERS,
+    });
+    if (negRes.status === 401) {
+      // Token missing/expired. Manual refresh required — back off long instead
+      // of hammering every 5s.
+      console.error(
+        "[signalr] Negotiate 401 — F1_LIVETIMING_TOKEN expired or invalid. Refresh it from your browser (see proxy/.env.example). Backing off 5 min.",
+      );
+      if (isRunning) scheduleReconnect(300000);
+      return;
+    }
     if (!negRes.ok) throw new Error(`Negotiate failed: ${negRes.status}`);
+
     const neg = await negRes.json();
-    const token = neg.ConnectionToken;
-    if (!token) throw new Error("No ConnectionToken in negotiate response");
+    const connToken = neg.connectionToken;
+    if (!connToken) throw new Error("No connectionToken in negotiate response");
 
-    const tokenEnc = encodeURIComponent(token);
+    const setCookies = negRes.headers.getSetCookie
+      ? negRes.headers.getSetCookie()
+      : [negRes.headers.get("set-cookie")].filter(Boolean);
+    const stickyCookie = setCookies.map((c) => c.split(";")[0]).join("; ");
 
-    // Step 2: Open WebSocket
-    const wsUrl =
-      `${WS_BASE}?clientProtocol=1.5&transport=webSockets` +
-      `&connectionToken=${tokenEnc}&connectionData=${CONNECTION_DATA}`;
-
-    ws = new WebSocket(wsUrl, { headers: COMMON_HEADERS });
+    // Step 2: Open WebSocket with the sticky cookie + auth token.
+    const wsUrl = `${WS_BASE}?id=${encodeURIComponent(connToken)}&${authQS}`;
+    ws = new WebSocket(wsUrl, {
+      headers: { ...COMMON_HEADERS, Cookie: stickyCookie },
+    });
 
     ws.on("open", () => {
-      console.log("[signalr] Connected to F1 live timing");
+      // SignalR Core handshake must be the very first frame.
+      ws.send(JSON.stringify({ protocol: "json", version: 1 }) + RS);
 
-      // Subscribe to topics
+      // Subscribe to the streaming topics (hub method "Subscribe").
       ws.send(
         JSON.stringify({
-          H: "Streaming",
-          M: "Subscribe",
-          A: [SUBSCRIBE_TOPICS],
-          I: 1,
-        }),
+          type: 1,
+          invocationId: "0",
+          target: "Subscribe",
+          arguments: [SUBSCRIBE_TOPICS],
+        }) + RS,
       );
 
-      // Step 3: HTTP start (required by SignalR protocol)
-      const startUrl =
-        `https://${SIGNALR_HOST}/signalr/start?clientProtocol=1.5&transport=webSockets` +
-        `&connectionToken=${tokenEnc}&connectionData=${CONNECTION_DATA}`;
-      fetch(startUrl, { headers: COMMON_HEADERS }).catch(() => {});
+      console.log("[signalr] Connected to F1 live timing (SignalR Core)");
+
+      // Application-level keepalive: SignalR Core drops the connection if the
+      // server receives nothing within its client-timeout window (~30s).
+      clearInterval(pingInterval);
+      pingInterval = setInterval(() => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 6 }) + RS);
+        }
+      }, 15000);
     });
 
     ws.on("message", (raw) => {
-      try {
-        const msg = JSON.parse(raw.toString());
+      // A single frame may pack multiple RS-delimited messages.
+      for (const part of raw.toString().split(RS)) {
+        if (!part) continue;
+        let msg;
+        try {
+          msg = JSON.parse(part);
+        } catch {
+          continue;
+        }
 
-        // Subscribe response snapshot: { I: "1", R: { TopicName: {data}, ... } }
-        // This is the initial state sent back when we call Subscribe().
-        // Must be processed BEFORE live incremental M[] messages arrive.
-        // isSnapshot=true so processTimingData treats absent InPit as false,
-        // clearing any stale in_pit:true from a previous connection cycle.
-        if (msg.R && typeof msg.R === "object" && !Array.isArray(msg.R)) {
-          for (const [topic, data] of Object.entries(msg.R)) {
+        if (msg.type === 1 && Array.isArray(msg.arguments)) {
+          // Invocation = live feed. arguments = [topic, data, timestamp].
+          handleFeedMessage(msg.arguments[0], msg.arguments[1]);
+        } else if (
+          msg.type === 3 &&
+          msg.result &&
+          typeof msg.result === "object"
+        ) {
+          // Completion of our Subscribe: result is the full initial snapshot,
+          // keyed by topic. Treat as authoritative (isSnapshot=true) so absent
+          // InPit clears stale state from a previous connection cycle.
+          for (const [topic, data] of Object.entries(msg.result)) {
             if (data && typeof data === "object") {
               console.log(`[signalr] Snapshot: ${topic}`);
               handleFeedMessage(topic, data, true);
             }
           }
+        } else if (msg.type === 7) {
+          // Server-initiated close.
+          console.log(`[signalr] Server close: ${msg.error || "(no reason)"}`);
+        } else if (msg.error && msg.type === undefined) {
+          // Handshake response is `{}` on success or `{error}` on failure.
+          console.error(`[signalr] Handshake error: ${msg.error}`);
         }
-
-        // Live broadcast messages: { M: [{ H: "streaming", M: "feed", A: ["Topic", {data}, "ts"] }] }
-        if (Array.isArray(msg.M)) {
-          for (const item of msg.M) {
-            if (
-              item.H?.toLowerCase() === "streaming" &&
-              item.M === "feed" &&
-              Array.isArray(item.A) &&
-              item.A.length >= 2
-            ) {
-              handleFeedMessage(item.A[0], item.A[1]);
-            }
-          }
-        }
-      } catch (_) {
-        // Ignore malformed messages (keepalives, etc.)
+        // type 6 (ping) and the empty handshake ack are ignored.
       }
     });
 
-    ws.on("close", (code, reason) => {
+    ws.on("close", (code) => {
       console.log(`[signalr] Disconnected (${code})`);
+      clearInterval(pingInterval);
       ws = null;
       if (isRunning) scheduleReconnect();
     });
@@ -466,6 +511,7 @@ export function startSignalR(broadcast, stateRef) {
 export function stopSignalR() {
   isRunning = false;
   clearTimeout(reconnectTimeout);
+  clearInterval(pingInterval);
   ws?.close();
   ws = null;
   broadcastFn = null;

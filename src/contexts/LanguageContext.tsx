@@ -142,6 +142,9 @@ const translations = {
     "mode.standbyLabel": "Esperando sesión en vivo",
     "mode.standbyDesc":
       "El proxy se conectará automáticamente cuando inicie la sesión.",
+    "mode.signalrDegradedLabel": "Datos en vivo degradados:",
+    "mode.signalrDegradedDesc":
+      "Hay inconvenientes con el proveedor de cronometraje oficial. Algunos datos (mini-sectores, tiempo restante, eliminados) pueden llegar con delay o faltar.",
 
     // Track status
     "status.allClear": "Despejado",
@@ -318,6 +321,9 @@ const translations = {
     "mode.replayDesc": "Live data unavailable. Displaying recorded session.",
     "mode.standbyLabel": "Waiting for live session",
     "mode.standbyDesc": "Will connect automatically when the session starts.",
+    "mode.signalrDegradedLabel": "Live data degraded:",
+    "mode.signalrDegradedDesc":
+      "There are issues with the official timing provider. Some data (mini-sectors, remaining time, eliminations) may be delayed or missing.",
 
     // Track status
     "status.allClear": "All Clear",
