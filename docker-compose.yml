@@ -6,7 +6,7 @@ services:
     build:
       context: ./proxy
       dockerfile: Dockerfile
-    container_name: f1-proxy
+    container_name: f1-api
     restart: unless-stopped
     ports:
       - "${PROXY_PORT:-4000}:4000"
@@ -40,7 +40,7 @@ services:
         # directly. Only set this to a PUBLIC https URL if you intentionally
         # expose the proxy. NEVER let it bake to localhost.
         - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-}
-    container_name: f1-dashboard
+    container_name: f1-ui
     restart: unless-stopped
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"

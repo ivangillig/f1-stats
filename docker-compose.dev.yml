@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  proxy:
+    container_name: f1-api-dev
+    ports:
+      - "${PROXY_PORT:-4001}:4000"
+
+  dashboard:
+    container_name: f1-ui-dev
+    ports:
+      - "${DASHBOARD_PORT:-3001}:3000"
+    build:
+      args:
+        - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-}
+        - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-https://dev.f1racehub.com}
