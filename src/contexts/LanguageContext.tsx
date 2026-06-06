@@ -34,6 +34,9 @@ const translations = {
     "timing.s2": "S2",
     "timing.s3": "S3",
     "timing.waiting": "Esperando datos de pilotos...",
+    "timing.lastLap": "Últ. Vuelta",
+    "timing.waitingData": "Esperando datos...",
+    "driver.lastLap": "Última Vuelta",
 
     // DriverRow
     "driver.inPit": "En boxes",
@@ -220,6 +223,9 @@ const translations = {
     "timing.s2": "S2",
     "timing.s3": "S3",
     "timing.waiting": "Waiting for driver data...",
+    "timing.lastLap": "Last Lap",
+    "timing.waitingData": "Waiting for data...",
+    "driver.lastLap": "Last Lap",
 
     // DriverRow
     "driver.inPit": "In pit",

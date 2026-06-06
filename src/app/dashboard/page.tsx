@@ -274,7 +274,7 @@ export default function DashboardPage() {
                         }`}
                       >
                         <tab.icon size={13} style={{ color: tab.color }} />
-                        <span className={tableExpanded ? "hidden" : "hidden sm:inline"}>{tab.label}</span>
+                        <span className={tableExpanded ? "hidden" : "inline"}>{tab.label}</span>
                         {activeTab === tab.id && (
                           <motion.div
                             layoutId="tab-indicator"

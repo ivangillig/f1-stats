@@ -65,7 +65,7 @@ function SectorGroup({
           <div key={i} className={cn("w-[10px] h-[4px] rounded-[2px]", SECTOR_COLORS[s])} />
         ))}
       </div>
-      <span className={cn("font-mono text-[10px] tabular-nums", SECTOR_TEXT[status])}>
+      <span className={cn("font-mono text-[11px] tabular-nums", SECTOR_TEXT[status])}>
         {time || "--.---"}
       </span>
     </div>
@@ -125,14 +125,14 @@ function DriverRowMobile({
         onClick={onToggle}
       >
         {/* Position */}
-        <span className="w-5 text-center text-[11px] font-bold text-zinc-400 tabular-nums flex-shrink-0">
+        <span className="w-5 text-center text-xs font-bold text-zinc-400 tabular-nums flex-shrink-0">
           {driver.position}
         </span>
 
         {/* Driver badge */}
         <div className="w-14 flex-shrink-0 flex justify-center mx-1">
           <div
-            className="px-1.5 py-0.5 rounded text-[11px] font-black text-white w-full text-center"
+            className="px-1.5 py-0.5 rounded text-xs font-black text-white w-full text-center"
             style={{
               backgroundColor: eliminated ? "#3f3f46" : teamColor,
               fontFamily: "'Formula1 Display', sans-serif",
@@ -145,16 +145,16 @@ function DriverRowMobile({
         {/* Tire + age */}
         <div className="w-12 flex-shrink-0 flex items-center gap-1 mx-1">
           <img src={tireSrc} alt={tireKey} className="w-5 h-5 flex-shrink-0" />
-          <span className="text-[10px] text-zinc-500 font-mono tabular-nums">{driver.tire.age}</span>
+          <span className="text-[11px] text-zinc-500 font-mono tabular-nums">{driver.tire.age}</span>
         </div>
 
         {/* Gap */}
-        <span className="flex-1 text-[11px] text-zinc-300 font-mono tabular-nums text-right pr-2 truncate">
+        <span className="flex-1 text-xs text-zinc-300 font-mono tabular-nums text-right pr-2 truncate">
           {gapText}
         </span>
 
         {/* Last lap / PIT / OUT */}
-        <span className={cn("w-[68px] flex-shrink-0 text-right text-[11px] font-mono tabular-nums", lastLapColor)}>
+        <span className={cn("w-[68px] flex-shrink-0 text-right text-xs font-mono tabular-nums", lastLapColor)}>
           {driver.inPit ? (
             <span className="text-[10px] font-bold text-cyan-400 border border-cyan-500 px-1 py-0.5 rounded">PIT</span>
           ) : driver.isPitOutLap ? (
@@ -224,7 +224,7 @@ function DriverRowMobile({
                     )}
                     <div className="flex flex-col items-end">
                       <span className="text-[8px] text-zinc-600 uppercase">{t("driver.lastLap")}</span>
-                      <span className={cn("font-mono text-[11px] tabular-nums", lastLapColor)}>
+                      <span className={cn("font-mono text-xs tabular-nums", lastLapColor)}>
                         {driver.lastLap || "–:–-.–––"}
                       </span>
                     </div>
@@ -313,15 +313,15 @@ export default function MobileTimingBoard({
 
       {/* Column headers */}
       <div className="flex items-center gap-0 px-2 py-1 border-b border-zinc-800/80 bg-zinc-950/60 shrink-0">
-        <span className="w-5 flex-shrink-0 text-center text-[9px] tracking-widest text-zinc-600 uppercase">#</span>
-        <span className="w-14 flex-shrink-0 text-center text-[9px] tracking-widest text-zinc-600 uppercase mx-1">
+        <span className="w-5 flex-shrink-0 text-center text-[10px] tracking-widest text-zinc-600 uppercase">#</span>
+        <span className="w-14 flex-shrink-0 text-center text-[10px] tracking-widest text-zinc-600 uppercase mx-1">
           {t("timing.driver") || "PILOTO"}
         </span>
-        <span className="w-12 flex-shrink-0 text-center text-[9px] tracking-widest text-zinc-600 uppercase mx-1">
+        <span className="w-12 flex-shrink-0 text-center text-[10px] tracking-widest text-zinc-600 uppercase mx-1">
           {t("timing.tire") || "NEU"}
         </span>
-        <span className="flex-1 text-right pr-2 text-[9px] tracking-widest text-zinc-600 uppercase">GAP</span>
-        <span className="w-[68px] flex-shrink-0 text-right text-[9px] tracking-widest text-zinc-600 uppercase">
+        <span className="flex-1 text-right pr-2 text-[10px] tracking-widest text-zinc-600 uppercase">GAP</span>
+        <span className="w-[68px] flex-shrink-0 text-right text-[10px] tracking-widest text-zinc-600 uppercase">
           {t("timing.lastLap") || "ÚLT. VTA"}
         </span>
         <span className="w-4 flex-shrink-0" />
