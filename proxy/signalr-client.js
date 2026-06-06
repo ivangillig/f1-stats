@@ -276,8 +276,9 @@ function processExtrapolatedClock(data) {
   if (!currentStateRef || !data) return;
   const remaining = data.Remaining ?? data.remaining;
   const utc = data.Utc ?? data.utc;
+  const extrapolating = data.Extrapolating ?? data.extrapolating ?? true;
   if (remaining && utc) {
-    currentStateRef.clock = { remaining, utc };
+    currentStateRef.clock = { remaining, utc, extrapolating };
     if (broadcastFn) broadcastFn("update", currentStateRef);
   }
 }

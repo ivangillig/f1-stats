@@ -130,7 +130,7 @@ export function useF1DataSSE(): F1DataState {
   const isConnectedRef = useRef(false);
 
   // Clock data received from the proxy (data.clock)
-  const clockRef = useRef<{ utc: string; remaining: string } | null>(null);
+  const clockRef = useRef<{ utc: string; remaining: string; extrapolating?: boolean } | null>(null);
 
   // Driver info cache populated from data.drivers
   const driverListRef = useRef<
@@ -239,6 +239,7 @@ export function useF1DataSSE(): F1DataState {
         clockRef.current = {
           remaining: clockData.remaining,
           utc: clockData.utc,
+          extrapolating: clockData.extrapolating,
         };
       }
 
@@ -770,11 +771,13 @@ export function useF1DataSSE(): F1DataState {
         return;
       }
 
-      // Always extrapolate: subtract elapsed time since the UTC anchor
-      const elapsed = Math.floor(
-        (Date.now() - new Date(clock.utc).getTime()) / 1000,
-      );
-      totalSeconds = Math.max(0, totalSeconds - elapsed);
+      // Only extrapolate when the clock is running (red flag / session end sets extrapolating=false)
+      if (clock.extrapolating !== false) {
+        const elapsed = Math.floor(
+          (Date.now() - new Date(clock.utc).getTime()) / 1000,
+        );
+        totalSeconds = Math.max(0, totalSeconds - elapsed);
+      }
 
       const hours = Math.floor(totalSeconds / 3600);
       const minutes = Math.floor((totalSeconds % 3600) / 60);
