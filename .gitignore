@@ -9,6 +9,7 @@
 
 # testing
 /coverage
+stress-test.mjs
 
 # next.js
 /.next/
