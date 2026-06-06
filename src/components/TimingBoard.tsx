@@ -166,7 +166,7 @@ export default function TimingBoard({
 
   const stickyStyle = getStickyStyle();
 
-  const gridCols = `95px 47px 99px 43px 72px 90px minmax(${s1Count * 20}px, max-content) minmax(${s2Count * 20}px, max-content) minmax(${s3Count * 20}px, max-content)`;
+  const gridCols = `95px 47px 99px 72px 90px minmax(${s1Count * 20}px, max-content) minmax(${s2Count * 20}px, max-content) minmax(${s3Count * 20}px, max-content)`;
 
   return (
     <>
@@ -180,7 +180,6 @@ export default function TimingBoard({
             <div>{t("timing.driver")}</div>
             <div className="text-center">{t("timing.drs")}</div>
             <div>{t("timing.tire")}</div>
-            <div className="text-center">{t("timing.position")}</div>
             <button
               className="text-right flex items-center justify-end gap-1 w-full cursor-pointer hover:text-foreground transition-colors"
               title={t(gapPrimary === "gap" ? "timing.gapToggleTooltip" : "timing.intervalToggleTooltip")}

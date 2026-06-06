@@ -11,7 +11,7 @@ export default function SupportModal() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="text-pink-400 hover:text-pink-300 transition-colors"
+        className="text-pink-400 hover:text-pink-300 transition-colors text-sm font-bold"
       >
         ♥ {t("footer.support")}
       </button>

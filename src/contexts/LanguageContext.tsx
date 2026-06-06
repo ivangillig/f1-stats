@@ -17,6 +17,7 @@ const LanguageContext = createContext<LanguageContextType | undefined>(
 const translations = {
   es: {
     // TopBar
+    "beta.tooltip": "App en desarrollo. Si experimentás demoras o desconexiones, refrescá en unos segundos.",
     "topbar.laps": "Vuelta",
     "topbar.of": "de",
 
@@ -206,6 +207,7 @@ const translations = {
   },
   en: {
     // TopBar
+    "beta.tooltip": "App under development. If you experience delays or disconnections, refresh in a few seconds.",
     "topbar.laps": "Lap",
     "topbar.of": "of",
 

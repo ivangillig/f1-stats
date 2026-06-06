@@ -91,18 +91,7 @@ export default function TopBar({
   const statusInfo = TRACK_STATUS[trackStatus.status] || TRACK_STATUS[1];
   // trackStatus.message is authoritative for the text but the numeric code can lag —
   // use the message to override the color when they disagree
-  const effectiveColor = (() => {
-    const msg = (trackStatus.message || "").toUpperCase();
-    // Chequered takes priority over everything — the race is over
-    if (msg === "CHEQUERED") return "#3A3A3A";
-    if (msg.includes("RED")) return "#FF0000";
-    if (msg.includes("GREEN") || msg === "ALLCLEAR" || msg === "ALL CLEAR")
-      return "#00bc7d";
-    // Only use race control override for RED FLAG if we're not already past it
-    if (latestRaceControlMessage?.message.includes("RED FLAG"))
-      return "#FF0000";
-    return statusInfo.color;
-  })();
+  const effectiveColor = statusInfo.color;
   const isRace = session.type === "Race" || session.type === "Sprint";
   const { t } = useLanguage();
   const viewers = useViewerCount();
@@ -163,12 +152,20 @@ export default function TopBar({
               alt="F1 RaceHub"
               className="h-10 sm:h-14 w-auto"
             />
-            <span
-              className="hidden sm:inline font-bold tracking-tight text-xl"
-              style={{ fontFamily: "'Formula1 Display', sans-serif" }}
-            >
-              F1 RaceHub
-            </span>
+            <div className="hidden sm:flex flex-col">
+              <span
+                className="font-bold tracking-tight text-xl leading-tight"
+                style={{ fontFamily: "'Formula1 Display', sans-serif" }}
+              >
+                F1 RaceHub
+              </span>
+              <span
+                className="text-[11px] font-bold text-amber-400/80 tracking-widest uppercase cursor-default"
+                title={t("beta.tooltip")}
+              >
+                Beta
+              </span>
+            </div>
           </a>
 
           {/* Vertical divider — mobile only, between logo and flag */}
@@ -194,7 +191,7 @@ export default function TopBar({
               {/* Mobile: lap counter or remaining time stacked below city name */}
               <span className="sm:hidden text-zinc-300 text-xs font-bold tabular-nums">
                 {isRace && session.currentLap > 0
-                  ? `${t("topbar.laps")} ${session.currentLap}${session.totalLaps > 0 ? ` / ${session.totalLaps}` : ""}`
+                  ? `${t("topbar.laps")} ${String(session.currentLap).padStart(2, "0")}${session.totalLaps > 0 ? ` / ${session.totalLaps}` : ""}`
                   : !isRace && session.remainingTime
                     ? session.remainingTime
                     : null}
@@ -248,8 +245,8 @@ export default function TopBar({
               : latestRaceControlMessage.message;
             return (
               <div className="hidden lg:flex flex-1 min-w-0 overflow-hidden items-center justify-center px-4 animate-in fade-in slide-in-from-top-2 duration-500">
-                <div className="bg-zinc-100 text-black rounded flex items-stretch max-w-3xl w-full shadow-lg overflow-hidden">
-                  <div className="flex-shrink-0 bg-[#003063] px-4 flex items-center justify-center">
+                <div className="text-black rounded flex items-stretch max-w-3xl w-full shadow-lg overflow-hidden transform-gpu">
+                  <div className="flex-shrink-0 bg-[#003063] px-4 flex items-center justify-center rounded-l">
                     <img
                       src="/images/fia-footer-logo.png"
                       alt="FIA"
@@ -257,7 +254,7 @@ export default function TopBar({
                     />
                   </div>
                   <div
-                    className="flex items-center flex-1 min-w-0 px-5 py-3"
+                    className="flex items-center flex-1 min-w-0 px-5 py-3 bg-zinc-100 rounded-r"
                     style={{ fontFamily: "'Formula1 Display', sans-serif" }}
                   >
                     <ScrollingText
@@ -286,7 +283,7 @@ export default function TopBar({
                 className="text-2xl font-extrabold tabular-nums"
                 title="Current Lap / Total Laps"
               >
-                {t("topbar.laps")} {session.currentLap}
+                {t("topbar.laps")} {String(session.currentLap).padStart(2, "0")}
                 {session.totalLaps > 0 && ` / ${session.totalLaps}`}
               </span>
             )}
@@ -295,36 +292,51 @@ export default function TopBar({
           {/* Track Status */}
           {(trackStatus.message || "").toUpperCase() === "CHEQUERED" ? (
             <div
-              className="flex items-center gap-2 px-2 sm:px-4 py-1 sm:py-2 rounded-lg border-2"
-              style={{
-                background:
-                  "repeating-conic-gradient(#111 0% 25%, #e8e8e8 0% 50%) 0 0 / 14px 14px",
-                borderColor: "#888",
-                boxShadow:
-                  "0 0 30px rgba(255,255,255,0.25), 0 0 70px rgba(255,255,255,0.1)",
-              }}
+              className="relative flex items-center justify-center sm:!w-[190px] sm:!h-[50px]"
+              style={{ width: 120, height: 30 }}
               title={statusInfo.name}
             >
-              <span
-                className="text-xs sm:text-sm font-bold uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded"
-                style={{ color: "#fff", backgroundColor: "rgba(0,0,0,0.65)" }}
-              >
-                {getTrackStatusText()}
-              </span>
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundColor: "#ffffff",
+                  maskImage: "url(/images/flag.svg)",
+                  maskSize: "contain",
+                  maskRepeat: "no-repeat",
+                  maskPosition: "center",
+                  WebkitMaskImage: "url(/images/flag.svg)",
+                  WebkitMaskSize: "contain",
+                  WebkitMaskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  filter: "drop-shadow(0 0 8px rgba(255,255,255,0.6))",
+                }}
+              />
             </div>
           ) : (
             <div
-              className="flex items-center gap-2 px-2 sm:px-4 py-1 sm:py-2 rounded-lg border-2"
-              style={{
-                backgroundColor: effectiveColor,
-                borderColor: effectiveColor,
-                boxShadow: `0 0 50px ${effectiveColor}, 0 0 100px ${effectiveColor}80, inset 0 0 20px ${effectiveColor}40`,
-              }}
+              className="relative flex items-center justify-center sm:!w-[190px] sm:!h-[50px]"
+              style={{ width: 120, height: 30 }}
               title={statusInfo.name}
             >
+              {/* Flag SVG as background, shown complete */}
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundColor: effectiveColor,
+                  maskImage: "url(/images/flag.svg)",
+                  maskSize: "contain",
+                  maskRepeat: "no-repeat",
+                  maskPosition: "center",
+                  WebkitMaskImage: "url(/images/flag.svg)",
+                  WebkitMaskSize: "contain",
+                  WebkitMaskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                }}
+              />
+              {/* Text on top with shadow for contrast */}
               <span
-                className="text-xs sm:text-sm font-bold uppercase tracking-wider"
-                style={{ color: "white" }}
+                className="relative z-10 text-[9px] sm:text-base font-bold uppercase tracking-wide text-white whitespace-nowrap"
+                style={{ textShadow: "0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7)" }}
               >
                 {getTrackStatusText()}
               </span>

@@ -583,14 +583,14 @@ export default function TrackMap({
         className="w-full h-full"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* Clip paths for driver photos */}
+        {/* Clip paths for driver avatar popups */}
         <defs>
           {carPositions.map(({ driver }) => (
             <clipPath
-              key={`cp-${driver.driverNumber}`}
-              id={`clip-photo-${driver.driverNumber}`}
+              key={`cp-avatar-${driver.driverNumber}`}
+              id={`clip-avatar-${driver.driverNumber}`}
             >
-              <circle r={112} />
+              <circle r={818} cx={0} cy={-1400} />
             </clipPath>
           ))}
         </defs>
@@ -751,7 +751,7 @@ export default function TrackMap({
                 key={`car.${driver.driverNumber}`}
                 transform={`translate(${x}, ${y})`}
               >
-                {/* Label outside dot — fuera del scale group para no desplazar el fill-box */}
+                {/* Label — hides on hover */}
                 <text
                   fontWeight="bold"
                   fontSize={300}
@@ -766,32 +766,26 @@ export default function TrackMap({
                   {driver.code}
                 </text>
 
-                {/* Scale group — solo círculos simétricos, fill-box centrado en (0,0) */}
+                {/* Avatar popup — fixed position above the dot, fades in on hover */}
                 <g
                   style={{
-                    transform: isHovered ? "scale(7.3)" : "scale(1)",
-                    transformBox: "fill-box",
-                    transformOrigin: "center",
-                    transition: "transform 0.2s ease",
+                    opacity: isHovered ? 1 : 0,
+                    transition: "opacity 0.2s ease",
+                    pointerEvents: "none",
                   }}
                 >
-                  <circle r={120} fill={teamColor} />
-                  <circle
-                    r={112}
-                    fill="white"
-                    style={{
-                      opacity: isHovered ? 1 : 0,
-                      transition: "opacity 0.15s ease",
-                    }}
-                  />
+                  {/* Team color border ring */}
+                  <circle r={876} cy={-1400} fill={teamColor} />
+                  {/* White background */}
+                  <circle r={818} cy={-1400} fill="white" />
                   {hasPhoto ? (
                     <image
                       href={`/drivers/${driver.code}.png`}
-                      x={-112}
-                      y={-112}
-                      width={224}
-                      height={224}
-                      clipPath={`url(#clip-photo-${driver.driverNumber})`}
+                      x={-818}
+                      y={-2218}
+                      width={1636}
+                      height={1636}
+                      clipPath={`url(#clip-avatar-${driver.driverNumber})`}
                       preserveAspectRatio="xMidYMin slice"
                       onError={() =>
                         setFailedPhotos((prev) => {
@@ -800,27 +794,37 @@ export default function TrackMap({
                           return s;
                         })
                       }
-                      style={{
-                        opacity: isHovered ? 1 : 0,
-                        transition: "opacity 0.15s ease",
-                      }}
                     />
                   ) : (
                     <text
                       textAnchor="middle"
                       dominantBaseline="middle"
-                      fontSize={95}
+                      fontSize={694}
                       fill={teamColor}
                       fontWeight="bold"
-                      style={{
-                        opacity: isHovered ? 1 : 0,
-                        transition: "opacity 0.15s ease",
-                      }}
+                      y={-1400}
                     >
                       {driver.code}
                     </text>
                   )}
+                  {/* Small caret pointing down toward the dot */}
+                  <polygon
+                    points="-180,-524 180,-524 0,-324"
+                    fill={teamColor}
+                  />
                 </g>
+
+                {/* Always-visible dot — renders above the avatar so it stays visible */}
+                <circle
+                  r={120}
+                  fill={teamColor}
+                  style={{
+                    transform: isHovered ? "scale(1.4)" : "scale(1)",
+                    transformBox: "fill-box",
+                    transformOrigin: "center",
+                    transition: "transform 0.15s ease",
+                  }}
+                />
               </g>
             );
           })}

@@ -18,13 +18,6 @@ export default function Footer() {
             Ivan Gillig
           </a>
           <span className="text-zinc-700">•</span>
-          <a
-            href="https://github.com/ivangillig"
-            className="text-blue-400 hover:underline"
-          >
-            GitHub
-          </a>
-          <span className="text-zinc-700">•</span>
           <SupportModal />
           <span className="text-zinc-700">•</span>
           v2.0.0

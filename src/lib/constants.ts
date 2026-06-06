@@ -38,8 +38,8 @@ export const TRACK_STATUS: Record<
   number,
   { name: string; color: string; key: string }
 > = {
-  1: { name: "Green Flag", color: "#00bc7d", key: "green" },
-  2: { name: "Yellow Flag", color: "#ffb900", key: "yellow" },
+  1: { name: "Green Flag", color: "#10DF5F", key: "green" },
+  2: { name: "Yellow Flag", color: "#FBFF00", key: "yellow" },
   4: { name: "Safety Car", color: "#FFA500", key: "scDeployed" },
   5: { name: "Red Flag", color: "#FF0000", key: "red" },
   6: { name: "Virtual Safety Car", color: "#FFA500", key: "vscDeployed" },

@@ -292,7 +292,7 @@ export default function DriverRow({
         !eliminated && inEliminationZone && "bg-red-950/60",
       )}
       style={{
-        gridTemplateColumns: `95px 47px 99px 43px 72px 90px minmax(${s1Count * 20}px, max-content) minmax(${s2Count * 20}px, max-content) minmax(${s3Count * 20}px, max-content)`,
+        gridTemplateColumns: `95px 47px 99px 72px 90px minmax(${s1Count * 20}px, max-content) minmax(${s2Count * 20}px, max-content) minmax(${s3Count * 20}px, max-content)`,
         borderLeft: isPinned
           ? `3px solid ${teamColor}`
           : !eliminated && inEliminationZone
@@ -364,55 +364,39 @@ export default function DriverRow({
         t={t}
       />
 
-      {/* Position change */}
-      <span
-        className={cn(
-          "text-sm font-medium tabular-nums leading-none text-center",
-          driver.positionChange &&
-            driver.positionChange > 0 &&
-            "text-[oklch(.696_.17_162.48)]",
-          driver.positionChange && driver.positionChange < 0 && "text-red-400",
-          !driver.positionChange && "text-zinc-600",
-        )}
-      >
-        {driver.positionChange
-          ? driver.positionChange > 0
-            ? `+${driver.positionChange}`
-            : driver.positionChange
-          : "—"}
-      </span>
-
       {/* Gap */}
-      <div className="text-right leading-none">
-        <div
-          className="text-lg text-foreground font-f1 font-medium leading-none tracking-tight"
-          title={t(
-            gapPrimary === "gap"
-              ? "driver.gapToLeader"
-              : "driver.intervalToAhead",
-          )}
-        >
-          {gapPrimary === "gap"
-            ? driver.position === 1
-              ? "—"
-              : driver.gap || "—"
-            : driver.interval || "—"}
+      {driver.retired ? <div /> : (
+        <div className="text-right leading-none">
+          <div
+            className="text-lg text-foreground font-f1 font-medium leading-none tracking-tight"
+            title={t(
+              gapPrimary === "gap"
+                ? "driver.gapToLeader"
+                : "driver.intervalToAhead",
+            )}
+          >
+            {gapPrimary === "gap"
+              ? driver.position === 1
+                ? "—"
+                : driver.gap || "—"
+              : driver.interval || "—"}
+          </div>
+          <div
+            className="text-xs text-zinc-500 font-f1 mt-0.5 tracking-tight"
+            title={t(
+              gapPrimary === "gap"
+                ? "driver.intervalToAhead"
+                : "driver.gapToLeader",
+            )}
+          >
+            {gapPrimary === "gap"
+              ? driver.interval || ""
+              : driver.position === 1
+                ? "—"
+                : driver.gap || ""}
+          </div>
         </div>
-        <div
-          className="text-xs text-zinc-500 font-f1 mt-0.5 tracking-tight"
-          title={t(
-            gapPrimary === "gap"
-              ? "driver.intervalToAhead"
-              : "driver.gapToLeader",
-          )}
-        >
-          {gapPrimary === "gap"
-            ? driver.interval || ""
-            : driver.position === 1
-              ? "—"
-              : driver.gap || ""}
-        </div>
-      </div>
+      )}
 
       {/* Last Lap + Best */}
       <div className="text-right leading-none">
@@ -420,9 +404,9 @@ export default function DriverRow({
           className={cn(
             "text-lg font-f1 font-medium leading-none tracking-tight",
             driver.lastLapOverallFastest
-              ? "text-f1-purple" // Session fastest lap - purple
+              ? "text-f1-purple"
               : driver.lastLapPersonalBest
-                ? "text-[oklch(.696_.17_162.48)]" // Personal best - green
+                ? "text-[oklch(.696_.17_162.48)]"
                 : "text-foreground",
           )}
           title={
