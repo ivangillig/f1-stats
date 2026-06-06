@@ -205,18 +205,25 @@ const server = http.createServer(async (req, res) => {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
     });
-    res.end(
-      JSON.stringify({
-        status: "ok",
-        mode,
-        clients: sseClients.size,
-        hasState: Object.keys(currentState).length > 0,
-        mqttAvailable: hasMQTTCredentials(),
-        mqttRunning: isMQTTRunning(),
-        signalrRunning: isSignalRRunning(),
-        watchdogRunning: sessionWatchdog !== null,
-      }),
-    );
+    const health = {
+      status: "ok",
+      mode,
+      clients: sseClients.size,
+      hasState: Object.keys(currentState).length > 0,
+      mqttAvailable: hasMQTTCredentials(),
+      mqttRunning: isMQTTRunning(),
+      signalrRunning: isSignalRRunning(),
+      watchdogRunning: sessionWatchdog !== null,
+    };
+    if (mode === "replay" && currentState.session) {
+      health.replaySession = {
+        meetingName: currentState.session.meeting_name,
+        sessionName: currentState.session.session_name,
+        circuitName: currentState.session.circuit_short_name,
+        location: currentState.session.location,
+      };
+    }
+    res.end(JSON.stringify(health));
     return;
   }
 
