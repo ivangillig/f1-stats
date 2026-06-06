@@ -357,8 +357,9 @@ function handleRaceControl(data, opts = {}) {
   // skipTrackStatus = true when called during historical data loading.
   // Historical messages must not overwrite the real-time status set by SignalR.
   if (!opts.skipTrackStatus) {
-    // Update track status from flag
-    if (data.flag && data.scope === "Track") {
+    // Update track status from flag — only when SignalR hasn't claimed authority.
+    // In live mode SignalR is the authoritative source for track status (~200ms faster).
+    if (!currentStateRef._signalrTrackStatusSet && data.flag && data.scope === "Track") {
       const flagStatus = flagToTrackStatus(data.flag);
       if (flagStatus) {
         currentStateRef.track_status = { flag: flagStatus };
