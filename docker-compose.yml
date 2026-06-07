@@ -13,13 +13,10 @@ services:
     environment:
       - PORT=4000
       - PROXY_MODE=${PROXY_MODE:-auto}
-      - F1_SSE_HOST=${F1_SSE_HOST}
-      - F1_SSE_PATH=${F1_SSE_PATH}
       - OPENF1_USERNAME=${OPENF1_USERNAME}
       - OPENF1_PASSWORD=${OPENF1_PASSWORD}
-      - F1_SSE_SECURE=${F1_SSE_SECURE:-true}
-      - REPLAY_SESSION_KEY=${REPLAY_SESSION_KEY:-11286}
-      - NODE_ENV=${NODE_ENV:-development}
+      - REPLAY_SESSION_KEY=${REPLAY_SESSION_KEY}
+      - NODE_ENV=${NODE_ENV:-production}
       - F1_LIVETIMING_TOKEN=${F1_LIVETIMING_TOKEN}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
@@ -45,8 +42,8 @@ services:
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     environment:
-      - INTERNAL_PROXY_URL=http://f1-proxy:4000
-    depends_on:
+      - INTERNAL_PROXY_URL=http://f1-proxy:4000    
+      depends_on:
       proxy:
         condition: service_healthy
     networks:
