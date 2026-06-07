@@ -9,7 +9,9 @@ services:
   dashboard:
     container_name: f1-ui-dev
     ports:
-      - "${DASHBOARD_PORT:-3001}:3000"
+      - "${DASHBOARD_PORT:-3001}:3000"    
+    environment:
+      - INTERNAL_PROXY_URL=http://f1-api-dev:4001
     build:
       args:
         - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-}
