@@ -16,6 +16,12 @@ COPY . .
 ARG NEXT_PUBLIC_PROXY_URL=
 ENV NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL}
 
+# Server-side rewrite destination: the internal Docker hostname where the proxy
+# runs. Baked into routes-manifest.json at build time (Next.js evaluates
+# next.config.js rewrites during `next build`, not at server startup).
+ARG INTERNAL_PROXY_URL=
+ENV INTERNAL_PROXY_URL=${INTERNAL_PROXY_URL}
+
 # Build the Next.js app
 RUN npm run build
 

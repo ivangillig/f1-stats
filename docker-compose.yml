@@ -37,6 +37,9 @@ services:
         # directly. Only set this to a PUBLIC https URL if you intentionally
         # expose the proxy. NEVER let it bake to localhost.
         - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-}
+        # INTERNAL_PROXY_URL must be a build arg (not just runtime env) because
+        # Next.js compiles rewrites into routes-manifest.json during next build.
+        - INTERNAL_PROXY_URL=http://f1-api-prod:4000
     container_name: f1-ui
     restart: unless-stopped
     ports:
