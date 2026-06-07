@@ -20,7 +20,7 @@ const PROXY_URL =
   process.env.NEXT_PUBLIC_PROXY_URL ||
   (typeof window !== "undefined"
     ? "/api/proxy"
-    : process.env.NEXT_PUBLIC_PROXY_URL || "http://localhost:4000");
+    : process.env.INTERNAL_PROXY_URL || "http://localhost:4000");
 
 interface F1DataState {
   drivers: Driver[];
