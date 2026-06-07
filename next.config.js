@@ -17,7 +17,7 @@ const nextConfig = {
       {
         source: "/api/proxy/:path*",
         destination: `${
-          process.env.INTERNAL_PROXY_URL || "http://f1-api:4000"
+          process.env.INTERNAL_PROXY_URL || "http://f1-prod-api:4000"
         }/:path*`,
       },
     ];

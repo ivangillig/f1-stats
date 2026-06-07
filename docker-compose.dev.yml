@@ -7,7 +7,7 @@ services:
       - "${PROXY_PORT:-4001}:4000"
 
   dashboard:
-    container_name: f1-ui-dev
+    container_name: f1-dev-ui
     ports:
       - "${DASHBOARD_PORT:-3001}:3000"
     environment:

@@ -6,7 +6,7 @@ services:
     build:
       context: ./proxy
       dockerfile: Dockerfile
-    container_name: f1-api-prod
+    container_name: f1-prod-api
     restart: unless-stopped
     ports:
       - "${PROXY_PORT:-4000}:4000"
@@ -39,13 +39,13 @@ services:
         - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-}
         # INTERNAL_PROXY_URL must be a build arg (not just runtime env) because
         # Next.js compiles rewrites into routes-manifest.json during next build.
-        - INTERNAL_PROXY_URL=http://f1-api-prod:4000
-    container_name: f1-ui
+        - INTERNAL_PROXY_URL=http://f1-prod-api:4000
+    container_name: f1-prod-ui
     restart: unless-stopped
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     environment:
-      - INTERNAL_PROXY_URL=http://f1-api-prod:4000
+      - INTERNAL_PROXY_URL=http://f1-prod-api:4000
     depends_on:
       proxy:
         condition: service_healthy
