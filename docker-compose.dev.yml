@@ -1,3 +1,4 @@
+name: f1racehub-dev
 version: "3.8"
 
 services:
