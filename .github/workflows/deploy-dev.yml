@@ -20,11 +20,8 @@ jobs:
         run: |
           echo "NODE_ENV=development" > .env
           echo "PROXY_MODE=${{ vars.PROXY_MODE }}" >> .env
-          echo "F1_SSE_HOST=${{ vars.F1_SSE_HOST }}" >> .env
-          echo "F1_SSE_PATH=${{ vars.F1_SSE_PATH }}" >> .env
           echo "OPENF1_USERNAME=${{ secrets.OPENF1_USERNAME }}" >> .env
           echo "OPENF1_PASSWORD=${{ secrets.OPENF1_PASSWORD }}" >> .env
-          echo "F1_SSE_SECURE=${{ vars.F1_SSE_SECURE }}" >> .env
           echo "REPLAY_SESSION_KEY=${{ vars.REPLAY_SESSION_KEY }}" >> .env
           echo "F1_LIVETIMING_TOKEN=${{ secrets.F1_LIVETIMING_TOKEN }}" >> .env
           echo "NEXT_PUBLIC_SITE_URL=https://dev.f1racehub.com" >> .env

@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   proxy:
-    container_name: f1-api-dev
+    container_name: f1-dev-api
     ports:
       - "${PROXY_PORT:-4001}:4000"
 
@@ -11,10 +11,10 @@ services:
     ports:
       - "${DASHBOARD_PORT:-3001}:3000"
     environment:
-      - INTERNAL_PROXY_URL=http://f1-api-dev:4000
+      - INTERNAL_PROXY_URL=http://f1-dev-api:4000
     build:
       args:
         - NEXT_PUBLIC_PROXY_URL=${NEXT_PUBLIC_PROXY_URL:-}
         - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-https://dev.f1racehub.com}
         # Overrides the prod value so dev dashboard rewrites to the dev proxy container
-        - INTERNAL_PROXY_URL=http://f1-api-dev:4000
+        - INTERNAL_PROXY_URL=http://f1-dev-api:4000
