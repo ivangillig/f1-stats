@@ -6,7 +6,7 @@ services:
     build:
       context: ./proxy
       dockerfile: Dockerfile
-    container_name: f1-api
+    container_name: f1-api-prod
     restart: unless-stopped
     ports:
       - "${PROXY_PORT:-4000}:4000"
@@ -42,7 +42,7 @@ services:
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     environment:
-      - INTERNAL_PROXY_URL=http://f1-proxy:4000    
+      - INTERNAL_PROXY_URL=http://f1-api-prod:4000
     depends_on:
       proxy:
         condition: service_healthy
