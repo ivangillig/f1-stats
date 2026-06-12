@@ -10,6 +10,7 @@
  */
 
 import mqtt from "mqtt";
+import { isSignalRRunning } from "./signalr-client.js";
 import {
   ensureTimingEntry,
   updateBestLap,
@@ -540,6 +541,15 @@ function handlePit(data) {
   const entry = ensureTimingEntry(currentStateRef, num);
 
   entry.pit_count = (entry.pit_count || 0) + 1;
+
+  // SignalR owns in_pit while connected (real-time InPit/PitOut deltas) —
+  // OpenF1 pit windows must never override it. As fallback they're only
+  // trustworthy in race-like sessions: in Practice/Quali, lane_duration
+  // windows routinely cover on-track laps (drivers got flagged in-pit while
+  // setting times).
+  if (isSignalRRunning()) return;
+  const sessionType = currentStateRef.session?.session_type;
+  if (sessionType !== "Race" && sessionType !== "Sprint") return;
 
   const { in_pit, remaining_ms } = getPitWindowStatus(
     data.date,

@@ -251,6 +251,30 @@ function isDriverInPit(driverNum, currentTime) {
   return stops.some((s) => now >= s.entryMs && now <= s.exitMs);
 }
 
+// ── Practice/Qualifying in-pit detection ─────────────────────────────────────
+// /v1/pit windows are only reliable for races (short stops). In practice the
+// data is inconsistent: lane_duration is often null and timed laps fall inside
+// supposed pit windows. Instead: a driver is on track iff the replay clock is
+// inside one of their laps (laps without a duration — e.g. in-laps that end in
+// the pits — count as in-progress for at most MAX_LAP_MS).
+const LAP_GRACE_MS = 20_000;
+const MAX_LAP_MS = 3 * 60_000;
+
+// { [driverNum]: { lastStartMs, lastEndMs } } — fed by processData's laps loop
+const lapActivity = {};
+
+function isDriverOnTrackByLaps(driverNum, nowMs) {
+  const act = lapActivity[driverNum];
+  if (!act) return false; // no laps yet — still in the garage
+  // Inside (or just past) a completed lap
+  if (act.lastEndMs && nowMs <= act.lastEndMs + LAP_GRACE_MS) return true;
+  // Lap in progress without a recorded duration
+  if (act.lastStartMs > act.lastEndMs && nowMs >= act.lastStartMs) {
+    return nowMs - act.lastStartMs <= MAX_LAP_MS;
+  }
+  return false;
+}
+
 async function fetchStintData() {
   console.log(`[Replay] Loading stint/tire data...`);
   const stints = dbMode
@@ -442,6 +466,20 @@ function processData(data, state) {
   laps.forEach((lap) => {
     const num = String(lap.driver_number);
     const entry = ensureTimingEntry(state, num);
+
+    // Track lap activity windows for practice/quali in-pit detection
+    if (lap.date_start) {
+      const startMs = Date.parse(lap.date_start);
+      if (Number.isFinite(startMs)) {
+        const act = (lapActivity[num] ??= { lastStartMs: 0, lastEndMs: 0 });
+        if (startMs > act.lastStartMs) act.lastStartMs = startMs;
+        if (lap.lap_duration) {
+          const endMs = startMs + lap.lap_duration * 1000;
+          if (endMs > act.lastEndMs) act.lastEndMs = endMs;
+        }
+      }
+    }
+
     if (lap.lap_number > entry.lap_number) {
       entry.lap_number = lap.lap_number;
       if (lap.lap_number > state.lap_count.current) {
@@ -743,9 +781,15 @@ async function pollAndBroadcast() {
   // Process and update state
   processData(data, currentStateRef);
 
-  // Update InPit per driver using /v1/pit time windows
+  // Update InPit per driver. Races: /v1/pit time windows (reliable, short
+  // stops). Practice/Quali: lap-activity heuristic — pit data is inconsistent
+  // there (see isDriverOnTrackByLaps).
+  const sessionType = currentStateRef.session?.session_type;
+  const raceLike = sessionType === "Race" || sessionType === "Sprint";
   Object.keys(currentStateRef.timing).forEach((num) => {
-    currentStateRef.timing[num].in_pit = isDriverInPit(num, currentRaceTime);
+    currentStateRef.timing[num].in_pit = raceLike
+      ? isDriverInPit(num, currentRaceTime)
+      : !isDriverOnTrackByLaps(num, currentRaceTime.getTime());
   });
 
   // Update active tire compound per driver based on current lap
@@ -796,6 +840,7 @@ export function stopReplay() {
   lastPollTime = null;
   Object.keys(pitData).forEach((k) => delete pitData[k]);
   Object.keys(stintsData).forEach((k) => delete stintsData[k]);
+  Object.keys(lapActivity).forEach((k) => delete lapActivity[k]);
   weatherRecords = [];
   console.log("[Replay] Replay stopped");
 }

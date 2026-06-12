@@ -395,6 +395,12 @@ async function pollData() {
           entry.pit_count = (entry.pit_count || 0) + 1;
         }
 
+        // Pit windows only mark in_pit in race-like sessions: in
+        // Practice/Quali, lane_duration windows routinely cover on-track
+        // laps and would flag drivers in-pit while they're setting times.
+        const sessionType = currentStateRef.session?.session_type;
+        if (sessionType !== "Race" && sessionType !== "Sprint") continue;
+
         const { in_pit, remaining_ms } = getPitWindowStatus(
           p.date,
           p.lane_duration,

@@ -153,6 +153,8 @@ Base URL: `https://api.openf1.org/v1`. All endpoints support generic filtering o
 
 **Pit detection pattern**: A driver is in the pit lane between `/v1/pit`'s `date` and `date + lane_duration * 1000ms`. The `is_pit_out_lap` field in `/v1/laps` only marks the **outlap** (lap after exit) — it does NOT indicate the driver is currently in the pit lane.
 
+**⚠️ Pit windows are only reliable in Race/Sprint.** In Practice/Quali, `lane_duration` is often null and the windows routinely cover on-track timed laps (verified against Barcelona FP1 2026: 211 timed laps fell inside supposed pit windows). Rules enforced in code: SignalR owns `in_pit` whenever it's connected (`handlePit` returns early); OpenF1 pit windows only apply as fallback in race-like sessions (mqtt-client, live-polling); replay uses a lap-activity heuristic for Practice/Quali (`isDriverOnTrackByLaps` in replay.js).
+
 **MQTT topics** mirror REST paths: `v1/laps`, `v1/pit`, `v1/position`, etc.
 
 ## Principio rector: tiempo real ante todo
