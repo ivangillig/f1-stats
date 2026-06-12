@@ -313,9 +313,14 @@ export default function TrackMap({
 
       // Trust SignalR exclusively — no heuristics
       if (driver.inPit || driver.retired) {
-        const trackIdx = Math.floor((pitIndex / pitDriverCount) * pitLaneEndIndex);
+        const trackIdx = Math.floor(
+          (pitIndex / pitDriverCount) * pitLaneEndIndex,
+        );
         pitIndex++;
-        targets.set(driver.driverNumber, { targetIndex: trackIdx, inPit: true });
+        targets.set(driver.driverNumber, {
+          targetIndex: trackIdx,
+          inPit: true,
+        });
         return;
       }
 
@@ -439,41 +444,50 @@ export default function TrackMap({
         animatedPositionsRef.current.set(driverNumber, current);
       }
 
-      // Handle pit status change — always mark as changed so the SVG updates immediately
-      if (current.inPit !== target.inPit) {
-        current.inPit = target.inPit;
-        hasChanges = true;
-      }
+      // 1. If the driver is in pit, snap them instantly to their pit box coordinate (no transitions, sliding or floating)
+      if (target.inPit) {
+        if (!current.inPit || current.currentIndex !== target.targetIndex) {
+          current.inPit = true;
+          current.currentIndex = target.targetIndex;
+          hasChanges = true;
+        }
+      } else {
+        // 2. If transitioning from pit to track, snap to starting track position
+        if (current.inPit) {
+          current.inPit = false;
+          current.currentIndex = target.targetIndex;
+          hasChanges = true;
+        }
 
-      // On-track cars: animate currentIndex toward targetIndex
-      let diff = target.targetIndex - current.currentIndex;
-
-      // Handle wrap-around (crossing start/finish)
-      while (diff < 0) diff += totalPoints;
-      while (diff > totalPoints) diff -= totalPoints;
-
-      // If target jumped back significantly, it means new lap data - catch up faster
-      if (diff > totalPoints * 0.7) {
-        diff = totalPoints - diff;
+        // 3. For on-track cars: animate using circular shortest-path interpolation
+        // This solves GPS fluctuations, finish line wrap-arounds, and backward steps mathematically
+        let diff = target.targetIndex - current.currentIndex;
+        diff = (diff + totalPoints / 2) % totalPoints;
         if (diff < 0) diff += totalPoints;
-      }
+        diff -= totalPoints / 2;
 
-      let targetVelocity = baseSpeed;
-      if (diff > totalPoints * 0.1) {
-        targetVelocity = baseSpeed * 3;
-      } else if (diff > totalPoints * 0.03) {
-        targetVelocity = baseSpeed * 1.5;
-      } else if (diff < 2) {
-        targetVelocity = baseSpeed * 0.8;
-      }
+        const absDiff = Math.abs(diff);
 
-      current.velocity +=
-        (targetVelocity - current.velocity) * Math.min(deltaTime * 3, 1);
+        let targetVelocity = baseSpeed;
+        if (absDiff > totalPoints * 0.1) {
+          targetVelocity = baseSpeed * 4; // Catch up fast for large jumps
+        } else if (absDiff > totalPoints * 0.03) {
+          targetVelocity = baseSpeed * 2;
+        } else if (absDiff < 2) {
+          targetVelocity = baseSpeed * 0.8;
+        }
 
-      if (diff > 0.1) {
-        const step = current.velocity * deltaTime;
-        current.currentIndex = (current.currentIndex + step) % totalPoints;
-        hasChanges = true;
+        current.velocity +=
+          (targetVelocity - current.velocity) * Math.min(deltaTime * 3, 1);
+
+        if (absDiff > 0.1) {
+          const stepSign = diff > 0 ? 1 : -1;
+          const step =
+            stepSign * Math.min(current.velocity * deltaTime, absDiff);
+          current.currentIndex =
+            (current.currentIndex + step + totalPoints) % totalPoints;
+          hasChanges = true;
+        }
       }
 
       const interpolated = getInterpolatedPoint(current.currentIndex);
