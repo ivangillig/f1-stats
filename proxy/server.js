@@ -27,7 +27,10 @@ const PROXY_MODE = process.env.PROXY_MODE || "auto";
 
 // Store current state (OpenF1-native format)
 let currentState = {};
-// Map<clientId, res> — deduplicates reconnects and StrictMode double-mounts
+// Map<clientId, Set<res>> — clientId identifies a browser (localStorage), so
+// multiple tabs share one id. Each tab gets its own connection in the Set;
+// unique viewers = number of clientIds. Never kill an existing connection on
+// reconnect: two tabs with the same id would terminate each other in a loop.
 let sseClients = new Map();
 // Map<clientId, lastSeenMs> — landing page viewers tracked via /health ping
 const LANDING_TTL_MS = 35000; // 15s poll + buffer
@@ -61,12 +64,15 @@ function deepMerge(target, source) {
 // Broadcast to all SSE clients
 function broadcastSSE(event, data) {
   const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  sseClients.forEach((client, clientId) => {
-    try {
-      client.write(message);
-    } catch (err) {
-      sseClients.delete(clientId);
+  sseClients.forEach((connections, clientId) => {
+    for (const client of connections) {
+      try {
+        client.write(message);
+      } catch (err) {
+        connections.delete(client);
+      }
     }
+    if (connections.size === 0) sseClients.delete(clientId);
   });
 }
 
@@ -258,15 +264,6 @@ const server = http.createServer(async (req, res) => {
       reqUrl.searchParams.get("clientId") ||
       `anon-${Date.now()}-${Math.random()}`;
 
-    // Close any existing connection for this clientId
-    const existing = sseClients.get(clientId);
-    if (existing) {
-      try {
-        existing.end();
-      } catch (_) {}
-      sseClients.delete(clientId);
-    }
-
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -276,20 +273,32 @@ const server = http.createServer(async (req, res) => {
 
     res.write(`event: initial\ndata: ${JSON.stringify(currentState)}\n\n`);
 
-    sseClients.set(clientId, res);
+    let connections = sseClients.get(clientId);
+    if (!connections) {
+      connections = new Set();
+      sseClients.set(clientId, connections);
+    }
+    connections.add(res);
     console.log(
-      `[proxy-sse] Client connected (${clientId}). Unique viewers: ${sseClients.size}`,
+      `[proxy-sse] Client connected (${clientId}, ${connections.size} conn). Unique viewers: ${sseClients.size}`,
     );
 
     const keepAlive = setInterval(() => {
-      res.write(": keepalive\n\n");
+      try {
+        res.write(": keepalive\n\n");
+      } catch (_) {
+        clearInterval(keepAlive);
+      }
     }, 15000);
 
     req.on("close", () => {
       clearInterval(keepAlive);
-      if (sseClients.get(clientId) === res) sseClients.delete(clientId);
+      connections.delete(res);
+      if (connections.size === 0 && sseClients.get(clientId) === connections) {
+        sseClients.delete(clientId);
+      }
       console.log(
-        `[proxy-sse] Client disconnected (${clientId}). Unique viewers: ${sseClients.size}`,
+        `[proxy-sse] Client disconnected (${clientId}, ${connections.size} conn). Unique viewers: ${sseClients.size}`,
       );
     });
 
