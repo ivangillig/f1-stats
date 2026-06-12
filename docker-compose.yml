@@ -19,6 +19,9 @@ services:
       - REPLAY_SESSION_KEY=${REPLAY_SESSION_KEY}
       - NODE_ENV=${NODE_ENV:-production}
       - F1_LIVETIMING_TOKEN=${F1_LIVETIMING_TOKEN}
+      - DB_PATH=/app/data/f1-sessions.db
+    volumes:
+      - proxy-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/health"]
       interval: 30s
@@ -56,3 +59,7 @@ services:
 networks:
   apps:
     external: true
+
+volumes:
+  # SQLite session archive — survives container rebuilds
+  proxy-data:

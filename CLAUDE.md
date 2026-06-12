@@ -12,7 +12,10 @@ Browser (Next.js 14)
                  ├─ f1dash-client.js  (SSE from f1-dash.com)
                  ├─ mqtt-client.js    (OpenF1 MQTT — paid tier, primary live source)
                  ├─ live-polling.js   (OpenF1 REST polling — free, fallback)
-                 └─ replay.js         (OpenF1 historical data replay)
+                 └─ replay.js         (session replay — SQLite archive first, REST fallback)
+                      ├─ session-store.js      (SQLite archive, better-sqlite3)
+                      ├─ session-downloader.js (archives finished sessions, retention=3)
+                      └─ openf1-rest.js        (shared auth-aware fetch)
 ```
 
 `openf1-client.js` was deleted — it was a broken placeholder. `mqtt-client.js` is the correct OpenF1 paid client.
@@ -74,12 +77,16 @@ Set `PROXY_MODE` in `proxy/.env`:
 - Historical data (laps, intervals, stints, race control, team radio) loaded at startup via REST before MQTT connects
 - Rate limits: free = 30 req/min, paid = 60 req/min
 
-## Replay
+## Replay & SQLite session archive
 
-- Session: Azerbaijan GP 2024, session_key 9598, Baku circuit (key 144)
-- With paid credentials: 4s poll interval, 200ms inter-request delay (60 req/min budget)
-- Without credentials: 8s poll interval, 1500ms inter-request delay (30 req/min budget)
-- `replay.js` imports `ensureValidToken` and `hasMQTTCredentials` from `mqtt-client.js` to auto-select rate
+- Session priority: latest finished session from OpenF1 (any type) > `REPLAY_SESSION_KEY` env > newest archived in SQLite > Baku 2024 (9598).
+- **Preferred source: SQLite archive** (`proxy/data/f1-sessions.db`, override with `DB_PATH`; Docker volume `proxy-data:/app/data`). 1s update cadence, no rate limits, works offline.
+- `server.js` runs `maintainSessionArchive()` every 10 min (first check at +5 min) in every mode: downloads the latest finished session (>30 min past `date_end`, any type) and restarts replay onto it. Retention: 3 sessions, pruned only after a successful download.
+- Per-topic completeness in `session_topics` (row_count/attempts, max 4 attempts): the verify pass re-fetches topics that are empty or whose time coverage is <60% of the session span (OpenF1 often has partial `location` even historically — Monaco 2026 race only has fragments). `car_data` is not archived (heavy, replay doesn't use it).
+- `openf1-rest.js` holds the shared auth-aware `fetchJSON`; the downloader passes `errorValue=null` to distinguish "no data" (404 → `[]`) from "request failed" — failed windows abort the topic instead of archiving silent gaps. Interrupted downloads resume (topics with rows are skipped).
+- REST streaming fallback (only if the archive download fails): paid 6s cycle / 800ms delays, free 4s / 1800ms.
+- **Replay loops**: when the replay clock passes the last data point (+60s buffer), it broadcasts `reset` and restarts from the beginning. End is data-driven in DB mode (max ts across laps/location/position/intervals), `date_end` in REST mode. A generation counter (`replayGeneration`) kills stale poll chains across restarts.
+- Archived `drivers` get team info backfilled (OpenF1 returns null colours right after a session): pass 1 from the newest archived session, pass 2 from `/v1/drivers?driver_number=N` history (rookies). Drivers topic has `maxAttempts: 12` in the verify pass since colours can take hours to consolidate upstream.
 
 ## Frontend — `proxyMode` and Demo Banner
 

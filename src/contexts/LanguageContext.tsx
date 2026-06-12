@@ -41,7 +41,7 @@ const translations = {
 
     // DriverRow
     "driver.inPit": "En boxes",
-    "driver.pitOut": "Saliendo de boxes",
+    "driver.pitOut": "Vuelta de salida",
     "driver.retired": "Retirado",
     "driver.drsEnabled": "DRS disponible",
     "driver.drsDisabled": "DRS no disponible",

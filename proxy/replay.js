@@ -1,14 +1,22 @@
 /**
- * F1 Race Replay Module - Incremental Polling
+ * F1 Race Replay Module
  *
- * Replays real race data from OpenF1 API using incremental time-based queries.
- * Instead of loading all data upfront, we poll the API every few seconds
- * simulating how a live session would work.
+ * Replays real session data simulating how a live session would work.
+ * Preferred source: the local SQLite archive (session-store.js) — no rate
+ * limits, works offline. Falls back to incremental OpenF1 REST polling when
+ * the session isn't archived and can't be downloaded.
  *
- * Session priority: latest completed race from OpenF1 > REPLAY_SESSION_KEY env var > Baku 2024 (fallback).
+ * Session priority: latest finished session from OpenF1 > REPLAY_SESSION_KEY
+ * env var > newest archived session in SQLite > Baku 2024 (fallback).
  */
 
-import { ensureValidToken, hasMQTTCredentials } from "./mqtt-client.js";
+import { hasMQTTCredentials } from "./mqtt-client.js";
+import { API_BASE, fetchJSON as fetchJSONShared, sleep } from "./openf1-rest.js";
+import * as store from "./session-store.js";
+import {
+  downloadSessionByKey,
+  findLatestFinishedSession,
+} from "./session-downloader.js";
 import {
   ensureTimingEntry,
   updateBestLap,
@@ -35,13 +43,25 @@ const FREE_POLL_INTERVAL_MS = 4000;
 const PAID_REQUEST_DELAY_MS = 800;
 const FREE_REQUEST_DELAY_MS = 1800;
 
-// Set at startReplay() based on whether credentials are available
+// DB mode: 1s cadence — no rate limits when serving from SQLite
+const DB_POLL_INTERVAL_MS = 1000;
+
+// Set at startReplay() based on source (SQLite vs REST) and credentials
 let POLL_INTERVAL_MS = FREE_POLL_INTERVAL_MS;
 let REQUEST_DELAY_MS = FREE_REQUEST_DELAY_MS;
 let POLL_WINDOW_SECONDS = 8 * REPLAY_SPEED;
 
-// API base URL
-const API_BASE = "https://api.openf1.org/v1";
+// True when the current replay is served from the local SQLite archive
+let dbMode = false;
+
+// Epoch ms of the last data point — when the replay clock passes this (plus
+// a buffer), the replay restarts from the beginning (continuous loop).
+let replayEndMs = 0;
+const REPLAY_END_BUFFER_MS = 60_000;
+
+// Bumped on every startReplay so a stale poll chain from a previous run
+// (e.g. before a loop restart) stops scheduling itself.
+let replayGeneration = 0;
 
 // State
 let replayInterval = null;
@@ -60,75 +80,23 @@ const pitData = {};
 // Stint data loaded at startup: { "driverNum": [{ compound, lap_start, lap_end, tyre_age_at_start }] }
 const stintsData = {};
 
-// Fetch with error handling and 429 retry backoff
-async function fetchJSON(url, retries = 4) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const headers = {};
-      if (hasMQTTCredentials()) {
-        try {
-          const token = await ensureValidToken();
-          headers["Authorization"] = `Bearer ${token}`;
-        } catch {
-          // Fall through to unauthenticated request
-        }
-      }
-      const response = await fetch(url, { headers });
-      if (response.status === 429) {
-        const delay = 2000 * (attempt + 1);
-        console.warn(`[Replay] Rate limited, retrying in ${delay / 1000}s...`);
-        await new Promise((r) => setTimeout(r, delay));
-        continue;
-      }
-      if (response.status === 404) {
-        return []; // No data in this time range — normal for narrow windows
-      }
-      if (!response.ok) {
-        console.error(`[Replay] API error: ${response.status} for ${url}`);
-        return [];
-      }
-      return await response.json();
-    } catch (error) {
-      const isLastAttempt = attempt >= retries;
-      if (isLastAttempt) {
-        console.error(
-          `[Replay] Fetch failed after ${retries + 1} attempts: ${error.message} for ${url}`,
-        );
-        return [];
-      }
-      const delay = 2000 * (attempt + 1);
-      console.warn(
-        `[Replay] Transient error (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay / 1000}s: ${error.message}`,
-      );
-      await new Promise((r) => setTimeout(r, delay));
-    }
-  }
-  return [];
+// Fetch with [Replay]-tagged logging (shared auth-aware implementation)
+function fetchJSON(url, retries = 4) {
+  return fetchJSONShared(url, retries, "[Replay]");
 }
 
 async function resolveSessionKey() {
-  // 1. Try latest completed Race or Sprint from OpenF1
+  // 1. Latest finished session (any type) from OpenF1
   try {
-    const year = new Date().getFullYear();
-    const sessions = await fetchJSON(
-      `${API_BASE}/sessions?date_start>=${year - 1}-01-01`,
-    );
-    const cutoff = new Date(Date.now() - 30 * 60 * 1000);
-    const completed = sessions.filter(
-      (s) =>
-        s.date_end &&
-        new Date(s.date_end) < cutoff &&
-        (s.session_type === "Race" || s.session_type === "Sprint"),
-    );
-    if (completed.length > 0) {
-      const latest = completed[completed.length - 1];
+    const latest = await findLatestFinishedSession();
+    if (latest) {
       SESSION_KEY = latest.session_key;
       console.log(
-        `[Replay] Latest ${latest.session_type}: ${latest.location} (session_key ${SESSION_KEY})`,
+        `[Replay] Latest finished session: ${latest.session_name} ${latest.location} (session_key ${SESSION_KEY})`,
       );
       return;
     }
-    console.warn(`[Replay] No completed Race/Sprint sessions found from OpenF1`);
+    console.warn(`[Replay] No finished sessions found from OpenF1`);
   } catch (err) {
     console.warn(`[Replay] Could not resolve latest session: ${err.message}`);
   }
@@ -138,29 +106,63 @@ async function resolveSessionKey() {
     console.log(`[Replay] Using session from env var: ${SESSION_KEY}`);
     return;
   }
-  // 3. Hardcoded fallback: Baku 2024
+  // 3. Newest session already archived in SQLite (works fully offline)
+  const stored = store.newestCompleteSession();
+  if (stored) {
+    SESSION_KEY = stored.session_key;
+    console.log(
+      `[Replay] Using newest archived session: ${stored.payload.session_name} ${stored.payload.location} (${SESSION_KEY})`,
+    );
+    return;
+  }
+  // 4. Hardcoded fallback: Baku 2024
   SESSION_KEY = 9598;
   console.log(`[Replay] Falling back to default session ${SESSION_KEY}`);
 }
 
 async function fetchSessionInfo() {
-  console.log(`[Replay] Fetching session ${SESSION_KEY} from OpenF1...`);
-  const sessions = await fetchJSON(
-    `${API_BASE}/sessions?session_key=${SESSION_KEY}`,
-  );
-  if (!sessions || sessions.length === 0)
-    throw new Error(`Session ${SESSION_KEY} not found in OpenF1`);
-  const session = sessions[0];
+  let session;
+  let drivers;
+  if (dbMode) {
+    const meta = store.getSessionMeta(SESSION_KEY);
+    if (!meta) throw new Error(`Session ${SESSION_KEY} not in local archive`);
+    session = meta.payload;
+    drivers = store.getTopicRows(SESSION_KEY, "drivers");
+  } else {
+    console.log(`[Replay] Fetching session ${SESSION_KEY} from OpenF1...`);
+    const sessions = await fetchJSON(
+      `${API_BASE}/sessions?session_key=${SESSION_KEY}`,
+    );
+    if (!sessions || sessions.length === 0)
+      throw new Error(`Session ${SESSION_KEY} not found in OpenF1`);
+    session = sessions[0];
+    await sleep(REQUEST_DELAY_MS);
+    drivers = await fetchJSON(`${API_BASE}/drivers?session_key=${SESSION_KEY}`);
+  }
   CIRCUIT_KEY = session.circuit_key;
   console.log(
-    `[Replay] Session: ${session.location} — ${session.session_name} (circuit_key: ${CIRCUIT_KEY})`,
-  );
-
-  await new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
-  const drivers = await fetchJSON(
-    `${API_BASE}/drivers?session_key=${SESSION_KEY}`,
+    `[Replay] Session: ${session.location} — ${session.session_name} (circuit_key: ${CIRCUIT_KEY}, source: ${dbMode ? "sqlite" : "rest"})`,
   );
   console.log(`[Replay] Drivers: ${drivers.length}`);
+
+  // Determine when the replay data runs out, to loop back to the start.
+  // DB mode: last actual data point across the main topics (more accurate
+  // than date_end, which is the scheduled end). REST mode: date_end.
+  if (dbMode) {
+    let maxTs = 0;
+    for (const topic of ["laps", "location", "position", "intervals"]) {
+      const bounds = store.getTopicTimeBounds(SESSION_KEY, topic);
+      if (bounds?.max && bounds.max > maxTs) maxTs = bounds.max;
+    }
+    replayEndMs = maxTs || (session.date_end ? Date.parse(session.date_end) : 0);
+  } else {
+    replayEndMs = session.date_end ? Date.parse(session.date_end) : 0;
+  }
+  if (replayEndMs) {
+    console.log(
+      `[Replay] Data ends at ${new Date(replayEndMs).toISOString()} — will loop back to start`,
+    );
+  }
 
   return {
     session: {
@@ -182,9 +184,9 @@ async function fetchSessionInfo() {
 }
 
 async function fetchStartingGrid() {
-  const grid = await fetchJSON(
-    `${API_BASE}/starting_grid?session_key=${SESSION_KEY}`,
-  );
+  const grid = dbMode
+    ? store.getTopicRows(SESSION_KEY, "starting_grid")
+    : await fetchJSON(`${API_BASE}/starting_grid?session_key=${SESSION_KEY}`);
   const result = {};
   grid.forEach((g) => {
     if (g.driver_number && g.position)
@@ -197,9 +199,13 @@ async function fetchStartingGrid() {
 async function findRaceStart(sessionDateStart) {
   // Use the earliest lap 1 date_start across all drivers — that's when lights went out.
   // Falls back to session date_start if no lap data yet.
-  const laps = await fetchJSON(
-    `${API_BASE}/laps?session_key=${SESSION_KEY}&lap_number=1`,
-  );
+  const laps = dbMode
+    ? store
+        .getTopicRows(SESSION_KEY, "laps")
+        .filter((l) => l.lap_number === 1)
+    : await fetchJSON(
+        `${API_BASE}/laps?session_key=${SESSION_KEY}&lap_number=1`,
+      );
   if (laps && laps.length > 0) {
     const dates = laps
       .map((l) => l.date_start && new Date(l.date_start).getTime())
@@ -220,7 +226,9 @@ async function findRaceStart(sessionDateStart) {
 
 async function fetchPitData() {
   console.log(`[Replay] Loading pit stop data...`);
-  const pits = await fetchJSON(`${API_BASE}/pit?session_key=${SESSION_KEY}`);
+  const pits = dbMode
+    ? store.getTopicRows(SESSION_KEY, "pit")
+    : await fetchJSON(`${API_BASE}/pit?session_key=${SESSION_KEY}`);
   // Clear before populating (in case of restart)
   Object.keys(pitData).forEach((k) => delete pitData[k]);
   pits.forEach((p) => {
@@ -245,9 +253,9 @@ function isDriverInPit(driverNum, currentTime) {
 
 async function fetchStintData() {
   console.log(`[Replay] Loading stint/tire data...`);
-  const stints = await fetchJSON(
-    `${API_BASE}/stints?session_key=${SESSION_KEY}`,
-  );
+  const stints = dbMode
+    ? store.getTopicRows(SESSION_KEY, "stints")
+    : await fetchJSON(`${API_BASE}/stints?session_key=${SESSION_KEY}`);
   Object.keys(stintsData).forEach((k) => delete stintsData[k]);
   stints.forEach((s) => {
     const num = String(s.driver_number);
@@ -270,9 +278,9 @@ let weatherRecords = [];
 
 async function fetchAllWeather() {
   console.log(`[Replay] Loading weather data...`);
-  const records = await fetchJSON(
-    `${API_BASE}/weather?session_key=${SESSION_KEY}`,
-  );
+  const records = dbMode
+    ? store.getTopicRows(SESSION_KEY, "weather")
+    : await fetchJSON(`${API_BASE}/weather?session_key=${SESSION_KEY}`);
   weatherRecords = (records || []).sort(
     (a, b) => new Date(a.date) - new Date(b.date),
   );
@@ -321,11 +329,23 @@ function updateActiveStints(state) {
   });
 }
 
-// Fetch incremental data for a time window — sequential to respect rate limits.
+// Fetch incremental data for a time window.
+// SQLite when archived (no rate limits); sequential REST otherwise.
 async function fetchTimeWindow(sessionKey, startTime, endTime) {
+  if (dbMode) {
+    return {
+      positions: store.getTopicWindow(sessionKey, "position", startTime, endTime),
+      intervals: store.getTopicWindow(sessionKey, "intervals", startTime, endTime),
+      laps: store.getTopicWindow(sessionKey, "laps", startTime, endTime),
+      locations: store.getTopicWindow(sessionKey, "location", startTime, endTime),
+      raceControl: store.getTopicWindow(sessionKey, "race_control", startTime, endTime),
+      teamRadio: store.getTopicWindow(sessionKey, "team_radio", startTime, endTime),
+    };
+  }
+
   const s = startTime.toISOString();
   const e = endTime.toISOString();
-  const delay = () => new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
+  const delay = () => sleep(REQUEST_DELAY_MS);
 
   const positions = await fetchJSON(
     `${API_BASE}/position?session_key=${sessionKey}&date>=${s}&date<${e}`,
@@ -537,28 +557,64 @@ export async function startReplay(broadcast, stateRef) {
   replayStarted = true;
   broadcastFn = broadcast;
   currentStateRef = stateRef;
-
-  // Use paid rate limits if credentials are available
-  if (hasMQTTCredentials()) {
-    POLL_INTERVAL_MS = PAID_POLL_INTERVAL_MS;
-    REQUEST_DELAY_MS = PAID_REQUEST_DELAY_MS;
-    POLL_WINDOW_SECONDS = (PAID_POLL_INTERVAL_MS / 1000) * REPLAY_SPEED;
-    console.log(
-      `[Replay] Paid tier detected — using ${POLL_INTERVAL_MS}ms interval`,
-    );
-  } else {
-    POLL_INTERVAL_MS = FREE_POLL_INTERVAL_MS;
-    REQUEST_DELAY_MS = FREE_REQUEST_DELAY_MS;
-    POLL_WINDOW_SECONDS = (FREE_POLL_INTERVAL_MS / 1000) * REPLAY_SPEED;
-    console.log(`[Replay] Free tier — using ${POLL_INTERVAL_MS}ms interval`);
-  }
-
-  const startupDelay = () =>
-    new Promise((r) => setTimeout(r, REQUEST_DELAY_MS));
+  const gen = ++replayGeneration;
 
   try {
-    // Resolve which session to replay (env override or latest race from OpenF1)
+    // Resolve which session to replay (latest from OpenF1 / env / archive)
     await resolveSessionKey();
+
+    // Pick the data source: prefer the local SQLite archive.
+    dbMode = store.isComplete(SESSION_KEY);
+    if (!dbMode) {
+      const stored = store.newestCompleteSession();
+      if (stored) {
+        // Replay the newest archived session meanwhile — the archive
+        // maintenance loop in server.js downloads the latest one in the
+        // background and restarts replay onto it when ready.
+        console.log(
+          `[Replay] Session ${SESSION_KEY} not archived yet — replaying archived ${stored.payload.session_name} ${stored.payload.location} (${stored.session_key}) meanwhile`,
+        );
+        SESSION_KEY = stored.session_key;
+        dbMode = true;
+      } else {
+        // Nothing archived (first boot): download now, then serve from SQLite.
+        console.log(
+          `[Replay] No archived sessions — downloading session ${SESSION_KEY} to SQLite...`,
+        );
+        dbMode = await downloadSessionByKey(SESSION_KEY);
+        if (!dbMode) {
+          console.warn(
+            `[Replay] Download failed — falling back to REST streaming`,
+          );
+        }
+      }
+    }
+    // The watchdog may have switched to a live source during the download
+    if (!replayStarted) return false;
+
+    if (dbMode) {
+      POLL_INTERVAL_MS = DB_POLL_INTERVAL_MS;
+      REQUEST_DELAY_MS = 0;
+      POLL_WINDOW_SECONDS = (DB_POLL_INTERVAL_MS / 1000) * REPLAY_SPEED;
+      console.log(
+        `[Replay] Serving from SQLite archive — ${POLL_INTERVAL_MS}ms update cadence`,
+      );
+    } else if (hasMQTTCredentials()) {
+      POLL_INTERVAL_MS = PAID_POLL_INTERVAL_MS;
+      REQUEST_DELAY_MS = PAID_REQUEST_DELAY_MS;
+      POLL_WINDOW_SECONDS = (PAID_POLL_INTERVAL_MS / 1000) * REPLAY_SPEED;
+      console.log(
+        `[Replay] Paid tier detected — using ${POLL_INTERVAL_MS}ms interval`,
+      );
+    } else {
+      POLL_INTERVAL_MS = FREE_POLL_INTERVAL_MS;
+      REQUEST_DELAY_MS = FREE_REQUEST_DELAY_MS;
+      POLL_WINDOW_SECONDS = (FREE_POLL_INTERVAL_MS / 1000) * REPLAY_SPEED;
+      console.log(`[Replay] Free tier — using ${POLL_INTERVAL_MS}ms interval`);
+    }
+
+    const startupDelay = () =>
+      dbMode ? Promise.resolve() : sleep(REQUEST_DELAY_MS);
     await startupDelay();
 
     // Sequential startup fetches with delays to stay within rate limits
@@ -602,16 +658,18 @@ export async function startReplay(broadcast, stateRef) {
     // Use recursive setTimeout so each cycle only starts after the previous completes,
     // preventing overlapping requests that blow the rate limit.
     const schedulePoll = async () => {
-      if (!replayStarted) return;
+      if (!replayStarted || gen !== replayGeneration) return;
       await pollAndBroadcast();
-      if (replayStarted) {
+      if (replayStarted && gen === replayGeneration) {
         replayInterval = setTimeout(schedulePoll, POLL_INTERVAL_MS);
       }
     };
 
     // Do first poll immediately, then schedule subsequent ones
     await pollAndBroadcast();
-    replayInterval = setTimeout(schedulePoll, POLL_INTERVAL_MS);
+    if (replayStarted && gen === replayGeneration) {
+      replayInterval = setTimeout(schedulePoll, POLL_INTERVAL_MS);
+    }
 
     console.log("[Replay] Replay started!");
     return true;
@@ -630,6 +688,23 @@ async function pollAndBroadcast() {
   const realElapsedMs = Date.now() - replayStartRealTime;
   const raceElapsedMs = realElapsedMs * REPLAY_SPEED;
   const currentRaceTime = new Date(raceStartTime.getTime() + raceElapsedMs);
+
+  // Session data exhausted — loop: restart the replay from the beginning
+  if (
+    replayEndMs &&
+    currentRaceTime.getTime() > replayEndMs + REPLAY_END_BUFFER_MS
+  ) {
+    console.log(
+      "[Replay] Reached end of session data — restarting replay from the beginning",
+    );
+    const broadcast = broadcastFn;
+    const stateRef = currentStateRef;
+    stopReplay();
+    for (const key of Object.keys(stateRef)) delete stateRef[key];
+    broadcast("reset", {});
+    await startReplay(broadcast, stateRef);
+    return;
+  }
 
   // Time window to fetch (from last poll to current)
   const windowStart = lastPollTime;
@@ -712,6 +787,8 @@ export function stopReplay() {
     replayInterval = null;
   }
   replayStarted = false;
+  dbMode = false;
+  replayEndMs = 0;
   sessionData = null;
   driversData = [];
   raceStartTime = null;
@@ -726,4 +803,9 @@ export function stopReplay() {
 // Check if replay is running
 export function isReplayRunning() {
   return replayStarted;
+}
+
+// True when the running replay serves from the local SQLite archive
+export function isReplayUsingDB() {
+  return replayStarted && dbMode;
 }

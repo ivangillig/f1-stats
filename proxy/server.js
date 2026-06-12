@@ -1,6 +1,16 @@
 import "dotenv/config";
 import http from "http";
-import { startReplay, stopReplay, isReplayRunning } from "./replay.js";
+import {
+  startReplay,
+  stopReplay,
+  isReplayRunning,
+  isReplayUsingDB,
+} from "./replay.js";
+import {
+  ensureLatestSessionArchived,
+  isArchiveDownloading,
+} from "./session-downloader.js";
+import { listSessions } from "./session-store.js";
 import {
   startMQTT,
   stopMQTT,
@@ -175,6 +185,44 @@ async function tryUpgradeToLive() {
   }
 }
 
+// ── Session archive maintenance ──────────────────────────────────────────────
+// Keeps the SQLite archive holding the latest finished sessions. Runs in every
+// mode: after a live session ends (or while in replay/standby), the latest
+// session gets downloaded once and replay switches to it. Also backfills
+// topics that were empty on first download (OpenF1 consolidates data late).
+
+const ARCHIVE_CHECK_INTERVAL_MS = 10 * 60_000;
+const ARCHIVE_FIRST_CHECK_DELAY_MS = 5 * 60_000;
+
+async function maintainSessionArchive() {
+  try {
+    await ensureLatestSessionArchived({
+      onNewSessionReady: (session) => {
+        if (!isReplayRunning()) return;
+        const alreadyOnIt =
+          currentState.session?.session_key === session.session_key &&
+          isReplayUsingDB();
+        if (alreadyOnIt) return;
+        console.log(
+          `[proxy] Session ${session.session_key} archived — restarting replay from SQLite`,
+        );
+        stopReplay();
+        clearCurrentState();
+        startReplay(broadcastSSE, currentState);
+      },
+    });
+  } catch (err) {
+    console.error("[proxy] Archive maintenance error:", err.message);
+  }
+}
+
+// First check is delayed so it doesn't compete with the startup flow
+// (startReplay may already be downloading the same session).
+setTimeout(() => {
+  maintainSessionArchive();
+  setInterval(maintainSessionArchive, ARCHIVE_CHECK_INTERVAL_MS);
+}, ARCHIVE_FIRST_CHECK_DELAY_MS);
+
 function startSessionWatchdog() {
   if (sessionWatchdog) return;
   console.log(
@@ -245,6 +293,16 @@ const server = http.createServer(async (req, res) => {
       mqttRunning: isMQTTRunning(),
       signalrRunning: isSignalRRunning(),
       watchdogRunning: sessionWatchdog !== null,
+      archive: {
+        downloading: isArchiveDownloading(),
+        replayFromDB: isReplayUsingDB(),
+        sessions: listSessions().map((s) => ({
+          key: s.session_key,
+          name: `${s.payload.session_name} ${s.payload.location}`,
+          date: s.date_start?.slice(0, 10),
+          complete: s.complete === 1,
+        })),
+      },
     };
     if (mode === "replay" && currentState.session) {
       health.replaySession = {

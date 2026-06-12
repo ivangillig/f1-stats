@@ -3,7 +3,11 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+# better-sqlite3 is a native module: build deps cover platforms without a
+# matching prebuilt binary (e.g. alpine/musl on ARM)
+RUN apk add --no-cache --virtual .build-deps python3 make g++ \
+  && npm ci --omit=dev \
+  && apk del .build-deps
 
 COPY . .
 
