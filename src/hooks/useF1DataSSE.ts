@@ -627,9 +627,8 @@ export function useF1DataSSE(): F1DataState {
                 if (posA > 0 && posB > 0) return posA - posB;
                 return 0;
               }
-              if (aHasGap) return -1;
-              if (bHasGap) return 1;
-              // Neither has gap — fall back to API position (starting grid order)
+              // One or both missing gap data — use API position so a driver
+              // without a gap reading doesn't drop below everyone who has one.
               const posA = a.position;
               const posB = b.position;
               if (posA > 0 && posB > 0) return posA - posB;

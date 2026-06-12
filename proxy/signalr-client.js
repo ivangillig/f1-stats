@@ -12,6 +12,7 @@
  *   state.timing[num].segments_1 / _2 / _3
  *   state.timing[num].sector_1   / _2 / _3
  *   state.track_status
+ *   state.drivers[num] (team name/colour — null in OpenF1 during live sessions)
  *
  * Everything else (position, gaps, tires, pit stops, etc.) stays with MQTT.
  *
@@ -33,13 +34,16 @@ const WS_BASE = `wss://${SIGNALR_HOST}/signalrcore`;
 const RS = "\x1e";
 
 // Topics: TimingData for live segments/sector times, TimingStats for personal best sectors,
-// TrackStatus and ExtrapolatedClock as fast overrides (OpenF1 MQTT doesn't provide these live)
+// TrackStatus and ExtrapolatedClock as fast overrides (OpenF1 MQTT doesn't provide these live).
+// DriverList because OpenF1 delivers team_name/team_colour as null during live
+// sessions (backfilled only after the session ends).
 const SUBSCRIBE_TOPICS = [
   "TimingData",
   "TimingStats",
   "TrackStatus",
   "ExtrapolatedClock",
   "LapCount",
+  "DriverList",
 ];
 
 const COMMON_HEADERS = {
@@ -338,12 +342,60 @@ function processLapCount(data) {
   }
 }
 
+/**
+ * DriverList — driver info keyed by racing number.
+ * Format: { "1": { Tla, FullName, TeamName, TeamColour, ... }, "_kf": true }
+ * Updates can be sparse (only changed fields present), so merge field-by-field
+ * and never overwrite an existing value with an absent one. TeamColour is a
+ * hex string without "#", same format as OpenF1's team_colour.
+ */
+function processDriverList(data) {
+  if (!currentStateRef || !data || typeof data !== "object") return;
+
+  if (!currentStateRef.drivers) currentStateRef.drivers = {};
+  let changed = false;
+
+  for (const [driverNum, info] of Object.entries(data)) {
+    if (!info || typeof info !== "object") continue; // skips "_kf" flag
+    const num = String(driverNum);
+    const existing = currentStateRef.drivers[num] || {
+      driver_number: parseInt(num, 10),
+      name_acronym: null,
+      full_name: null,
+      team_name: null,
+      team_colour: null,
+    };
+
+    const merged = {
+      ...existing,
+      name_acronym: info.Tla ?? existing.name_acronym,
+      full_name: info.FullName ?? existing.full_name,
+      team_name: info.TeamName ?? existing.team_name,
+      team_colour: info.TeamColour ?? existing.team_colour,
+    };
+
+    if (
+      merged.name_acronym !== existing.name_acronym ||
+      merged.full_name !== existing.full_name ||
+      merged.team_name !== existing.team_name ||
+      merged.team_colour !== existing.team_colour ||
+      !currentStateRef.drivers[num]
+    ) {
+      currentStateRef.drivers[num] = merged;
+      changed = true;
+    }
+  }
+
+  if (changed && broadcastFn) broadcastFn("update", currentStateRef);
+}
+
 function handleFeedMessage(topic, data, isSnapshot = false) {
   if (topic === "TimingData") processTimingData(data, isSnapshot);
   else if (topic === "TimingStats") processTimingStats(data);
   else if (topic === "TrackStatus") processTrackStatus(data);
   else if (topic === "ExtrapolatedClock") processExtrapolatedClock(data);
   else if (topic === "LapCount") processLapCount(data);
+  else if (topic === "DriverList") processDriverList(data);
 }
 
 // ── Connection ───────────────────────────────────────────────────────────────

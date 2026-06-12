@@ -226,13 +226,96 @@ function handleDriver(data) {
   if (!currentStateRef) return;
   const num = String(data.driver_number);
   if (!currentStateRef.drivers) currentStateRef.drivers = {};
+  // OpenF1 sends team_name/team_colour as null during live sessions — merge
+  // field-by-field so we don't wipe values already filled by SignalR DriverList.
+  const existing = currentStateRef.drivers[num] || {};
   currentStateRef.drivers[num] = {
     driver_number: data.driver_number,
-    name_acronym: data.name_acronym,
-    full_name: data.full_name,
-    team_name: data.team_name,
-    team_colour: data.team_colour,
+    name_acronym: data.name_acronym ?? existing.name_acronym ?? null,
+    full_name: data.full_name ?? existing.full_name ?? null,
+    team_name: data.team_name ?? existing.team_name ?? null,
+    team_colour: data.team_colour ?? existing.team_colour ?? null,
   };
+}
+
+/**
+ * During a live session neither OpenF1 nor (since 2026) the F1 SignalR
+ * DriverList provides team_name/team_colour — OpenF1 backfills them after the
+ * session ends. Walk back through previous session_keys and merge the team
+ * info of the most recent session that has it, matching by driver_number.
+ */
+async function backfillTeamInfo(sessionKey, headers) {
+  if (!currentStateRef?.drivers) return;
+  const stillMissing = () =>
+    Object.values(currentStateRef.drivers).filter((d) => !d.team_colour);
+  if (stillMissing().length === 0) return;
+
+  // Pass 1: most recent previous session — fills the regular race lineup
+  // with a single request.
+  for (let sk = sessionKey - 1; sk >= sessionKey - 10; sk--) {
+    try {
+      const res = await fetchWithRetry(
+        `${API_BASE}/drivers?session_key=${sk}`,
+        { headers },
+      );
+      if (!res.ok) continue;
+      const prev = await res.json();
+      const withTeam = Array.isArray(prev)
+        ? prev.filter((d) => d.team_colour)
+        : [];
+      if (withTeam.length === 0) continue;
+
+      let filled = 0;
+      for (const p of withTeam) {
+        const entry = currentStateRef.drivers[String(p.driver_number)];
+        if (entry && !entry.team_colour) {
+          entry.team_name = entry.team_name ?? p.team_name;
+          entry.team_colour = p.team_colour;
+          filled++;
+        }
+      }
+      console.log(
+        `[openf1-mqtt] Backfilled team info for ${filled} drivers from session ${sk}`,
+      );
+      break;
+    } catch {
+      /* try next session key */
+    }
+  }
+
+  // Pass 2: rookie/FP1-only drivers aren't in the previous session's lineup.
+  // Query each one's full driver history and take their most recent team.
+  for (const entry of stillMissing()) {
+    try {
+      const res = await fetchWithRetry(
+        `${API_BASE}/drivers?driver_number=${entry.driver_number}`,
+        { headers },
+      );
+      if (!res.ok) continue;
+      const hist = await res.json();
+      const latest = (Array.isArray(hist) ? hist : [])
+        .filter((h) => h.team_colour && h.session_key !== sessionKey)
+        .sort((a, b) => b.session_key - a.session_key)[0];
+      if (latest) {
+        entry.team_name = entry.team_name ?? latest.team_name;
+        entry.team_colour = latest.team_colour;
+        console.log(
+          `[openf1-mqtt] Backfilled team info for #${entry.driver_number} (${entry.name_acronym}) from session ${latest.session_key}: ${latest.team_name}`,
+        );
+      }
+    } catch {
+      /* leave this driver without team info */
+    }
+    // Stay well inside the OpenF1 rate budget during startup
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  const remaining = stillMissing();
+  if (remaining.length > 0) {
+    console.warn(
+      `[openf1-mqtt] No team info found for: ${remaining.map((d) => d.name_acronym || d.driver_number).join(", ")} — colors will be missing for these drivers`,
+    );
+  }
 }
 
 /**
@@ -647,10 +730,19 @@ async function fetchHistoricalData(sessionKey) {
       } else {
         console.log(`[openf1-mqtt] Loaded ${drivers.length} drivers`);
       }
-      // Replace entirely so that retained MQTT messages for drivers from past
-      // sessions (e.g. RIC) don't persist into the current session.
+      // Rebuild keyed only by the fetched list so retained MQTT messages for
+      // drivers from past sessions (e.g. RIC) don't persist — but carry over
+      // each current driver's existing entry first, so team name/colour already
+      // filled by SignalR DriverList survives the REST nulls (handleDriver merges).
+      const previousDrivers = currentStateRef.drivers || {};
       currentStateRef.drivers = {};
-      drivers.forEach((driver) => handleDriver(driver));
+      drivers.forEach((driver) => {
+        const num = String(driver.driver_number);
+        if (previousDrivers[num])
+          currentStateRef.drivers[num] = previousDrivers[num];
+        handleDriver(driver);
+      });
+      await backfillTeamInfo(sessionKey, headers);
     } else {
       // Drivers are critical (team colors, codes, names). If even the retried
       // fetch failed, log it loudly — team colors will be missing until the
