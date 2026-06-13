@@ -412,7 +412,9 @@ export function useF1DataSSE(): F1DataState {
             return r;
           };
           const hasSegs =
-            segs1.length > 0 || segs2.length > 0 || segs3.length > 0;
+            segs1.some((s) => s !== 0) ||
+            segs2.some((s) => s !== 0) ||
+            segs3.some((s) => s !== 0);
           const miniSectors: SectorStatus[] = hasSegs
             ? [
                 ...padNone(segs1.map(segmentStatus), s1Count),
@@ -471,37 +473,37 @@ export function useF1DataSSE(): F1DataState {
                 ? formatGap(entry.interval)
                 : (existing?.interval ?? ""),
             lastLap:
-              entry.last_lap != null
+              entry.last_lap !== undefined
                 ? formatLapTime(entry.last_lap)
                 : (existing?.lastLap ?? ""),
             lastLapPersonalBest: entry.last_lap_is_pb || false,
             lastLapOverallFastest: num === sessionFastestDriverRef.current,
             bestLap:
-              entry.best_lap != null
+              entry.best_lap !== undefined
                 ? formatLapTime(entry.best_lap)
                 : (existing?.bestLap ?? ""),
             sector1:
-              entry.sector_1 != null
+              entry.sector_1 !== undefined
                 ? formatLapTime(entry.sector_1)
                 : (existing?.sector1 ?? ""),
             sector2:
-              entry.sector_2 != null
+              entry.sector_2 !== undefined
                 ? formatLapTime(entry.sector_2)
                 : (existing?.sector2 ?? ""),
             sector3:
-              entry.sector_3 != null
+              entry.sector_3 !== undefined
                 ? formatLapTime(entry.sector_3)
                 : (existing?.sector3 ?? ""),
             bestSector1:
-              entry.best_sector_1 != null
+              entry.best_sector_1 !== undefined
                 ? formatLapTime(entry.best_sector_1)
                 : (existing?.bestSector1 ?? ""),
             bestSector2:
-              entry.best_sector_2 != null
+              entry.best_sector_2 !== undefined
                 ? formatLapTime(entry.best_sector_2)
                 : (existing?.bestSector2 ?? ""),
             bestSector3:
-              entry.best_sector_3 != null
+              entry.best_sector_3 !== undefined
                 ? formatLapTime(entry.best_sector_3)
                 : (existing?.bestSector3 ?? ""),
             hasSector1Record:
