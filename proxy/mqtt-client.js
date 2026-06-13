@@ -346,7 +346,7 @@ function handleInterval(data) {
 /**
  * Handle lap updates
  */
-function handleLap(data) {
+function handleLap(data, fromHistory = false) {
   if (!currentStateRef) return;
   const num = String(data.driver_number);
   const entry = ensureTimingEntry(currentStateRef, num);
@@ -378,9 +378,17 @@ function handleLap(data) {
   entry.is_pit_out_lap = data.is_pit_out_lap || false;
 
   if (data.lap_duration != null) {
-    entry.last_lap = data.lap_duration;
-    const isPb = updateBestLap(entry, data.lap_duration, data.is_pit_out_lap);
-    entry.last_lap_is_pb = isPb;
+    // Only record last_lap for timed laps — skip pit-out laps and anything over
+    // 10 minutes (red-flag-interrupted or installation-lap garbage durations).
+    const isTimed = !data.is_pit_out_lap && data.lap_duration < 600;
+    // When loading historical laps at startup and SignalR has already set the
+    // current qualifying part's timing (BestLapTime/LastLapTime from snapshot),
+    // skip overwriting best_lap and last_lap — historical data may be from a
+    // prior qualifying part (Q1/Q2) and would show stale times.
+    const signalrOwns = fromHistory && entry._signalrTimingInit;
+    if (isTimed && !signalrOwns) entry.last_lap = data.lap_duration;
+    const isPb = signalrOwns ? false : updateBestLap(entry, data.lap_duration, data.is_pit_out_lap);
+    entry.last_lap_is_pb = isPb && isTimed;
     // Lap is confirmed complete — clear live sector data so next lap starts clean
     // (SignalR will repopulate segment-by-segment as the new lap progresses)
     entry.segments_1 = [];
@@ -766,7 +774,7 @@ async function fetchHistoricalData(sessionKey) {
     if (lapsRes.ok) {
       const laps = await lapsRes.json();
       laps.sort((a, b) => a.lap_number - b.lap_number);
-      laps.forEach((lap) => handleLap(lap));
+      laps.forEach((lap) => handleLap(lap, true));
       console.log(`[openf1-mqtt] Loaded ${laps.length} historical laps`);
     }
 

@@ -107,6 +107,18 @@ function processTimingData(data, isSnapshot = false) {
     if (!isNaN(part)) {
       const prevPart = currentStateRef.session.qualifying_part ?? 0;
       currentStateRef.session.qualifying_part = part;
+      // SessionPart only arrives in Qualifying/Sprint Qualifying. If the stored
+      // session name is from a prior session (e.g. "Practice 3"), correct it now
+      // so the frontend doesn't show "Practice 3 · Q2".
+      const storedType = (currentStateRef.session.session_type ?? "").toLowerCase();
+      if (!storedType.includes("qualifying")) {
+        const oldName = currentStateRef.session.session_name;
+        currentStateRef.session.session_type = "Qualifying";
+        currentStateRef.session.session_name = "Qualifying";
+        console.log(
+          `[signalr] SessionPart received but session was "${oldName}" — corrected to Qualifying`,
+        );
+      }
       // When advancing to a new qualifying segment, wipe all per-lap timing so
       // stale Q1/Q2 times don't bleed into the new segment's leaderboard.
       if (part > prevPart && currentStateRef.timing) {
@@ -178,6 +190,27 @@ function processTimingData(data, isSnapshot = false) {
     } else if (isSnapshot && entry.in_pit) {
       // Snapshot is authoritative: car not shown as InPit:true → must be on track.
       entry.in_pit = false;
+      changed = true;
+    }
+
+    // BestLapTime / LastLapTime — authoritative source for qualifying best/last laps.
+    // SignalR resets these between Q1/Q2/Q3, so the snapshot correctly reflects
+    // the current part's state. Setting _signalrTimingInit tells MQTT historical
+    // lap loading to skip overwriting these with data from prior qualifying parts.
+    if (driverData.BestLapTime !== undefined) {
+      const seconds = parseF1Time(driverData.BestLapTime?.Value);
+      entry.best_lap = seconds; // null when Value is "" (no time set this part)
+      entry._signalrTimingInit = true;
+      changed = true;
+    }
+    if (driverData.LastLapTime !== undefined) {
+      const seconds = parseF1Time(driverData.LastLapTime?.Value);
+      if (seconds != null) {
+        entry.last_lap = seconds;
+      } else if (entry._signalrTimingInit) {
+        // Snapshot says no last lap this part — clear any stale value
+        entry.last_lap = null;
+      }
       changed = true;
     }
 

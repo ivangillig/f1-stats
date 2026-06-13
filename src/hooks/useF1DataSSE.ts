@@ -792,6 +792,16 @@ export function useF1DataSSE(): F1DataState {
           : `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 
       setSessionInfo((prev) => ({ ...prev, remainingTime: formatted }));
+
+      // Session ended: clock at 0:00 and stopped (extrapolating=false means
+      // end-of-session, not a mid-session red flag where remaining > 0).
+      if (totalSeconds === 0 && clock.extrapolating === false) {
+        setTrackStatus((prev) =>
+          prev.status === 7
+            ? prev
+            : { status: 7, message: "CHEQUERED" },
+        );
+      }
     };
 
     updateClock();
