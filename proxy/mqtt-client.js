@@ -378,6 +378,8 @@ function handleLap(data, fromHistory = false) {
   const entry = ensureTimingEntry(currentStateRef, num);
 
   entry.lap_number = data.lap_number ?? entry.lap_number;
+  // Keep tyre age current as laps tick up
+  if (entry.stint_lap_start != null) entry.tyre_age = computeTyreAge(entry);
 
   // Only update sector times if present — avoids clearing live data from SignalR
   if (data.duration_sector_1 != null) entry.sector_1 = data.duration_sector_1;
@@ -567,8 +569,21 @@ function handleStint(data) {
   const num = String(data.driver_number);
   const entry = ensureTimingEntry(currentStateRef, num);
   entry.compound = data.compound ? data.compound.toUpperCase() : entry.compound;
-  entry.tyre_age = data.tyre_age_at_start ?? entry.tyre_age;
+  entry.tyre_age_at_start = data.tyre_age_at_start ?? entry.tyre_age_at_start ?? 0;
+  entry.stint_lap_start = data.lap_start ?? entry.stint_lap_start;
   entry.stint_number = data.stint_number ?? entry.stint_number;
+  // Compute current tyre age: base age + laps completed in this stint
+  entry.tyre_age = computeTyreAge(entry);
+}
+
+function computeTyreAge(entry) {
+  const base = entry.tyre_age_at_start || 0;
+  const lapStart = entry.stint_lap_start;
+  const currentLap = entry.lap_number || 0;
+  if (lapStart != null && currentLap >= lapStart) {
+    return Math.max(0, currentLap - lapStart) + base;
+  }
+  return base;
 }
 
 /**

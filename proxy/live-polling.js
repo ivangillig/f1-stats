@@ -375,8 +375,15 @@ async function pollData() {
       for (const [num, s] of latest) {
         const entry = ensureTimingEntry(currentStateRef, num);
         entry.compound = s.compound || "UNKNOWN";
-        entry.tyre_age = s.tyre_age_at_start || 0;
+        entry.tyre_age_at_start = s.tyre_age_at_start || 0;
+        entry.stint_lap_start = s.lap_start ?? entry.stint_lap_start;
         entry.stint_number = s.stint_number || 0;
+        // Compute current tyre age: base age + laps done in this stint
+        const currentLap = entry.lap_number || 0;
+        const lapStart = entry.stint_lap_start;
+        entry.tyre_age = (lapStart != null && currentLap >= lapStart)
+          ? Math.max(0, currentLap - lapStart) + entry.tyre_age_at_start
+          : entry.tyre_age_at_start;
       }
     }
 
