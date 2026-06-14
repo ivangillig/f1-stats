@@ -386,9 +386,9 @@ export default function TrackMap({
       // Fallback 2: trackProgress from live segment fraction (no miniSectorsIndexes needed)
       // This uses how far through the current lap the car is, updated each time SignalR
       // sends a new segment status (~2-4s). Better than pure position order.
-      if (driver.trackProgress > 0) {
+      if ((driver.trackProgress ?? 0) > 0) {
         targets.set(driver.driverNumber, {
-          targetIndex: Math.floor(driver.trackProgress * totalPoints),
+          targetIndex: Math.floor((driver.trackProgress ?? 0) * totalPoints),
           inPit: false,
           hasFix: true,
         });
