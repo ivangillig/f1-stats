@@ -74,6 +74,27 @@ let carDataTimer = null;
 let locationDirty = false;
 let locationTimer = null;
 
+// Raw message debug buffer — last 20 messages per topic (excluding high-freq location/car_data)
+const RAW_MQTT_BUFFER = {};
+const RAW_MQTT_MAX = 20;
+const HIGH_FREQ_TOPICS = new Set(["location", "car_data"]);
+
+function recordRawMqtt(topicName, data) {
+  if (HIGH_FREQ_TOPICS.has(topicName)) return;
+  if (!RAW_MQTT_BUFFER[topicName]) RAW_MQTT_BUFFER[topicName] = [];
+  RAW_MQTT_BUFFER[topicName].push({ ts: new Date().toISOString(), data });
+  if (RAW_MQTT_BUFFER[topicName].length > RAW_MQTT_MAX) {
+    RAW_MQTT_BUFFER[topicName].shift();
+  }
+}
+
+export function getRawMqttDebug() {
+  return {
+    connected: isRunning,
+    buffer: RAW_MQTT_BUFFER,
+  };
+}
+
 /**
  * Obtain OAuth2 access token from OpenF1
  */
@@ -132,6 +153,8 @@ function processMessage(topic, message) {
   try {
     const data = JSON.parse(message.toString());
     const topicName = topic.replace("v1/", "");
+
+    recordRawMqtt(topicName, data);
 
     // Update state based on topic
     switch (topicName) {
@@ -336,8 +359,11 @@ function handleInterval(data) {
   if (!currentStateRef) return;
   const num = String(data.driver_number);
   const entry = ensureTimingEntry(currentStateRef, num);
-  const isLeader = data.gap_to_leader === 0 || data.gap_to_leader == null;
-  entry.gap_to_leader = isLeader ? null : data.gap_to_leader;
+  // Only infer leader (position=1) when gap_to_leader is explicitly 0.
+  // A null value means data is missing for this driver — treating it as
+  // "leader" causes this driver to jump to P1 in the frontend sort.
+  const isLeader = data.gap_to_leader === 0;
+  entry.gap_to_leader = (data.gap_to_leader === 0 || data.gap_to_leader == null) ? null : data.gap_to_leader;
   if (isLeader) entry.position = 1;
   entry.interval =
     data.interval === 0 || data.interval == null ? null : data.interval;
@@ -415,9 +441,16 @@ function handleLap(data, fromHistory = false) {
  */
 function handleLocation(data) {
   if (!currentStateRef) return;
+  // If SignalR Position.z is delivering (<5s ago), let it own car positions.
+  if (
+    currentStateRef.locationSignalRTs &&
+    Date.now() - currentStateRef.locationSignalRTs < 5000
+  )
+    return;
   const num = String(data.driver_number);
   if (!currentStateRef.location) currentStateRef.location = {};
   currentStateRef.location[num] = { x: data.x, y: data.y };
+  currentStateRef.locationSource = "mqtt";
 }
 
 /**

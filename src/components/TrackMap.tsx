@@ -68,6 +68,13 @@ export default function TrackMap({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // True when at least one driver has real GPS coordinates from SignalR/MQTT
+  const hasGpsData = useMemo(
+    () => drivers.some((d) => d.trackX != null && d.trackX !== 0 && d.trackY != null && d.trackY !== 0),
+    [drivers],
+  );
+  const showGpsFallbackBanner = isSessionActive && !hasGpsData;
+
   useEffect(() => {
     // Don't attempt fetch until we have a real circuit key
     if (!circuitKey) {
@@ -293,13 +300,13 @@ export default function TrackMap({
   // Calculate target positions based on driver data (this is the "goal" for animation)
   const targetPositions = useMemo(() => {
     if (!points || points.length === 0 || !bounds)
-      return new Map<string, { targetIndex: number; inPit: boolean }>();
+      return new Map<string, { targetIndex: number; inPit: boolean; hasFix: boolean }>();
 
     const miniSectorIndexes = mapData?.miniSectorsIndexes || [];
     const totalPoints = points.length;
     const pitLaneEndIndex = Math.min(Math.floor(totalPoints * 0.05), 50);
 
-    const targets = new Map<string, { targetIndex: number; inPit: boolean }>();
+    const targets = new Map<string, { targetIndex: number; inPit: boolean; hasFix: boolean }>();
     let pitIndex = 0;
     const pitDriverCount = Math.max(
       20,
@@ -320,6 +327,7 @@ export default function TrackMap({
         targets.set(driver.driverNumber, {
           targetIndex: trackIdx,
           inPit: true,
+          hasFix: true,
         });
         return;
       }
@@ -347,11 +355,12 @@ export default function TrackMap({
         targets.set(driver.driverNumber, {
           targetIndex: nearestIdx,
           inPit: false,
+          hasFix: true,
         });
         return;
       }
 
-      // Fallback: mini-sectors from SignalR (~4s granularity)
+      // Fallback 1: mini-sectors from SignalR with circuit boundary data (~4s granularity)
       if (
         driver.miniSectors &&
         driver.miniSectors.length > 0 &&
@@ -368,17 +377,33 @@ export default function TrackMap({
           targets.set(driver.driverNumber, {
             targetIndex: miniSectorIndexes[completedMiniSectors - 1] || 0,
             inPit: false,
+            hasFix: true,
           });
           return;
         }
       }
 
-      // No GPS or mini-sector data — place on track by position order
+      // Fallback 2: trackProgress from live segment fraction (no miniSectorsIndexes needed)
+      // This uses how far through the current lap the car is, updated each time SignalR
+      // sends a new segment status (~2-4s). Better than pure position order.
+      if (driver.trackProgress > 0) {
+        targets.set(driver.driverNumber, {
+          targetIndex: Math.floor(driver.trackProgress * totalPoints),
+          inPit: false,
+          hasFix: true,
+        });
+        return;
+      }
+
+      // Fallback 3: position order — no real data available.
+      // hasFix=false tells the animation loop to keep drifting at base speed so
+      // cars don't freeze on screen when we have no live position information.
       const pos = driver.position || 99;
       const progress = 1 - (pos - 1) / Math.max(drivers.length, 1);
       targets.set(driver.driverNumber, {
         targetIndex: Math.floor(progress * totalPoints),
         inPit: false,
+        hasFix: false,
       });
     });
 
@@ -487,6 +512,14 @@ export default function TrackMap({
           current.currentIndex =
             (current.currentIndex + step + totalPoints) % totalPoints;
           hasChanges = true;
+        } else if (!target.hasFix) {
+          // No real position fix — keep drifting at base speed so cars appear
+          // to be racing rather than frozen. Target updates override the drift
+          // when real data arrives (GPS, mini-sectors, or trackProgress).
+          current.currentIndex =
+            (current.currentIndex + baseSpeed * deltaTime + totalPoints) %
+            totalPoints;
+          hasChanges = true;
         }
       }
 
@@ -590,7 +623,14 @@ export default function TrackMap({
   };
 
   return (
-    <div className="relative h-full w-full flex items-center justify-center py-0 px-1">
+    <div className="relative h-full w-full flex flex-col">
+      {showGpsFallbackBanner && (
+        <div className="flex items-center justify-center gap-1.5 px-2 py-0.5 text-[10px] font-medium text-amber-400/80 bg-amber-950/40 border-b border-amber-800/30 shrink-0">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400/60" />
+          {t("map.gpsFallback")}
+        </div>
+      )}
+      <div className="relative flex-1 min-h-0 flex items-center justify-center py-0 px-1">
       {weather && <WeatherOverlay weather={weather} />}
       <svg
         viewBox={`${minX} ${minY} ${widthX} ${widthY}`}
@@ -843,6 +883,7 @@ export default function TrackMap({
             );
           })}
       </svg>
+      </div>
     </div>
   );
 }

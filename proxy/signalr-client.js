@@ -20,6 +20,7 @@
  */
 
 import WebSocket from "ws";
+import zlib from "zlib";
 import { ensureTimingEntry } from "./state-utils.js";
 
 const SIGNALR_HOST = "livetiming.formula1.com";
@@ -44,6 +45,7 @@ const SUBSCRIBE_TOPICS = [
   "ExtrapolatedClock",
   "LapCount",
   "DriverList",
+  "Position.z", // compressed car x/y positions; may require F1 TV Pro entitlement
 ];
 
 const COMMON_HEADERS = {
@@ -57,6 +59,41 @@ let broadcastFn = null;
 let isRunning = false;
 let reconnectTimeout = null;
 let pingInterval = null;
+
+// Raw message debug buffer — last 20 messages per topic
+const RAW_SIGNALR_BUFFER = {};
+const RAW_SIGNALR_MAX = 20;
+
+function recordRawSignalR(topic, data) {
+  if (!RAW_SIGNALR_BUFFER[topic]) RAW_SIGNALR_BUFFER[topic] = [];
+  // For TimingData, extract only the Retired/InPit fields to keep payloads small
+  let stored = data;
+  if (topic === "TimingData" && data?.Lines) {
+    const lines = {};
+    for (const [num, d] of Object.entries(data.Lines)) {
+      if (!d) continue;
+      const relevant = {};
+      if (d.Retired !== undefined) relevant.Retired = d.Retired;
+      if (d.InPit !== undefined) relevant.InPit = d.InPit;
+      if (d.PitOut !== undefined) relevant.PitOut = d.PitOut;
+      if (d.Position !== undefined) relevant.Position = d.Position;
+      if (d.KnockedOut !== undefined) relevant.KnockedOut = d.KnockedOut;
+      if (Object.keys(relevant).length > 0) lines[num] = relevant;
+    }
+    stored = { Lines: lines, SessionPart: data.SessionPart };
+  }
+  RAW_SIGNALR_BUFFER[topic].push({ ts: new Date().toISOString(), data: stored });
+  if (RAW_SIGNALR_BUFFER[topic].length > RAW_SIGNALR_MAX) {
+    RAW_SIGNALR_BUFFER[topic].shift();
+  }
+}
+
+export function getRawSignalRDebug() {
+  return {
+    connected: isRunning && ws !== null,
+    buffer: RAW_SIGNALR_BUFFER,
+  };
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -422,13 +459,66 @@ function processDriverList(data) {
   if (changed && broadcastFn) broadcastFn("update", currentStateRef);
 }
 
+/**
+ * Position.z — compressed car x/y positions (~4 Hz for all cars).
+ * Payload is a base64-encoded, raw-deflate-compressed JSON string.
+ * Decoded format: { Position: [{ Timestamp: "...", Entries: { "1": { X, Y, Z }, ... } }] }
+ * Requires F1 TV Pro entitlement; with Access the server returns completion but 0 messages.
+ */
+let positionMsgCount = 0;
+function processPosition(data) {
+  if (!currentStateRef) return;
+
+  let payload;
+  try {
+    // Data arrives as a base64 string (compressed); objects are also possible in snapshots.
+    const raw = typeof data === "string" ? data : JSON.stringify(data);
+    const buf = Buffer.from(raw, "base64");
+    const inflated = zlib.inflateRawSync(buf);
+    payload = JSON.parse(inflated.toString("utf8"));
+  } catch {
+    // Not all frames are compressed — some are plain JSON objects (snapshot).
+    payload = typeof data === "object" ? data : null;
+  }
+
+  if (!payload?.Position) return;
+
+  if (positionMsgCount === 0) {
+    console.log("[signalr] Position.z delivering — car GPS active");
+  }
+  positionMsgCount++;
+  if (positionMsgCount % 100 === 0) {
+    console.log(`[signalr] Position.z: ${positionMsgCount} messages received`);
+  }
+
+  if (!currentStateRef.location) currentStateRef.location = {};
+  let changed = false;
+
+  for (const frame of payload.Position) {
+    if (!frame?.Entries) continue;
+    for (const [num, coords] of Object.entries(frame.Entries)) {
+      if (coords?.X != null && coords?.Y != null) {
+        currentStateRef.location[String(num)] = { x: coords.X, y: coords.Y };
+        // Seal timestamp so MQTT handleLocation won't override SignalR GPS
+        currentStateRef.locationSignalRTs = Date.now();
+        currentStateRef.locationSource = "signalr";
+        changed = true;
+      }
+    }
+  }
+
+  if (changed && broadcastFn) broadcastFn("update", currentStateRef);
+}
+
 function handleFeedMessage(topic, data, isSnapshot = false) {
+  recordRawSignalR(topic, data);
   if (topic === "TimingData") processTimingData(data, isSnapshot);
   else if (topic === "TimingStats") processTimingStats(data);
   else if (topic === "TrackStatus") processTrackStatus(data);
   else if (topic === "ExtrapolatedClock") processExtrapolatedClock(data);
   else if (topic === "LapCount") processLapCount(data);
   else if (topic === "DriverList") processDriverList(data);
+  else if (topic === "Position.z") processPosition(data);
 }
 
 // ── Connection ───────────────────────────────────────────────────────────────
@@ -532,7 +622,8 @@ async function connect() {
           // keyed by topic. Treat as authoritative (isSnapshot=true) so absent
           // InPit clears stale state from a previous connection cycle.
           for (const [topic, data] of Object.entries(msg.result)) {
-            if (data && typeof data === "object") {
+            // Position.z comes as a compressed base64 string, not an object
+            if (data && (typeof data === "object" || typeof data === "string")) {
               console.log(`[signalr] Snapshot: ${topic}`);
               handleFeedMessage(topic, data, true);
             }
@@ -600,6 +691,8 @@ export function stopSignalR() {
   clearInterval(pingInterval);
   ws?.close();
   ws = null;
+  positionMsgCount = 0;
+  if (currentStateRef) currentStateRef.locationSignalRTs = null;
   broadcastFn = null;
   currentStateRef = null;
 }

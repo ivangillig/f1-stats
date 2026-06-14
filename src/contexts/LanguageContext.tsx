@@ -126,6 +126,7 @@ const translations = {
     "map.loading": "Cargando mapa...",
     "map.error": "Error al cargar el mapa",
     "map.notAvailable": "Mapa no disponible",
+    "map.gpsFallback": "Posiciones aproximadas — GPS en vivo no disponible",
 
     // Footer
     "footer.madeWith": "Hecho con",
@@ -315,6 +316,7 @@ const translations = {
     "map.loading": "Loading map...",
     "map.error": "Error loading map",
     "map.notAvailable": "Map not available",
+    "map.gpsFallback": "Estimated positions — live GPS unavailable",
 
     // Footer
     "footer.madeWith": "Made with",

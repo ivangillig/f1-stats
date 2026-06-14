@@ -530,10 +530,14 @@ export function useF1DataSSE(): F1DataState {
               entry.in_pit !== undefined
                 ? entry.in_pit
                 : (existing?.inPit ?? false),
+            // OUT badge is only meaningful in Practice/Qualifying (lap doesn't count).
+            // In Race/Sprint, the out-lap is a normal racing lap — suppress the badge.
             isPitOutLap:
-              entry.is_pit_out_lap !== undefined
-                ? entry.is_pit_out_lap
-                : (existing?.isPitOutLap ?? false),
+              (sessionTypeRef.current !== "Race" && sessionTypeRef.current !== "Sprint")
+                ? (entry.is_pit_out_lap !== undefined
+                    ? entry.is_pit_out_lap
+                    : (existing?.isPitOutLap ?? false))
+                : false,
             pitCount: entry.pit_count ?? existing?.pitCount ?? 0,
             retired:
               entry.retired !== undefined

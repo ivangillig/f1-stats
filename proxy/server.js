@@ -18,6 +18,7 @@ import {
   hasMQTTCredentials,
   checkActiveSession,
   ensureValidToken,
+  getRawMqttDebug,
 } from "./mqtt-client.js";
 import {
   startLivePolling,
@@ -28,6 +29,7 @@ import {
   startSignalR,
   stopSignalR,
   isSignalRRunning,
+  getRawSignalRDebug,
 } from "./signalr-client.js";
 
 const PORT = process.env.PORT || 4000;
@@ -89,9 +91,12 @@ function broadcastSSE(event, data) {
 // ── Retirement inference ──────────────────────────────────────────────────────
 // SignalR's Retired field is only sent as a live delta event. If the proxy
 // restarts mid-race and a driver had already retired, the field won't appear
-// in the next snapshot. We infer retirement from two signals:
-//   1. gap_to_leader === null && interval === null (timing drops off)
-//   2. driver's lap_number is >5 behind the leader (stuck on an old lap)
+// in the next snapshot. We infer retirement only when BOTH conditions hold:
+//   1. gap_to_leader AND interval are gone from timing
+//   2. driver's lap_number is >3 behind the leader (not just a slow lap)
+// Pure lap gap alone is NOT enough — incomplete historical data can leave
+// drivers stuck on lap 1 while the leader is on lap 20, which triggered
+// false retirements for the entire field.
 // Runs every 30 s during live sessions. Only applies to Race/Sprint.
 function inferRetiredDrivers() {
   if (!currentState.timing) return;
@@ -112,9 +117,11 @@ function inferRetiredDrivers() {
     const gapGone =
       (entry.gap_to_leader === null || entry.gap_to_leader === undefined) &&
       (entry.interval === null || entry.interval === undefined);
-    if (lapsBehind > 5 || (gapGone && lapsBehind > 2 && !entry.in_pit)) {
+    // Require gapGone + lap gap — pure lap gap alone fires on drivers whose
+    // historical lap data didn't load (lap_number stuck at 1).
+    if (gapGone && lapsBehind > 3 && !entry.in_pit) {
       console.log(
-        `[proxy] Inferred retirement: ${entry.code || entry.driver_number} (lap ${entry.lap_number} vs leader ${leaderLap}, gapGone=${gapGone})`,
+        `[proxy] Inferred retirement: ${entry.driver_number} (lap ${entry.lap_number} vs leader ${leaderLap}, gapGone=${gapGone})`,
       );
       entry.retired = true;
       changed = true;
@@ -292,6 +299,7 @@ const server = http.createServer(async (req, res) => {
       mqttAvailable: hasMQTTCredentials(),
       mqttRunning: isMQTTRunning(),
       signalrRunning: isSignalRRunning(),
+      locationSource: currentState.locationSource ?? "none",
       watchdogRunning: sessionWatchdog !== null,
       archive: {
         downloading: isArchiveDownloading(),
@@ -367,6 +375,44 @@ const server = http.createServer(async (req, res) => {
   if (req.url === "/api/state") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(currentState));
+    return;
+  }
+
+  // Raw MQTT debug — last 20 messages per topic
+  if (req.url === "/api/debug/mqtt") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(getRawMqttDebug(), null, 2));
+    return;
+  }
+
+  // Raw SignalR debug — last 20 messages per topic (TimingData filtered to key fields)
+  if (req.url === "/api/debug/signalr") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(getRawSignalRDebug(), null, 2));
+    return;
+  }
+
+  // Retirement debug — current retired state per driver and its source
+  if (req.url === "/api/debug/retired") {
+    const retired = {};
+    if (currentState.timing) {
+      for (const [num, entry] of Object.entries(currentState.timing)) {
+        retired[num] = {
+          driver_number: entry.driver_number,
+          retired: entry.retired,
+          in_pit: entry.in_pit,
+          lap_number: entry.lap_number,
+          gap_to_leader: entry.gap_to_leader,
+          interval: entry.interval,
+          position: entry.position,
+        };
+      }
+    }
+    const leaderLap = currentState.timing
+      ? Math.max(...Object.values(currentState.timing).map((e) => e.lap_number || 0))
+      : 0;
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ leaderLap, drivers: retired }, null, 2));
     return;
   }
 

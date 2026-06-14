@@ -10,6 +10,7 @@ export function ensureTimingEntry(state, driverNum) {
   if (!state.timing) state.timing = {};
   if (!state.timing[driverNum]) {
     state.timing[driverNum] = {
+      driver_number: parseInt(driverNum, 10) || driverNum,
       position: null,
       gap_to_leader: null,
       interval: null,
