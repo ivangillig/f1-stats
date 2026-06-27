@@ -242,10 +242,12 @@ function processTimingData(data, isSnapshot = false) {
     }
     if (driverData.LastLapTime !== undefined) {
       const seconds = parseF1Time(driverData.LastLapTime?.Value);
-      if (seconds != null) {
+      // Reject values ≥600s — SignalR sometimes sends elapsed session time
+      // (e.g. "21:56.685") instead of a real lap time for drivers who haven't
+      // completed a lap in the current qualifying part yet.
+      if (seconds != null && seconds < 600) {
         entry.last_lap = seconds;
-      } else if (entry._signalrTimingInit) {
-        // Snapshot says no last lap this part — clear any stale value
+      } else {
         entry.last_lap = null;
       }
       changed = true;

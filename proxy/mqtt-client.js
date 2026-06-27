@@ -418,17 +418,23 @@ function handleLap(data, fromHistory = false) {
   entry.is_pit_out_lap = data.is_pit_out_lap || false;
 
   if (data.lap_duration != null) {
-    // Only record last_lap for timed laps — skip pit-out laps and anything over
-    // 10 minutes (red-flag-interrupted or installation-lap garbage durations).
+    // Only record timed laps — skip pit-out laps and anything over 10 minutes
+    // (red-flag-interrupted laps, in-laps with inter-segment break included, etc.)
     const isTimed = !data.is_pit_out_lap && data.lap_duration < 600;
     // When loading historical laps at startup and SignalR has already set the
     // current qualifying part's timing (BestLapTime/LastLapTime from snapshot),
     // skip overwriting best_lap and last_lap — historical data may be from a
     // prior qualifying part (Q1/Q2) and would show stale times.
     const signalrOwns = fromHistory && entry._signalrTimingInit;
-    if (isTimed && !signalrOwns) entry.last_lap = data.lap_duration;
-    const isPb = signalrOwns ? false : updateBestLap(entry, data.lap_duration, data.is_pit_out_lap);
-    entry.last_lap_is_pb = isPb && isTimed;
+    // Apply isTimed to both last_lap AND best_lap — a >600s in-lap/installation
+    // lap must not become the driver's "best" qualifying time.
+    if (isTimed && !signalrOwns) {
+      entry.last_lap = data.lap_duration;
+      const isPb = updateBestLap(entry, data.lap_duration, data.is_pit_out_lap);
+      entry.last_lap_is_pb = isPb;
+    } else {
+      entry.last_lap_is_pb = false;
+    }
     // Lap is confirmed complete — clear live sector data so next lap starts clean
     // (SignalR will repopulate segment-by-segment as the new lap progresses)
     entry.segments_1 = [];

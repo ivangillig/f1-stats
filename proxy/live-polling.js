@@ -243,12 +243,11 @@ async function pollData() {
       }
       for (const [num, l] of latest) {
         const entry = ensureTimingEntry(currentStateRef, num);
-        entry.last_lap = l.lap_duration ?? null;
-        entry.last_lap_is_pb = updateBestLap(
-          entry,
-          l.lap_duration,
-          l.is_pit_out_lap,
-        );
+        const isTimed = !l.is_pit_out_lap && l.lap_duration != null && l.lap_duration < 600;
+        entry.last_lap = isTimed ? l.lap_duration : null;
+        entry.last_lap_is_pb = isTimed
+          ? updateBestLap(entry, l.lap_duration, l.is_pit_out_lap)
+          : false;
         entry.lap_number = l.lap_number;
         entry.sector_1 = l.duration_sector_1 ?? null;
         entry.sector_2 = l.duration_sector_2 ?? null;
