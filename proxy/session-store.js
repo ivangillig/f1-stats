@@ -223,3 +223,34 @@ export function newestCompleteSession() {
   const sessions = listSessions();
   return sessions.find((s) => s.complete === 1) || null;
 }
+
+// ── SignalR event archive ─────────────────────────────────────────────────────
+// Reuses session_events with topic prefixed "signalr:" so OpenF1 and SignalR
+// rows coexist in the same table and the same window-query path works for both.
+
+let _insertSignalR = null;
+function insertSignalRStmt() {
+  if (!_insertSignalR)
+    _insertSignalR = getDB().prepare(
+      `INSERT INTO session_events (session_key, topic, ts, payload) VALUES (?, ?, ?, ?)`,
+    );
+  return _insertSignalR;
+}
+
+export function insertSignalREvent(sessionKey, topic, ts, payload) {
+  insertSignalRStmt().run(sessionKey, `signalr:${topic}`, ts, payload);
+}
+
+// Time-windowed query for SignalR events — same API as getTopicWindow
+export function getSignalRWindow(sessionKey, topic, start, end) {
+  const s = start instanceof Date ? start.getTime() : start;
+  const e = end instanceof Date ? end.getTime() : end;
+  return getDB()
+    .prepare(
+      `SELECT payload FROM session_events
+       WHERE session_key = ? AND topic = ? AND ts >= ? AND ts < ?
+       ORDER BY ts ASC`,
+    )
+    .all(sessionKey, `signalr:${topic}`, s, e)
+    .map((r) => JSON.parse(r.payload));
+}

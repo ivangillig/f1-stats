@@ -22,6 +22,7 @@
 import WebSocket from "ws";
 import zlib from "zlib";
 import { ensureTimingEntry } from "./state-utils.js";
+import { insertSignalREvent } from "./session-store.js";
 
 const SIGNALR_HOST = "livetiming.formula1.com";
 // SignalR Core (modern ASP.NET Core SignalR). Since ~2025 F1 migrated here and
@@ -39,13 +40,23 @@ const RS = "\x1e";
 // DriverList because OpenF1 delivers team_name/team_colour as null during live
 // sessions (backfilled only after the session ends).
 const SUBSCRIBE_TOPICS = [
+  // Already processed live
   "TimingData",
   "TimingStats",
   "TrackStatus",
   "ExtrapolatedClock",
   "LapCount",
   "DriverList",
-  "Position.z", // compressed car x/y positions; may require F1 TV Pro entitlement
+  "Position.z",          // compressed GPS — gated (Pro entitlement); recorded if delivered
+  // New: processed live + recorded
+  "RaceControlMessages", // real-time flags with marshal sector — faster than OpenF1 MQTT
+  "WeatherData",         // real-time weather
+  "TimingAppData",       // tyre compound + stint info in real time
+  // New: recorded only (live processing deferred)
+  "CarData.z",           // compressed telemetry — gated (Pro); recorded if delivered
+  "SessionInfo",         // session metadata
+  "SessionData",         // session status series (Started/Ends/etc.)
+  "TeamRadio",           // audio URLs
 ];
 
 const COMMON_HEADERS = {
@@ -516,15 +527,39 @@ function processPosition(data) {
   if (changed && broadcastFn) broadcastFn("update", currentStateRef);
 }
 
+// ── SQLite recorder ──────────────────────────────────────────────────────────
+// Non-blocking: wrapped in try/catch so any DB error is silently discarded and
+// the live feed is never interrupted. Snapshots (isSnapshot=true) are skipped —
+// we only need the incremental stream for replay.
+
+function persistMessage(topic, data) {
+  const sessionKey = currentStateRef?.session?.session_key;
+  if (!sessionKey) return;
+  try {
+    insertSignalREvent(sessionKey, topic, Date.now(), JSON.stringify(data));
+  } catch (err) {
+    console.warn(`[signalr] Failed to archive message (topic=${topic}):`, err.message);
+  }
+}
+
+// ── New topic handlers ───────────────────────────────────────────────────────
+
 function handleFeedMessage(topic, data, isSnapshot = false) {
   recordRawSignalR(topic, data);
-  if (topic === "TimingData") processTimingData(data, isSnapshot);
-  else if (topic === "TimingStats") processTimingStats(data);
-  else if (topic === "TrackStatus") processTrackStatus(data);
+  // Archive every incremental message to SQLite (non-blocking, best-effort)
+  if (!isSnapshot) persistMessage(topic, data);
+
+  if (topic === "TimingData")           processTimingData(data, isSnapshot);
+  else if (topic === "TimingStats")     processTimingStats(data);
+  else if (topic === "TrackStatus")     processTrackStatus(data);
   else if (topic === "ExtrapolatedClock") processExtrapolatedClock(data);
-  else if (topic === "LapCount") processLapCount(data);
-  else if (topic === "DriverList") processDriverList(data);
-  else if (topic === "Position.z") processPosition(data);
+  else if (topic === "LapCount")        processLapCount(data);
+  else if (topic === "DriverList")      processDriverList(data);
+  else if (topic === "Position.z")      processPosition(data);
+  // RaceControlMessages, WeatherData, TimingAppData, CarData.z, SessionInfo,
+  // SessionData, TeamRadio: recorded to SQLite above; live data comes from
+  // OpenF1 MQTT. RaceControlMessages will be integrated live once we verify
+  // that SignalR flag strings match what the UI expects.
 }
 
 // ── Connection ───────────────────────────────────────────────────────────────
