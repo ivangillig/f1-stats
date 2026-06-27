@@ -801,7 +801,11 @@ export function useF1DataSSE(): F1DataState {
 
       // Session ended: clock at 0:00 and stopped (extrapolating=false means
       // end-of-session, not a mid-session red flag where remaining > 0).
-      if (totalSeconds === 0 && clock.extrapolating === false) {
+      // Skip for Q1/Q2 — the segment ends but the session continues; the proxy
+      // resets track_status to GREEN when the next part starts.
+      const qualiPart = qualifyingPartRef.current;
+      const isIntermediateQualy = qualiPart !== undefined && qualiPart < 3;
+      if (totalSeconds === 0 && clock.extrapolating === false && !isIntermediateQualy) {
         setTrackStatus((prev) =>
           prev.status === 7
             ? prev

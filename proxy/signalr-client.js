@@ -175,8 +175,12 @@ function processTimingData(data, isSnapshot = false) {
           entry.gap_to_leader = null;
           entry.interval = null;
         }
+        // Also clear the CHEQUERED flag — the end-of-segment flag must not
+        // persist into the next segment while waiting for SignalR's GREEN update.
+        currentStateRef.track_status = { flag: "GREEN" };
+        currentStateRef._signalrTrackStatusSet = true;
         console.log(
-          `[signalr] Qualifying part advanced to Q${part} — timing data cleared`,
+          `[signalr] Qualifying part advanced to Q${part} — timing data and track status cleared`,
         );
       }
       changed = true;
