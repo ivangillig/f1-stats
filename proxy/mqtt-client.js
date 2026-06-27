@@ -518,9 +518,12 @@ function handleRaceControl(data, opts = {}) {
       }
     }
 
-    // CHEQUERED can arrive with flag=null — detect from message text as fallback
+    // CHEQUERED can arrive with flag=null — detect from message text as fallback.
+    // Also lock _signalrTrackStatusSet so a delayed yellow sector message can't
+    // override the checkered flag afterwards.
     if (data.message?.toUpperCase().includes("CHEQUERED")) {
       currentStateRef.track_status = { flag: "CHEQUERED" };
+      currentStateRef._signalrTrackStatusSet = true;
     }
 
     // Safety car overrides flag-based status — but only when SignalR hasn't

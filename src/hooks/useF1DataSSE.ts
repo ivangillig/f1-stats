@@ -246,9 +246,15 @@ export function useF1DataSSE(): F1DataState {
       // ── 5. Track status ─────────────────────────────────────────────────
       const trackStatusData = data.track_status;
       if (trackStatusData?.flag) {
-        setTrackStatus({
-          status: FLAG_TO_STATUS[trackStatusData.flag] ?? 1,
-          message: trackStatusData.flag,
+        setTrackStatus((prev) => {
+          const next = FLAG_TO_STATUS[trackStatusData.flag] ?? 1;
+          // Once CHEQUERED is showing in Q3 (or non-qualifying), don't let a
+          // concurrent yellow flag from an incident downgrade it — the session
+          // is over and the clock code would re-assert CHEQUERED every second.
+          const qualiPart = qualifyingPartRef.current;
+          const isEndOfSession = qualiPart === undefined || qualiPart >= 3;
+          if (prev.status === 7 && isEndOfSession && next !== 7) return prev;
+          return { status: next, message: trackStatusData.flag };
         });
       }
 

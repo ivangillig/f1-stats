@@ -11,11 +11,19 @@ import { TEAM_COLORS } from "@/lib/constants";
 import { useLanguage } from "@/contexts/LanguageContext";
 import WeatherOverlay from "@/components/WeatherOverlay";
 
+interface MarshalSector {
+  number: number;
+  length: number;
+  angle: number;
+  trackPosition: { x: number; y: number };
+}
+
 interface MapData {
   x: number[];
   y: number[];
   rotation: number;
   miniSectorsIndexes?: number[];
+  marshalSectors?: MarshalSector[];
   corners: {
     number: number;
     angle: number;
@@ -227,6 +235,50 @@ export default function TrackMap({
       "sectors",
     );
     return boundaries;
+  }, [points, mapData]);
+
+  // Fallback sector boundaries computed from marshalSectors arc lengths.
+  // Every circuit from multiviewer has marshalSectors even when miniSectorsIndexes
+  // is absent (e.g. Spielberg). Each sector's `length` is the cumulative arc
+  // distance from points[0] to the marshal post, so we can binary-search for the
+  // nearest point index and slice the track array per sector.
+  const marshalSectorBoundaries = useMemo(() => {
+    if (!points || points.length === 0 || !mapData?.marshalSectors?.length)
+      return null;
+    // Cumulative arc lengths along the track points
+    const cumLen: number[] = new Array(points.length);
+    cumLen[0] = 0;
+    for (let i = 1; i < points.length; i++) {
+      const dx = points[i].x - points[i - 1].x;
+      const dy = points[i].y - points[i - 1].y;
+      cumLen[i] = cumLen[i - 1] + Math.sqrt(dx * dx + dy * dy);
+    }
+    const findIdx = (len: number) => {
+      let lo = 0,
+        hi = points.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (cumLen[mid] < len) lo = mid + 1;
+        else hi = mid;
+      }
+      return lo;
+    };
+    // Sort by arc length so adjacent entries give us the sector span
+    const sorted = [...mapData.marshalSectors].sort((a, b) => a.length - b.length);
+    const map = new Map<number, { start: number; end: number }>();
+    for (let i = 0; i < sorted.length; i++) {
+      const startLen = i === 0 ? 0 : sorted[i - 1].length;
+      map.set(sorted[i].number, {
+        start: findIdx(startLen),
+        end: findIdx(sorted[i].length),
+      });
+    }
+    console.log(
+      "[TrackMap] Marshal sector boundaries:",
+      map.size,
+      "sectors (arc-length method)",
+    );
+    return map;
   }, [points, mapData]);
 
   // Check track status flags
@@ -595,31 +647,46 @@ export default function TrackMap({
 
   const [minX, minY, widthX, widthY] = bounds;
 
-  // Helper to get points for a specific mini sector
-  // F1 sector numbers in messages appear to be 1-indexed (sector 1, 2, 3...)
-  // but miniSectorsIndexes array is 0-indexed
+  // Helper to get SVG path for a specific yellow-flag sector.
+  // Tries miniSectorBoundaries (from miniSectorsIndexes) first; falls back to
+  // marshalSectorBoundaries (computed from marshalSectors arc lengths — always
+  // available from multiviewer even when miniSectorsIndexes is absent).
   const getMiniSectorPath = (sectorNum: number) => {
-    if (!miniSectorBoundaries || !points) return "";
+    if (!points) return "";
 
-    // Try direct index first (if F1 sends 0-indexed)
-    let index = sectorNum;
-    if (index < 0 || index >= miniSectorBoundaries.length) {
-      // If out of bounds, try 1-indexed (sectorNum - 1)
-      index = sectorNum - 1;
+    // Primary: miniSectorsIndexes-based boundaries (array, 0-indexed internally)
+    if (miniSectorBoundaries) {
+      let index = sectorNum;
+      if (index < 0 || index >= miniSectorBoundaries.length)
+        index = sectorNum - 1;
+      if (index >= 0 && index < miniSectorBoundaries.length) {
+        const boundary = miniSectorBoundaries[index];
+        const sectorPoints = points.slice(boundary.start, boundary.end + 1);
+        if (sectorPoints.length > 0) {
+          return `M${sectorPoints[0].x},${sectorPoints[0].y} ${sectorPoints
+            .map((p) => `L${p.x},${p.y}`)
+            .join(" ")}`;
+        }
+      }
     }
-    if (index < 0 || index >= miniSectorBoundaries.length) return "";
 
-    const boundary = miniSectorBoundaries[index];
-    const sectorPoints = points.slice(boundary.start, boundary.end + 1);
-    if (sectorPoints.length === 0) return "";
+    // Fallback: marshalSectors arc-length boundaries (Map keyed by sector number)
+    if (marshalSectorBoundaries) {
+      const boundary = marshalSectorBoundaries.get(sectorNum);
+      if (boundary) {
+        const sectorPoints = points.slice(boundary.start, boundary.end + 1);
+        if (sectorPoints.length > 0) {
+          console.log(
+            `[TrackMap] Drawing marshal sector ${sectorNum}: points ${boundary.start}-${boundary.end}`,
+          );
+          return `M${sectorPoints[0].x},${sectorPoints[0].y} ${sectorPoints
+            .map((p) => `L${p.x},${p.y}`)
+            .join(" ")}`;
+        }
+      }
+    }
 
-    console.log(
-      `[TrackMap] Drawing sector ${sectorNum} (index ${index}): points ${boundary.start}-${boundary.end}`,
-    );
-
-    return `M${sectorPoints[0].x},${sectorPoints[0].y} ${sectorPoints
-      .map((point) => `L${point.x},${point.y}`)
-      .join(" ")}`;
+    return "";
   };
 
   return (
@@ -724,8 +791,9 @@ export default function TrackMap({
           />
         ))}
 
-        {/* Full track yellow flag when status is yellow but no specific sector */}
-        {isYellowFlag && yellowFlagSectors.size === 0 && (
+        {/* Full track yellow flag when status is yellow but no specific sector,
+            OR when we have sector data but neither boundary source can paint them */}
+        {isYellowFlag && (yellowFlagSectors.size === 0 || (!miniSectorBoundaries && !marshalSectorBoundaries)) && (
           <path
             stroke="#ffb900"
             strokeWidth={220}
