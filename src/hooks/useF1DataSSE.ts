@@ -733,9 +733,9 @@ export function useF1DataSSE(): F1DataState {
       }
     });
 
-    // Proxy signals a session change — clear local driver state immediately
+    // Proxy signals a session change — clear all accumulated state
     eventSource.addEventListener("reset", () => {
-      console.log("[SSE] Session reset received — clearing driver state");
+      console.log("[SSE] Session reset received — clearing state");
       setDrivers([]);
       driverListRef.current = {};
       carDataRef.current = {};
@@ -743,6 +743,8 @@ export function useF1DataSSE(): F1DataState {
       sessionFastestLapRef.current = Infinity;
       sessionFastestDriverRef.current = null;
       qualifyingPartRef.current = undefined;
+      setRaceControlMessages([]);
+      setTeamRadios([]);
     });
 
     eventSource.addEventListener("update", (event) => {

@@ -73,6 +73,7 @@ let carDataDirty = false;
 let carDataTimer = null;
 let locationDirty = false;
 let locationTimer = null;
+let trackedSessionKey = null;
 
 // Raw message debug buffer — last 20 messages per topic (excluding high-freq location/car_data)
 const RAW_MQTT_BUFFER = {};
@@ -215,6 +216,17 @@ function processMessage(topic, message) {
  */
 function handleSession(data) {
   if (!currentStateRef) return;
+
+  if (trackedSessionKey !== null && data.session_key !== trackedSessionKey) {
+    console.log(
+      `[openf1-mqtt] Session changed ${trackedSessionKey} → ${data.session_key} — resetting state`,
+    );
+    for (const key of Object.keys(currentStateRef)) delete currentStateRef[key];
+    if (broadcastFn) broadcastFn("reset", {});
+    fetchHistoricalData(data.session_key);
+  }
+  trackedSessionKey = data.session_key;
+
   currentStateRef.session = {
     session_key: data.session_key,
     session_name: data.session_name || data.session_type,
@@ -1073,6 +1085,7 @@ export function stopMQTT() {
 
   accessToken = null;
   tokenExpiry = null;
+  trackedSessionKey = null;
 }
 
 /**
