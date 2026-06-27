@@ -16,6 +16,7 @@ import CarTelemetry from "@/components/CarTelemetry";
 import Footer from "@/components/Footer";
 import StatusBanner, { BannerConfig } from "@/components/StatusBanner";
 import ReplayBar from "@/components/ReplayBar";
+import AppDrawer from "@/components/AppDrawer";
 import { useF1DataSSE } from "@/hooks/useF1DataSSE";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -34,6 +35,7 @@ export default function DashboardPage() {
     signalrDegraded,
   } = useF1DataSSE();
 
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "map" | "control" | "violations" | "radio"
   >("map");
@@ -88,7 +90,7 @@ export default function DashboardPage() {
     if (radio && radioTime > msgTime) {
       const driver = drivers.find((d) => d.driverNumber === radio.racingNumber);
       return {
-        label: "Radio",
+        label: t("alert.radio"),
         text: driver ? driver.code : `#${radio.racingNumber}`,
         time: radio.utc,
         icon: "📻" as string | null,
@@ -100,7 +102,7 @@ export default function DashboardPage() {
     const m = msg.message;
     const isViolation = m.toUpperCase().includes("TRACK LIMITS");
     return {
-      label: isViolation ? "Violaciones" : "Control de Carrera",
+      label: isViolation ? t("alert.violations") : t("alert.raceControl"),
       color: isViolation ? "text-orange-400" : "text-zinc-400",
       text: msg.message,
       time: msg.utc,
@@ -212,12 +214,19 @@ export default function DashboardPage() {
         trackStatus={trackStatus}
         latestRaceControlMessage={latestRaceControlMessage}
         onBannerComplete={hideBanner}
+        onMenuOpen={() => setDrawerOpen((v) => !v)}
       />
 
-      <main className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <StatusBanner banner={activeBanner} />
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 p-2">
+        <main
+          className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden"
+          onClick={drawerOpen ? () => setDrawerOpen(false) : undefined}
+        >
+          <StatusBanner banner={activeBanner} />
+
+          <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2 p-2">
           {/* Mobile timing board */}
           <div className={`lg:hidden min-h-0 ${tableExpanded ? "flex-1" : "flex-[60]"}`}>
             <MobileTimingBoard
@@ -249,11 +258,11 @@ export default function DashboardPage() {
           {/* Tab panel — full when split, icon-only strip when tableExpanded */}
           {(() => {
             const tabs = [
-              { id: "map",        label: "Mapa",    icon: Map,           color: "#38bdf8" },
-              { id: "control",    label: "Control", icon: Flag,          color: "#facc15" },
-              { id: "violations", label: "Límites", icon: AlertTriangle, color: "#f97316" },
-              { id: "radio",      label: "Radio",   icon: Radio,         color: "#a78bfa" },
-            ] as const;
+              { id: "map"        as const, label: t("tab.map"),     icon: Map,           color: "#38bdf8" },
+              { id: "control"    as const, label: t("tab.control"), icon: Flag,          color: "#facc15" },
+              { id: "violations" as const, label: t("tab.limits"),  icon: AlertTriangle, color: "#f97316" },
+              { id: "radio"      as const, label: t("tab.radio"),   icon: Radio,         color: "#a78bfa" },
+            ];
 
             return (
               <div
@@ -344,8 +353,9 @@ export default function DashboardPage() {
               </div>
             );
           })()}
-        </div>
-      </main>
+          </div>
+        </main>
+      </div>
 
       <Footer />
       <ReplayBar

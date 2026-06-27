@@ -185,6 +185,24 @@ const translations = {
     "weather.dry": "Condiciones secas",
     "weather.wind": "Viento",
 
+    // Dashboard tabs
+    "tab.map": "Mapa",
+    "tab.control": "Control",
+    "tab.limits": "Límites",
+    "tab.radio": "Radio",
+
+    // Alert strip labels
+    "alert.raceControl": "Control de Carrera",
+    "alert.violations": "Violaciones",
+    "alert.radio": "Radio",
+
+    // Drawer nav
+    "drawer.stats": "Estadísticas",
+    "drawer.comparisons": "Comparativas",
+    "drawer.login": "Iniciar sesión",
+    "drawer.soon": "Pronto",
+    "drawer.language": "Idioma",
+
     // Viewers
     "viewers.watching": "Viendo ahora",
     "viewers.count": "{{count}} espectadores",
@@ -372,6 +390,24 @@ const translations = {
     "weather.rain": "Rain detected",
     "weather.dry": "Dry conditions",
     "weather.wind": "Wind",
+
+    // Dashboard tabs
+    "tab.map": "Map",
+    "tab.control": "Control",
+    "tab.limits": "Limits",
+    "tab.radio": "Radio",
+
+    // Alert strip labels
+    "alert.raceControl": "Race Control",
+    "alert.violations": "Violations",
+    "alert.radio": "Radio",
+
+    // Drawer nav
+    "drawer.stats": "Statistics",
+    "drawer.comparisons": "Comparisons",
+    "drawer.login": "Log in",
+    "drawer.soon": "Soon",
+    "drawer.language": "Language",
 
     // Viewers
     "viewers.watching": "Watching now",

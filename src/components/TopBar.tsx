@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Menu } from "lucide-react";
 import { SessionInfo, TrackStatusInfo } from "@/types/f1";
 import { Badge } from "@/components/ui/badge";
 import { TRACK_STATUS } from "@/lib/constants";
 import { useLanguage } from "@/contexts/LanguageContext";
-import LanguageToggle from "./LanguageToggle";
 import ScrollingText from "./ScrollingText";
 
 // Country name to ISO 3166-1 alpha-2 code mapping
@@ -80,6 +80,7 @@ interface TopBarProps {
   trackStatus: TrackStatusInfo;
   latestRaceControlMessage?: { category?: string; message: string };
   onBannerComplete?: () => void;
+  onMenuOpen?: () => void;
 }
 
 export default function TopBar({
@@ -87,6 +88,7 @@ export default function TopBar({
   trackStatus,
   latestRaceControlMessage,
   onBannerComplete,
+  onMenuOpen,
 }: TopBarProps) {
   const statusInfo = TRACK_STATUS[trackStatus.status] || TRACK_STATUS[1];
   // trackStatus.message is authoritative for the text but the numeric code can lag —
@@ -143,8 +145,17 @@ export default function TopBar({
   return (
     <header className="w-full border-b border-zinc-800 bg-zinc-950">
       <div className="flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 gap-2 sm:gap-4">
-        {/* Left side - Logo + session */}
+        {/* Left side - Hamburger + Logo + session */}
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 min-w-0">
+          {/* Hamburger */}
+          <button
+            onClick={onMenuOpen}
+            className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors flex-shrink-0"
+            aria-label="Abrir menú"
+          >
+            <Menu size={20} />
+          </button>
+
           {/* Logo */}
           <a href="/" className="flex items-center gap-2 flex-shrink-0">
             <img
@@ -342,11 +353,6 @@ export default function TopBar({
               </span>
             </div>
           )}
-
-          {/* Language Toggle — desktop only */}
-          <div className="hidden sm:block">
-            <LanguageToggle />
-          </div>
 
           {/* Viewers count — desktop only */}
           {viewers > 0 && (

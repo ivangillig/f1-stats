@@ -1,10 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronDown } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+
+const MP_OPTIONS = [
+  { label: "$2.000",  href: "https://mpago.la/2zPVttH" },
+  { label: "$5.000",  href: "https://mpago.la/1NrWtBf" },
+  { label: "$10.000", href: "https://mpago.la/2vSkUWY" },
+];
 
 export default function SupportModal() {
   const [open, setOpen] = useState(false);
+  const [mpExpanded, setMpExpanded] = useState(false);
   const { t } = useLanguage();
 
   return (
@@ -61,18 +70,47 @@ export default function SupportModal() {
                 </div>
               </a>
 
-              <a
-                href="https://mpago.la/2zPVttH"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 px-4 py-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
-              >
-                <span className="text-xl shrink-0">💙</span>
-                <div>
-                  <div className="text-white text-sm font-semibold">MercadoPago</div>
-                  <div className="text-zinc-400 text-xs">mpago.la/2zPVttH</div>
-                </div>
-              </a>
+              <div className="rounded-lg bg-zinc-800 overflow-hidden">
+                <button
+                  onClick={() => setMpExpanded((v) => !v)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-700 transition-colors"
+                >
+                  <span className="text-xl shrink-0">💙</span>
+                  <div className="flex-1 text-left">
+                    <div className="text-white text-sm font-semibold">MercadoPago</div>
+                  </div>
+                  <ChevronDown
+                    size={15}
+                    className={`text-zinc-500 transition-transform duration-200 ${mpExpanded ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {mpExpanded && (
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: "auto" }}
+                      exit={{ height: 0 }}
+                      transition={{ duration: 0.2, ease: "easeInOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex gap-2 px-4 pt-3 pb-3 border-t border-zinc-700/50">
+                        {MP_OPTIONS.map(({ label, href }) => (
+                          <a
+                            key={label}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 text-center px-2 py-1.5 rounded-md bg-zinc-700 hover:bg-[#009ee3] text-white text-xs font-semibold transition-colors"
+                          >
+                            {label}
+                          </a>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
             <button

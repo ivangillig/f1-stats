@@ -86,7 +86,7 @@ export default function ReplayBar({ proxyMode, sessionName }: ReplayBarProps) {
   const canSeek = status?.dbMode && !seeking;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center gap-3 border-t border-zinc-700/60 bg-zinc-950/95 px-4 py-2 text-xs font-mono backdrop-blur">
+    <div className="flex items-center gap-3 border-t border-zinc-700/60 bg-zinc-950/95 px-4 py-2 text-xs font-mono shrink-0">
       {/* Label */}
       <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-amber-400">
         DEV REPLAY
