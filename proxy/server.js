@@ -5,6 +5,8 @@ import {
   stopReplay,
   isReplayRunning,
   isReplayUsingDB,
+  getReplayStatus,
+  seekReplay,
 } from "./replay.js";
 import {
   ensureLatestSessionArchived,
@@ -262,7 +264,7 @@ async function startFallbackNoLive() {
 // Create HTTP server
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
@@ -375,6 +377,48 @@ const server = http.createServer(async (req, res) => {
   if (req.url === "/api/state") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(currentState));
+    return;
+  }
+
+  // Dev replay scrubber — only available outside production
+  if (
+    (reqUrl.pathname === "/replay/status" ||
+      reqUrl.pathname === "/replay/seek") &&
+    process.env.NODE_ENV === "production"
+  ) {
+    res.writeHead(403, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not available in production" }));
+    return;
+  }
+
+  // Dev replay scrubber — current position + total duration
+  if (req.method === "GET" && reqUrl.pathname === "/replay/status") {
+    const status = getReplayStatus();
+    res.writeHead(status ? 200 : 404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(status || { error: "Replay not running" }));
+    return;
+  }
+
+  // Dev replay scrubber — seek to a target offset (ms from session start)
+  if (req.method === "POST" && reqUrl.pathname === "/replay/seek") {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", async () => {
+      try {
+        const { targetMs } = JSON.parse(body);
+        if (typeof targetMs !== "number" || !isFinite(targetMs)) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "targetMs must be a finite number" }));
+          return;
+        }
+        const ok = await seekReplay(targetMs);
+        res.writeHead(ok ? 200 : 400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok }));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
     return;
   }
 

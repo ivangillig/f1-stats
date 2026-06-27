@@ -15,6 +15,7 @@ import TrackViolations from "@/components/TrackViolations";
 import CarTelemetry from "@/components/CarTelemetry";
 import Footer from "@/components/Footer";
 import StatusBanner, { BannerConfig } from "@/components/StatusBanner";
+import ReplayBar from "@/components/ReplayBar";
 import { useF1DataSSE } from "@/hooks/useF1DataSSE";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -347,6 +348,14 @@ export default function DashboardPage() {
       </main>
 
       <Footer />
+      <ReplayBar
+        proxyMode={proxyMode}
+        sessionName={
+          sessionInfo
+            ? `${sessionInfo.sessionName} · ${sessionInfo.track}`
+            : undefined
+        }
+      />
     </div>
   );
 }

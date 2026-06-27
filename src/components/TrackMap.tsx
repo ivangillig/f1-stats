@@ -263,14 +263,19 @@ export default function TrackMap({
       }
       return lo;
     };
-    // Sort by arc length so adjacent entries give us the sector span
+    // Sort by arc length so adjacent entries give us the sector span.
+    // Each marshal post marks the ENTRY of the sector it guards: drivers see
+    // the flag AT the post and the hazard lies AHEAD (from this post to the next).
     const sorted = [...mapData.marshalSectors].sort((a, b) => a.length - b.length);
+    const totalArcLen = cumLen[points.length - 1];
     const map = new Map<number, { start: number; end: number }>();
     for (let i = 0; i < sorted.length; i++) {
-      const startLen = i === 0 ? 0 : sorted[i - 1].length;
+      const startLen = sorted[i].length;
+      const endLen =
+        i + 1 < sorted.length ? sorted[i + 1].length : totalArcLen;
       map.set(sorted[i].number, {
         start: findIdx(startLen),
-        end: findIdx(sorted[i].length),
+        end: findIdx(endLen),
       });
     }
     console.log(

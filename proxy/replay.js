@@ -80,6 +80,9 @@ const pitData = {};
 // Stint data loaded at startup: { "driverNum": [{ compound, lap_start, lap_end, tyre_age_at_start }] }
 const stintsData = {};
 
+// Starting grid data — kept at module level so seekReplay can rebuild state without a re-fetch
+let startingGridData = {};
+
 // Fetch with [Replay]-tagged logging (shared auth-aware implementation)
 function fetchJSON(url, retries = 4) {
   return fetchJSONShared(url, retries, "[Replay]");
@@ -670,6 +673,7 @@ export async function startReplay(broadcast, stateRef) {
     const { session, drivers } = sessionInfo;
     sessionData = session;
     driversData = drivers;
+    startingGridData = startingGrid;
 
     raceStartTime = await findRaceStart(session.date_start);
 
@@ -693,21 +697,9 @@ export async function startReplay(broadcast, stateRef) {
       `[Replay] Polling every ${POLL_INTERVAL_MS}ms for ${POLL_WINDOW_SECONDS}s windows`,
     );
 
-    // Use recursive setTimeout so each cycle only starts after the previous completes,
-    // preventing overlapping requests that blow the rate limit.
-    const schedulePoll = async () => {
-      if (!replayStarted || gen !== replayGeneration) return;
-      await pollAndBroadcast();
-      if (replayStarted && gen === replayGeneration) {
-        replayInterval = setTimeout(schedulePoll, POLL_INTERVAL_MS);
-      }
-    };
-
     // Do first poll immediately, then schedule subsequent ones
     await pollAndBroadcast();
-    if (replayStarted && gen === replayGeneration) {
-      replayInterval = setTimeout(schedulePoll, POLL_INTERVAL_MS);
-    }
+    scheduleNextPoll(gen);
 
     console.log("[Replay] Replay started!");
     return true;
@@ -716,6 +708,17 @@ export async function startReplay(broadcast, stateRef) {
     replayStarted = false;
     return false;
   }
+}
+
+// Recursive setTimeout scheduling — extracted so seekReplay can reuse the same loop.
+// Each cycle starts only after the previous completes, preventing overlapping requests.
+function scheduleNextPoll(gen) {
+  if (!replayStarted || gen !== replayGeneration) return;
+  replayInterval = setTimeout(async () => {
+    if (!replayStarted || gen !== replayGeneration) return;
+    await pollAndBroadcast();
+    scheduleNextPoll(gen);
+  }, POLL_INTERVAL_MS);
 }
 
 // Poll for new data and broadcast
@@ -835,6 +838,7 @@ export function stopReplay() {
   replayEndMs = 0;
   sessionData = null;
   driversData = [];
+  startingGridData = {};
   raceStartTime = null;
   replayStartRealTime = null;
   lastPollTime = null;
@@ -853,4 +857,83 @@ export function isReplayRunning() {
 // True when the running replay serves from the local SQLite archive
 export function isReplayUsingDB() {
   return replayStarted && dbMode;
+}
+
+// Returns current replay position info for the dev scrubber UI
+export function getReplayStatus() {
+  if (!replayStarted || !raceStartTime || !replayStartRealTime) return null;
+  const realElapsedMs = Date.now() - replayStartRealTime;
+  const currentOffsetMs = Math.max(0, Math.floor(realElapsedMs * REPLAY_SPEED));
+  const totalMs = replayEndMs > 0 ? replayEndMs - raceStartTime.getTime() : 0;
+  return {
+    sessionKey: SESSION_KEY,
+    currentOffsetMs,
+    totalMs,
+    dbMode,
+    speed: REPLAY_SPEED,
+  };
+}
+
+// Seek the replay to a target offset from session start (ms). Only works in DB
+// mode — rebuilds state from SQLite up to the target time, then resumes polling.
+export async function seekReplay(targetOffsetMs) {
+  if (!replayStarted || !raceStartTime || !dbMode) return false;
+
+  const totalMs = replayEndMs > 0 ? replayEndMs - raceStartTime.getTime() : 0;
+  const clampedMs = Math.max(
+    0,
+    totalMs > 0 ? Math.min(targetOffsetMs, totalMs) : targetOffsetMs,
+  );
+  const targetTime = new Date(raceStartTime.getTime() + clampedMs);
+
+  if (replayInterval) {
+    clearTimeout(replayInterval);
+    replayInterval = null;
+  }
+  const gen = ++replayGeneration;
+
+  try {
+    // Clear lap-activity cache so in-pit detection starts fresh
+    Object.keys(lapActivity).forEach((k) => delete lapActivity[k]);
+
+    // Rebuild state from session start to target time in one pass
+    const freshState = buildInitialState(sessionData, driversData, startingGridData);
+    for (const k of Object.keys(currentStateRef)) delete currentStateRef[k];
+    Object.assign(currentStateRef, freshState);
+
+    if (clampedMs > 0) {
+      const allData = await fetchTimeWindow(SESSION_KEY, raceStartTime, targetTime);
+      processData(allData, currentStateRef);
+    }
+
+    updateActiveStints(currentStateRef);
+    updateWeather(currentStateRef, targetTime);
+
+    const sessionType = currentStateRef.session?.session_type;
+    const raceLike = sessionType === "Race" || sessionType === "Sprint";
+    Object.keys(currentStateRef.timing).forEach((num) => {
+      currentStateRef.timing[num].in_pit = raceLike
+        ? isDriverInPit(num, targetTime)
+        : !isDriverOnTrackByLaps(num, targetTime.getTime());
+    });
+
+    // Adjust the virtual clock so polling continues from targetTime
+    replayStartRealTime = Date.now() - clampedMs / REPLAY_SPEED;
+    lastPollTime = targetTime;
+
+    // Tell clients to reset then receive the rebuilt snapshot
+    broadcastFn("reset", {});
+    broadcastFn("initial", currentStateRef);
+
+    scheduleNextPoll(gen);
+
+    const mins = Math.floor(clampedMs / 60000);
+    const secs = String(Math.floor((clampedMs % 60000) / 1000)).padStart(2, "0");
+    console.log(`[Replay] Seeked to ${mins}:${secs} (${targetTime.toISOString()})`);
+    return true;
+  } catch (err) {
+    console.error("[Replay] Seek error:", err.message);
+    scheduleNextPoll(gen); // resume even on error
+    return false;
+  }
 }
