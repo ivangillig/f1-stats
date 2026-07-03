@@ -85,6 +85,7 @@ function recordRawSignalR(topic, data) {
       if (!d) continue;
       const relevant = {};
       if (d.Retired !== undefined) relevant.Retired = d.Retired;
+      if (d.ShowPosition !== undefined) relevant.ShowPosition = d.ShowPosition;
       if (d.InPit !== undefined) relevant.InPit = d.InPit;
       if (d.PitOut !== undefined) relevant.PitOut = d.PitOut;
       if (d.Position !== undefined) relevant.Position = d.Position;
@@ -284,6 +285,12 @@ function processTimingData(data, isSnapshot = false) {
       changed = true;
     } else if (driverData.Retired === false) {
       entry.retired = false;
+      changed = true;
+    }
+    // ShowPosition:false is F1's timing signal that the driver is out/classified.
+    // It arrives a few minutes after a retirement, complementing Retired:true.
+    if (driverData.ShowPosition === false) {
+      entry.retired = true;
       changed = true;
     }
 

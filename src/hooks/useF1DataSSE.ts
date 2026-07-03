@@ -636,7 +636,22 @@ export function useF1DataSSE(): F1DataState {
               const bHasGap = b.gap !== "" || b.position === 1;
               if (aHasGap && bHasGap) {
                 const gapDiff = parseGap(a.gap) - parseGap(b.gap);
-                if (gapDiff !== 0) return gapDiff;
+                if (gapDiff !== 0) {
+                  // If explicit positions strongly contradict the gap order by
+                  // 3+ places, trust position: gap can freeze for a retired or
+                  // stopped driver while SignalR position continues updating.
+                  const posA = a.position;
+                  const posB = b.position;
+                  if (
+                    posA > 0 &&
+                    posB > 0 &&
+                    Math.sign(gapDiff) !== Math.sign(posA - posB) &&
+                    Math.abs(posA - posB) >= 3
+                  ) {
+                    return posA - posB;
+                  }
+                  return gapDiff;
+                }
                 // Same gap bucket (e.g. both "+1 LAP") → fall back to position
                 const posA = a.position;
                 const posB = b.position;
