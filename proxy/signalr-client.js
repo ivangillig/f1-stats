@@ -280,17 +280,15 @@ function processTimingData(data, isSnapshot = false) {
     }
 
     // Retired — driver has stopped/retired from the race.
+    // NOTE: `Retired` is the authoritative retirement flag. We do NOT infer
+    // retirement from `ShowPosition:false` — F1 sets ShowPosition:false for
+    // garage-bound cars in the pre-session snapshot, which would mark the whole
+    // grid as retired at session start (dimmed table + cars pulled off the map).
     if (driverData.Retired === true) {
       entry.retired = true;
       changed = true;
     } else if (driverData.Retired === false) {
       entry.retired = false;
-      changed = true;
-    }
-    // ShowPosition:false is F1's timing signal that the driver is out/classified.
-    // It arrives a few minutes after a retirement, complementing Retired:true.
-    if (driverData.ShowPosition === false) {
-      entry.retired = true;
       changed = true;
     }
 

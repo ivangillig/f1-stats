@@ -74,6 +74,7 @@ let carDataTimer = null;
 let locationDirty = false;
 let locationTimer = null;
 let trackedSessionKey = null;
+let sessionRefreshInFlight = false;
 
 // Raw message debug buffer — last 20 messages per topic (excluding high-freq location/car_data)
 const RAW_MQTT_BUFFER = {};
@@ -156,6 +157,10 @@ function processMessage(topic, message) {
     const topicName = topic.replace("v1/", "");
 
     recordRawMqtt(topicName, data);
+
+    // Self-heal a stale session header: if live data arrives for a session other
+    // than the one currently tracked, refresh session info from that exact key.
+    if (topicName !== "sessions") maybeRefreshSession(data.session_key);
 
     // Update state based on topic
     switch (topicName) {
@@ -705,6 +710,52 @@ async function getCurrentSessionKey() {
 }
 
 /**
+ * Self-heal for stale session header.
+ *
+ * `getCurrentSessionKey()` runs once at connect via `?session_key=latest`, which
+ * lags when a session goes green — it can still return the previous session, so
+ * the header shows stale info even though live MQTT data (location/position) is
+ * already streaming for the new session. Every OpenF1 record carries the true
+ * `session_key`, so when a live message arrives for a session other than the one
+ * in the header, we fetch that specific session and hand it to handleSession
+ * (which resets state + refetches historical). Fetching by explicit key avoids
+ * the `latest` lag entirely.
+ */
+function maybeRefreshSession(sessionKey) {
+  if (
+    sessionRefreshInFlight ||
+    trackedSessionKey === null ||
+    typeof sessionKey !== "number" ||
+    sessionKey === trackedSessionKey
+  ) {
+    return;
+  }
+  sessionRefreshInFlight = true;
+  console.log(
+    `[openf1-mqtt] Live data for session ${sessionKey} but header tracks ${trackedSessionKey} — refreshing session info`,
+  );
+  (async () => {
+    try {
+      const token = await ensureValidToken();
+      const res = await fetch(`${API_BASE}/sessions?session_key=${sessionKey}`, {
+        headers: { accept: "application/json", Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const sessions = await res.json();
+        if (sessions?.length && currentStateRef) {
+          handleSession(sessions[0]);
+          if (broadcastFn) broadcastFn("update", currentStateRef);
+        }
+      }
+    } catch (err) {
+      console.error("[openf1-mqtt] Session refresh failed:", err.message);
+    } finally {
+      sessionRefreshInFlight = false;
+    }
+  })();
+}
+
+/**
  * Fetch historical data for the current session.
  * Called once at startup to fill in data that happened before we connected.
  */
@@ -1095,6 +1146,7 @@ export function stopMQTT() {
   accessToken = null;
   tokenExpiry = null;
   trackedSessionKey = null;
+  sessionRefreshInFlight = false;
 }
 
 /**
