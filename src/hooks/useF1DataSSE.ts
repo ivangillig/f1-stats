@@ -288,6 +288,9 @@ export function useF1DataSSE(): F1DataState {
           const unique = merged.filter(
             (c, i) => merged.findIndex((x) => x.path === c.path) === i,
           );
+          unique.sort(
+            (a, b) => new Date(b.utc).getTime() - new Date(a.utc).getTime(),
+          );
           return unique.slice(0, 20);
         });
       }
@@ -318,7 +321,7 @@ export function useF1DataSSE(): F1DataState {
           unique.sort(
             (a, b) => new Date(b.utc).getTime() - new Date(a.utc).getTime(),
           );
-          return unique.slice(0, 30);
+          return unique.slice(0, 200);
         });
       }
 

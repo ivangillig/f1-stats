@@ -221,7 +221,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-background flex flex-col">
+    <div className="h-dvh overflow-hidden bg-background flex flex-col">
       <TopBar
         session={sessionInfo}
         trackStatus={trackStatus}
