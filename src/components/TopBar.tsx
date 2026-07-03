@@ -4,42 +4,9 @@ import { useState, useEffect } from "react";
 import { Menu } from "lucide-react";
 import { SessionInfo, TrackStatusInfo } from "@/types/f1";
 import { Badge } from "@/components/ui/badge";
-import { TRACK_STATUS } from "@/lib/constants";
+import { TRACK_STATUS, COUNTRY_CODES } from "@/lib/constants";
 import { useLanguage } from "@/contexts/LanguageContext";
 import ScrollingText from "./ScrollingText";
-
-// Country name to ISO 3166-1 alpha-2 code mapping
-const COUNTRY_CODES: Record<string, string> = {
-  Australia: "au",
-  Austria: "at",
-  Azerbaijan: "az",
-  Bahrain: "bh",
-  Belgium: "be",
-  Brazil: "br",
-  Canada: "ca",
-  China: "cn",
-  France: "fr",
-  Germany: "de",
-  "Great Britain": "gb",
-  Hungary: "hu",
-  Italy: "it",
-  Japan: "jp",
-  Mexico: "mx",
-  Monaco: "mc",
-  Netherlands: "nl",
-  Portugal: "pt",
-  Qatar: "qa",
-  Russia: "ru",
-  "Saudi Arabia": "sa",
-  Singapore: "sg",
-  Spain: "es",
-  UAE: "ae",
-  "United Arab Emirates": "ae",
-  "United States": "us",
-  USA: "us",
-  "Las Vegas": "us",
-  Miami: "us",
-};
 
 function getCountryCode(country: string): string {
   return COUNTRY_CODES[country] || "un";
