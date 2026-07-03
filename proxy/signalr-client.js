@@ -344,9 +344,9 @@ const STATUS_TO_FLAG = {
   4: "SC",
   5: "RED",
   6: "VSC",
-  // SignalR 7 = VSCEnding (transitional — track still under VSC rules).
+  // SignalR 7 = VSCEnding (transitional — delta still active until AllClear).
   // The real chequered arrives via OpenF1 race_control flag:"CHEQUERED".
-  7: "VSC",
+  7: "VSC ENDING",
 };
 
 function processTrackStatus(data) {

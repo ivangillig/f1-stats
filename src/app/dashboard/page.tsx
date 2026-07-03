@@ -58,11 +58,15 @@ export default function DashboardPage() {
         newestMessage &&
         newestMessage.message !== lastShownMessageRef.current
       ) {
+        const isRace = /^(Race|Sprint)$/i.test(sessionInfo.sessionName);
         const isInterestingMessage =
           !newestMessage.message.includes("CLEAR IN TRACK SECTOR") &&
           !newestMessage.message.includes("TRACK SURFACE SLIPPERY") &&
           !newestMessage.message.includes("WAVED BLUE FLAG") &&
-          !newestMessage.message.includes("BLUE FLAG");
+          !newestMessage.message.includes("BLUE FLAG") &&
+          // In race/sprint, "time deleted" notices are not actionable for viewers
+          !(isRace && newestMessage.message.includes("DELETED")) &&
+          !(isRace && newestMessage.message.includes("WILL BE REINSTATED"));
         if (isInterestingMessage) {
           lastShownMessageRef.current = newestMessage.message;
           setLatestRaceControlMessage({
@@ -72,7 +76,7 @@ export default function DashboardPage() {
         }
       }
     }
-  }, [raceControlMessages]);
+  }, [raceControlMessages, sessionInfo.sessionName]);
 
   const hideBanner = useCallback(
     () => setLatestRaceControlMessage(undefined),
@@ -80,7 +84,16 @@ export default function DashboardPage() {
   );
 
   const latestAlert = (() => {
-    const msg = raceControlMessages[0];
+    const isRace = /^(Race|Sprint)$/i.test(sessionInfo.sessionName);
+    const allMsgs = raceControlMessages.filter(
+      (m) =>
+        !m.message.includes("CLEAR IN TRACK SECTOR") &&
+        !m.message.includes("WAVED BLUE FLAG") &&
+        !m.message.includes("BLUE FLAG") &&
+        !(isRace && m.message.includes("DELETED")) &&
+        !(isRace && m.message.includes("WILL BE REINSTATED")),
+    );
+    const msg = allMsgs[0];
     const radio = teamRadios[0];
     const msgTime = msg ? new Date(msg.utc).getTime() : 0;
     const radioTime = radio ? new Date(radio.utc).getTime() : 0;

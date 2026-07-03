@@ -55,7 +55,7 @@ const defaultTrackStatus: TrackStatusInfo = {
   message: "",
 };
 
-// Map OpenF1 track flag string to numeric status used by the UI
+// Map OpenF1/SignalR track flag string to numeric status used by the UI
 const FLAG_TO_STATUS: Record<string, number> = {
   GREEN: 1,
   YELLOW: 2,
@@ -63,6 +63,7 @@ const FLAG_TO_STATUS: Record<string, number> = {
   RED: 5,
   VSC: 6,
   CHEQUERED: 7,
+  "VSC ENDING": 8,
 };
 
 // Format raw seconds to "M:SS.mmm" lap time string
