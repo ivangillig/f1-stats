@@ -27,6 +27,10 @@ export function getDB() {
   db = new Database(DB_PATH);
   db.pragma("journal_mode = WAL");
   db.pragma("busy_timeout = 5000");
+  // Flush WAL to main file every 5 min so a plain .db copy is always safe.
+  setInterval(() => {
+    try { db.pragma("wal_checkpoint(PASSIVE)"); } catch { /* ignore */ }
+  }, 5 * 60 * 1000).unref();
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       session_key INTEGER PRIMARY KEY,
