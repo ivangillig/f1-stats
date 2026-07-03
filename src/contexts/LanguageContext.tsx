@@ -203,6 +203,28 @@ const translations = {
     "drawer.soon": "Pronto",
     "drawer.language": "Idioma",
 
+    // Auth
+    "auth.signIn": "Iniciar sesión con Google",
+    "auth.signOut": "Cerrar sesión",
+    "auth.myProfile": "Mi perfil",
+
+    // Profile page
+    "profile.backToDashboard": "Volver al dashboard",
+    "profile.free": "Gratis",
+    "profile.pro": "Pro",
+    "profile.editSection": "Editar perfil",
+    "profile.displayName": "Nombre visible",
+    "profile.displayNameHint": "Opcional. Se mostrará en el drawer si es diferente a tu nombre de Google.",
+    "profile.country": "País",
+    "profile.selectCountry": "Seleccioná tu país",
+    "profile.favoriteTeam": "Equipo favorito",
+    "profile.selectTeam": "Seleccioná un equipo",
+    "profile.favoriteDriver": "Piloto favorito",
+    "profile.favoriteDriverPlaceholder": "Nombre o número (ej: Verstappen, 16)",
+    "profile.save": "Guardar cambios",
+    "profile.saved": "¡Guardado!",
+    "profile.googleNote": "El nombre, email e imagen provienen de tu cuenta de Google.",
+
     // Viewers
     "viewers.watching": "Viendo ahora",
     "viewers.count": "{{count}} espectadores",
@@ -408,6 +430,28 @@ const translations = {
     "drawer.login": "Log in",
     "drawer.soon": "Soon",
     "drawer.language": "Language",
+
+    // Auth
+    "auth.signIn": "Sign in with Google",
+    "auth.signOut": "Sign out",
+    "auth.myProfile": "My profile",
+
+    // Profile page
+    "profile.backToDashboard": "Back to dashboard",
+    "profile.free": "Free",
+    "profile.pro": "Pro",
+    "profile.editSection": "Edit profile",
+    "profile.displayName": "Display name",
+    "profile.displayNameHint": "Optional. Shown in the drawer instead of your Google name.",
+    "profile.country": "Country",
+    "profile.selectCountry": "Select your country",
+    "profile.favoriteTeam": "Favorite team",
+    "profile.selectTeam": "Select a team",
+    "profile.favoriteDriver": "Favorite driver",
+    "profile.favoriteDriverPlaceholder": "Name or number (e.g. Verstappen, 16)",
+    "profile.save": "Save changes",
+    "profile.saved": "Saved!",
+    "profile.googleNote": "Name, email and photo come from your Google account.",
 
     // Viewers
     "viewers.watching": "Watching now",

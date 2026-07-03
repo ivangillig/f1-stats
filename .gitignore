@@ -62,3 +62,6 @@ logs/
 proxy/recordings/
 proxy/data/
 
+# User profile store (JSON-file "DB" — runtime user data, never commit)
+/data/
+

@@ -3,8 +3,10 @@
 import { useEffect } from "react";
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, BarChart2, GitCompare, User, ChevronLeft } from "lucide-react";
+import { LayoutDashboard, BarChart2, GitCompare, UserCircle, ChevronLeft, LogIn, LogOut } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
+import { useSession, signIn, signOut } from "next-auth/react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 interface AppDrawerProps {
@@ -21,6 +23,7 @@ const LANGUAGES = [
 
 export default function AppDrawer({ open, onClose }: AppDrawerProps) {
   const { language, setLanguage, t } = useLanguage();
+  const { data: session, status } = useSession();
 
   const navItems: Array<{
     icon: React.ElementType;
@@ -29,10 +32,9 @@ export default function AppDrawer({ open, onClose }: AppDrawerProps) {
     active?: boolean;
     soon?: boolean;
   }> = [
-    { icon: LayoutDashboard, label: "Dashboard",             href: "/dashboard", active: true },
+    { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", active: true },
     { icon: BarChart2,       label: t("drawer.stats"),       soon: true },
     { icon: GitCompare,      label: t("drawer.comparisons"), soon: true },
-    { icon: User,            label: t("drawer.login"),       soon: true },
   ];
 
   useEffect(() => {
@@ -97,6 +99,66 @@ export default function AppDrawer({ open, onClose }: AppDrawerProps) {
 
             {/* Footer */}
             <div className="border-t border-zinc-800">
+              {/* User section */}
+              <div className="px-4 py-3 border-b border-zinc-800/60">
+                {status === "loading" ? (
+                  <div className="h-9 bg-zinc-800/60 rounded-lg animate-pulse" />
+                ) : session?.user ? (
+                  <>
+                    {/* Logged in */}
+                    <div className="flex items-center gap-2.5 mb-2.5">
+                      {session.user.image ? (
+                        <Image
+                          src={session.user.image}
+                          alt={session.user.name ?? ""}
+                          width={32}
+                          height={32}
+                          className="rounded-full border border-zinc-700 shrink-0"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-300 shrink-0">
+                          {(session.user.name ?? "?")[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-zinc-200 truncate">
+                          {session.user.name}
+                        </p>
+                        <p className="text-[10px] text-zinc-500 truncate">
+                          {session.user.email}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Link
+                        href="/profile"
+                        onClick={onClose}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 hover:text-zinc-100 transition-colors"
+                      >
+                        <UserCircle size={13} />
+                        {t("auth.myProfile")}
+                      </Link>
+                      <button
+                        onClick={() => signOut({ callbackUrl: "/" })}
+                        className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+                      >
+                        <LogOut size={13} />
+                        {t("auth.signOut")}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  /* Not logged in */
+                  <button
+                    onClick={() => signIn("google", { callbackUrl: "/profile" })}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 hover:text-zinc-100 transition-colors"
+                  >
+                    <LogIn size={15} className="text-zinc-400" />
+                    {t("auth.signIn")}
+                  </button>
+                )}
+              </div>
+
               {/* Language switcher */}
               <div className="px-4 py-3 flex items-center gap-2 border-b border-zinc-800/60">
                 <span className="text-xs text-zinc-500 whitespace-nowrap mr-1">{t("drawer.language")}</span>
