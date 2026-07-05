@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, BarChart2, GitCompare, User, ChevronLeft } from "lucide-react";
+import { LayoutDashboard, Trophy, GitCompare, User, ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -30,7 +30,7 @@ export default function AppDrawer({ open, onClose }: AppDrawerProps) {
     soon?: boolean;
   }> = [
     { icon: LayoutDashboard, label: "Dashboard",             href: "/dashboard", active: true },
-    { icon: BarChart2,       label: t("drawer.stats"),       soon: true },
+    { icon: Trophy,          label: t("drawer.standings"),   href: "/standings" },
     { icon: GitCompare,      label: t("drawer.comparisons"), soon: true },
     { icon: User,            label: t("drawer.login"),       soon: true },
   ];

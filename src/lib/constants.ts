@@ -109,6 +109,33 @@ export const COUNTRY_CODES: Record<string, string> = {
   Miami: "us",
 };
 
+// Driver acronym → ISO 3166-1 alpha-2 code (for flagcdn.com nationality flags).
+// Covers the 2026 grid; missing entries simply render without a flag.
+export const DRIVER_NATIONALITY: Record<string, string> = {
+  NOR: "gb", // Lando Norris
+  VER: "nl", // Max Verstappen
+  BOR: "br", // Gabriel Bortoleto
+  HAD: "fr", // Isack Hadjar
+  GAS: "fr", // Pierre Gasly
+  PER: "mx", // Sergio Pérez
+  ANT: "it", // Kimi Antonelli
+  ALO: "es", // Fernando Alonso
+  LEC: "mc", // Charles Leclerc
+  STR: "ca", // Lance Stroll
+  ALB: "th", // Alexander Albon
+  HUL: "de", // Nico Hülkenberg
+  LAW: "nz", // Liam Lawson
+  OCO: "fr", // Esteban Ocon
+  LIN: "gb", // Arvid Lindblad
+  COL: "ar", // Franco Colapinto
+  HAM: "gb", // Lewis Hamilton
+  SAI: "es", // Carlos Sainz
+  RUS: "gb", // George Russell
+  BOT: "fi", // Valtteri Bottas
+  PIA: "au", // Oscar Piastri
+  BEA: "gb", // Oliver Bearman
+};
+
 // Country name to flag emoji mapping
 export const COUNTRY_FLAGS: Record<string, string> = {
   Australia: "🇦🇺",

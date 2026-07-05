@@ -467,10 +467,23 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Sessions proxy — forwards to OpenF1 with auth credentials when available
-  if (reqUrl.pathname.startsWith("/api/sessions")) {
+  // OpenF1 read-through proxy — forwards whitelisted GET endpoints to OpenF1
+  // with paid-tier auth when available (higher rate limit, no 429 bursts).
+  // Used by the landing (sessions) and the standings page (championship, etc.).
+  const OPENF1_PASSTHROUGH = [
+    "/api/sessions",
+    "/api/championship_drivers",
+    "/api/championship_teams",
+    "/api/drivers",
+    "/api/meetings",
+  ];
+  const passthrough = OPENF1_PASSTHROUGH.find((p) =>
+    reqUrl.pathname.startsWith(p),
+  );
+  if (passthrough) {
+    const endpoint = passthrough.slice("/api/".length);
     const queryString = reqUrl.search;
-    const upstreamUrl = `https://api.openf1.org/v1/sessions${queryString}`;
+    const upstreamUrl = `https://api.openf1.org/v1/${endpoint}${queryString}`;
     try {
       const headers = { Accept: "application/json" };
       if (hasMQTTCredentials()) {

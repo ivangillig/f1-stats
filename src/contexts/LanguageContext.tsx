@@ -198,10 +198,19 @@ const translations = {
 
     // Drawer nav
     "drawer.stats": "Estadísticas",
+    "drawer.standings": "Campeonato",
     "drawer.comparisons": "Comparativas",
     "drawer.login": "Iniciar sesión",
     "drawer.soon": "Pronto",
     "drawer.language": "Idioma",
+
+    // Standings / Championship
+    "standings.title": "Campeonato Mundial",
+    "standings.drivers": "Pilotos",
+    "standings.teams": "Constructores",
+    "standings.updatedAfter": "Actualizado tras",
+    "standings.unavailable": "Clasificación no disponible",
+    "standings.source": "Datos: OpenF1",
 
     // Viewers
     "viewers.watching": "Viendo ahora",
@@ -404,10 +413,19 @@ const translations = {
 
     // Drawer nav
     "drawer.stats": "Statistics",
+    "drawer.standings": "Standings",
     "drawer.comparisons": "Comparisons",
     "drawer.login": "Log in",
     "drawer.soon": "Soon",
     "drawer.language": "Language",
+
+    // Standings / Championship
+    "standings.title": "World Championship",
+    "standings.drivers": "Drivers",
+    "standings.teams": "Constructors",
+    "standings.updatedAfter": "Updated after",
+    "standings.unavailable": "Standings unavailable",
+    "standings.source": "Data: OpenF1",
 
     // Viewers
     "viewers.watching": "Watching now",
