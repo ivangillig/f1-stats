@@ -26,6 +26,22 @@ export const TEAM_LOGOS: Record<string, string> = {
   "Haas F1 Team": "/images/teams/haas.png",
 };
 
+// 2026 team name (as returned by OpenF1) → logo file. Teams without a matching
+// asset fall back to a colour chip.
+export const TEAM_LOGOS_2026: Record<string, string> = {
+  Mercedes: "/images/teams/mercedes.png",
+  Ferrari: "/images/teams/ferrari.png",
+  McLaren: "/images/teams/mclaren.png",
+  "Red Bull Racing": "/images/teams/redbull.png",
+  Alpine: "/images/teams/alpine.png",
+  "Racing Bulls": "/images/teams/rb.png",
+  "Haas F1 Team": "/images/teams/haas.png",
+  Williams: "/images/teams/williams.png",
+  "Aston Martin": "/images/teams/astonmartin.jpg",
+  Audi: "/images/teams/audi.webp",
+  Cadillac: "/images/teams/cadillac.png",
+};
+
 export const TIRE_COMPOUNDS: Record<string, { color: string; name: string }> = {
   SOFT: { color: "#FF3333", name: "Soft" },
   MEDIUM: { color: "#FFD700", name: "Medium" },

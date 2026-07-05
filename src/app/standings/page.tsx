@@ -11,19 +11,12 @@ import {
   DriverStanding,
   TeamStanding,
 } from "@/hooks/useChampionship";
-import { DRIVER_NATIONALITY } from "@/lib/constants";
+import { DRIVER_NATIONALITY, TEAM_LOGOS_2026 } from "@/lib/constants";
 
 const f1Font = { fontFamily: "'Formula1 Display', sans-serif" } as const;
 const f1Wide = { fontFamily: "'Formula1 Display Wide', sans-serif" } as const;
 
 type View = "drivers" | "teams";
-
-// Medal tints for the top three positions.
-const PODIUM: Record<number, string> = {
-  1: "#FFD700",
-  2: "#C0C0C0",
-  3: "#CD7F32",
-};
 
 function hex(c: string) {
   return c.startsWith("#") ? c : `#${c}`;
@@ -103,6 +96,37 @@ function Avatar({ driver }: { driver: DriverStanding }) {
         </span>
       )}
     </div>
+  );
+}
+
+function TeamLogo({ teamName, colour }: { teamName: string; colour: string }) {
+  const [failed, setFailed] = useState(false);
+  const logo = TEAM_LOGOS_2026[teamName];
+  const c = hex(colour);
+
+  if (logo && !failed) {
+    return (
+      <div
+        className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-white/[0.06] p-1"
+        style={{ boxShadow: `inset 0 0 0 1px ${c}55` }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={logo}
+          alt={teamName}
+          className="h-full w-full object-contain"
+          onError={() => setFailed(true)}
+        />
+      </div>
+    );
+  }
+
+  // Fallback: solid colour chip (teams without a logo asset).
+  return (
+    <span
+      className="h-9 w-9 flex-none rounded-md"
+      style={{ background: c, boxShadow: `0 0 18px -6px ${c}` }}
+    />
   );
 }
 
@@ -260,11 +284,7 @@ function TeamRow({
         <Delta start={t.positionStart} current={t.position} />
       </div>
 
-      {/* team colour chip */}
-      <span
-        className="h-9 w-9 rounded-md flex-none"
-        style={{ background: colour, boxShadow: `0 0 18px -6px ${colour}` }}
-      />
+      <TeamLogo teamName={t.teamName} colour={t.teamColour} />
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
