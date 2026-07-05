@@ -268,7 +268,7 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
             )}
             <motion.div className="text-center" {...stagger(2)}>
               <h1
-                className="text-[clamp(1.5rem,7vw,3.75rem)] sm:text-6xl md:text-7xl uppercase text-white leading-none tracking-tight"
+                className="text-[clamp(1.5rem,7vw,3.75rem)] sm:text-6xl md:text-[3.6rem] uppercase text-white leading-none tracking-tight"
                 style={f1Wide}
               >
                 {nextSession.location}
