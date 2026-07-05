@@ -1,10 +1,13 @@
 "use client";
 
+import { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import F1TrackBackground from "@/components/F1TrackBackground";
 import LanguageToggle from "@/components/LanguageToggle";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useNextF1Session, OpenF1Session } from "@/hooks/useNextF1Session";
 import { COUNTRY_CODES } from "@/lib/constants";
+import { getCircuitTrack } from "@/data/circuits";
 
 interface ReplaySession {
   meetingName: string;
@@ -182,10 +185,12 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
   const { t, language } = useLanguage();
   const { nextSession, weekendSessions, loading, countdown } =
     useNextF1Session();
+  const contentColumnRef = useRef<HTMLDivElement>(null);
 
   const countryCode = nextSession
     ? COUNTRY_CODES[nextSession.country_name]
     : null;
+  const circuitTrack = getCircuitTrack(nextSession?.circuit_short_name);
 
   const countdownUnits = [
     { value: countdown.days, label: t("landing.countdown.days") },
@@ -209,6 +214,9 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
         `,
       }}
     >
+      {/* Three.js ambient circuit background */}
+      <F1TrackBackground circuitTrack={circuitTrack} contentColumnRef={contentColumnRef} />
+
       {/* Subtle red glow from bottom */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -234,7 +242,11 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
       </div>
 
       {/* Main */}
-      <main className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-center px-4 py-2 sm:py-6 gap-2 sm:gap-6">
+      <main className="relative z-10 flex-1 min-h-0 flex flex-col md:flex-row items-center justify-center md:justify-start px-4 py-2 sm:py-6">
+      <div
+        ref={contentColumnRef}
+        className="w-full md:w-[50%] lg:w-[46%] flex flex-col items-center gap-2 sm:gap-6 md:pl-[3%] lg:pl-[5%] [container-type:inline-size]"
+      >
         {/* "PRÓXIMA CARRERA" label */}
         <motion.div className="flex items-center gap-3" {...stagger(0)}>
           <div className="w-10 h-px bg-primary opacity-70" />
@@ -268,8 +280,17 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
             )}
             <motion.div className="text-center" {...stagger(2)}>
               <h1
-                className="text-[clamp(1.5rem,7vw,3.75rem)] sm:text-6xl md:text-7xl uppercase text-white leading-none tracking-tight"
-                style={f1Wide}
+                className="uppercase text-white leading-none tracking-tight"
+                style={{
+                  ...f1Wide,
+                  // Container-relative sizing (not just viewport-relative) so
+                  // long names (e.g. "Spa-Francorchamps") shrink to fit the
+                  // narrower column instead of wrapping and clipping.
+                  fontSize: `clamp(1.5rem, ${Math.min(
+                    12,
+                    82 / nextSession.location.length
+                  )}cqw, 4.25rem)`,
+                }}
               >
                 {nextSession.location}
               </h1>
@@ -400,68 +421,69 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
             )}
           </>
         )}
-      </main>
 
-      {/* CTA */}
-      <footer className="relative z-10 shrink-0 flex flex-col items-center gap-2 sm:gap-3 py-3 sm:py-8 px-4">
-        <AnimatePresence mode="wait">
-          {proxyAvailable && replaySession?.meetingName ? (
-            <motion.div
-              key="cta"
-              className="flex flex-col items-center gap-2"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-            >
-              <motion.button
-                onClick={onEnterDemo}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.97 }}
-                className="group flex items-center gap-3 bg-primary hover:bg-primary/90 text-white px-6 sm:px-10 py-4 text-sm uppercase tracking-[0.12em] sm:tracking-[0.2em] transition-colors whitespace-nowrap"
-                style={{ ...f1Font, fontWeight: 700 }}
+        {/* CTA — sits below the info, aligned with this column */}
+        <div className="w-full flex flex-col items-center gap-2 sm:gap-3 mt-2 sm:mt-4">
+          <AnimatePresence mode="wait">
+            {proxyAvailable && replaySession?.meetingName ? (
+              <motion.div
+                key="cta"
+                className="flex flex-col items-center gap-2"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
               >
-                <span>{t("landing.enterDemo")}</span>
-                <motion.span
-                  className="text-white/60 group-hover:text-white transition-colors"
-                  animate={{ x: [0, 5, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
+                <motion.button
+                  onClick={onEnterDemo}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="group flex items-center gap-3 bg-primary hover:bg-primary/90 text-white px-6 sm:px-10 py-4 text-sm uppercase tracking-[0.12em] sm:tracking-[0.2em] transition-colors whitespace-nowrap"
+                  style={{ ...f1Font, fontWeight: 700 }}
                 >
-                  →
-                </motion.span>
-              </motion.button>
-              <p className="text-[11px] text-zinc-600 tracking-wide" style={f1Font}>
-                {replaySession
-                  ? `${replaySession.meetingName} · ${replaySession.sessionName} · ${replaySession.circuitName}`
-                  : t("landing.replayInfo")}
-              </p>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="connecting"
-              className="flex flex-col items-center gap-2"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="flex gap-1.5">
-                {[0, 1, 2].map((i) => (
-                  <motion.div
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-zinc-600"
-                    animate={{ opacity: [0.3, 1, 0.3] }}
-                    transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }}
-                  />
-                ))}
-              </div>
-              <p className="text-[11px] text-zinc-600 tracking-[0.2em] uppercase" style={f1Font}>
-                {t("error.connection")}
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </footer>
+                  <span>{t("landing.enterDemo")}</span>
+                  <motion.span
+                    className="text-white/60 group-hover:text-white transition-colors"
+                    animate={{ x: [0, 5, 0] }}
+                    transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
+                  >
+                    →
+                  </motion.span>
+                </motion.button>
+                <p className="text-[11px] text-zinc-600 tracking-wide" style={f1Font}>
+                  {replaySession
+                    ? `${replaySession.meetingName} · ${replaySession.sessionName} · ${replaySession.circuitName}`
+                    : t("landing.replayInfo")}
+                </p>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="connecting"
+                className="flex flex-col items-center gap-2"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <div className="flex gap-1.5">
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-zinc-600"
+                      animate={{ opacity: [0.3, 1, 0.3] }}
+                      transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }}
+                    />
+                  ))}
+                </div>
+                <p className="text-[11px] text-zinc-600 tracking-[0.2em] uppercase" style={f1Font}>
+                  {t("error.connection")}
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+      </main>
     </div>
   );
 }
