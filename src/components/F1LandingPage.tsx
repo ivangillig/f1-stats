@@ -405,7 +405,7 @@ export default function F1LandingPage({ onEnterDemo, replaySession, activeViewer
       {/* CTA */}
       <footer className="relative z-10 shrink-0 flex flex-col items-center gap-2 sm:gap-3 py-3 sm:py-8 px-4">
         <AnimatePresence mode="wait">
-          {proxyAvailable && replaySession?.meetingName ? (
+          {proxyAvailable ? (
             <motion.div
               key="cta"
               className="flex flex-col items-center gap-2"
