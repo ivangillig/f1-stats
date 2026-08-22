@@ -258,10 +258,12 @@ function processTimingData(data, isSnapshot = false) {
     }
     if (driverData.LastLapTime !== undefined) {
       const seconds = parseF1Time(driverData.LastLapTime?.Value);
-      // Reject values ≥600s — SignalR sometimes sends elapsed session time
-      // (e.g. "21:56.685") instead of a real lap time for drivers who haven't
-      // completed a lap in the current qualifying part yet.
-      if (seconds != null && seconds < 600) {
+      // Reject values >=150s — SignalR sometimes sends elapsed session time
+      // (e.g. "21:56.685" or "9:24.xxx") instead of a real lap time for drivers
+      // who haven't completed a lap in the current qualifying part yet. A real
+      // F1 lap never exceeds ~2:30 (150s), and replay.js uses the same bound to
+      // decide what counts as a timed lap.
+      if (seconds != null && seconds < 150) {
         entry.last_lap = seconds;
       } else {
         entry.last_lap = null;

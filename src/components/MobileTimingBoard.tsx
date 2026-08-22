@@ -270,6 +270,10 @@ export default function MobileTimingBoard({
   const eliminationCutoff = (() => {
     if (!qualifyingPart || qualifyingPart === 3) return null;
     const active = drivers.filter((d) => !d.knockedOut).length;
+    // Q3 always has exactly 10 cars left (2026 grid). If the driver count is
+    // already <=10 we're in Q3 regardless of qualifyingPart (which can go stale
+    // when the SessionPart=3 update is missed), so there is never a red zone.
+    if (active <= 10) return null;
     return active - 6 + 1;
   })();
 

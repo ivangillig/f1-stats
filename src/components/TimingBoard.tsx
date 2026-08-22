@@ -44,6 +44,10 @@ export default function TimingBoard({
   const eliminationCutoff = (() => {
     if (!qualifyingPart || qualifyingPart === 3) return null;
     const activeDrivers = drivers.filter((d) => !d.knockedOut).length;
+    // Q3 always has exactly 10 cars left (2026 grid). If the driver count is
+    // already <=10 we're in Q3 regardless of qualifyingPart (which can go stale
+    // when the SessionPart=3 update is missed), so there is never a red zone.
+    if (activeDrivers <= 10) return null;
     return activeDrivers - 6 + 1;
   })();
 

@@ -440,14 +440,15 @@ function handleLap(data, fromHistory = false) {
     } else {
       entry.last_lap_is_pb = false;
     }
-    // Lap is confirmed complete — clear live sector data so next lap starts clean
-    // (SignalR will repopulate segment-by-segment as the new lap progresses)
+    // Lap is confirmed complete — clear live *segment* data so the next lap's
+    // mini-sectors start clean (SignalR will repopulate them segment-by-segment
+    // as the new lap progresses). Do NOT clear the sector times here: S3 is only
+    // known at the finish line, so clearing sector_3 here erases it before it's
+    // ever shown (bug #9). Sector times are overwritten as the next lap's
+    // sectors complete.
     entry.segments_1 = [];
     entry.segments_2 = [];
     entry.segments_3 = [];
-    entry.sector_1 = null;
-    entry.sector_2 = null;
-    entry.sector_3 = null;
   }
 
   // Advance the global lap counter

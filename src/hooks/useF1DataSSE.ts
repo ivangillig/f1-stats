@@ -161,6 +161,13 @@ export function useF1DataSSE(): F1DataState {
   // Track qualifying part so we can reset fastest-lap tracking when it advances
   const qualifyingPartRef = useRef<number | undefined>(undefined);
 
+  // Whether the official SignalR feed is the authoritative live position source
+  // (mqtt-live mode with SignalR connected). When true, race positions update on
+  // every change and are the correct sort key. When false (replay, live-polling,
+  // or a degraded mqtt session without SignalR), position can be stale, so we
+  // fall back to sorting by gap.
+  const signalrOwnsPositionRef = useRef(false);
+
   const processData = useCallback((data: any) => {
     if (!data) return;
 
@@ -630,6 +637,16 @@ export function useF1DataSSE(): F1DataState {
                 if (g.startsWith("+")) return parseFloat(g.slice(1)) || 0;
                 return 99999; // any other non-numeric → end
               };
+
+              // When SignalR is the authoritative live position source it updates
+              // position on every change, making position the correct primary
+              // sort key. Gap can diverge from the real running order during VSC
+              // or pit stops and made the leaderboard look wrong (bug #12).
+              if (signalrOwnsPositionRef.current && a.position > 0 && b.position > 0) {
+                if (a.position !== b.position) return a.position - b.position;
+                return parseGap(a.gap) - parseGap(b.gap);
+              }
+
               // A driver "has gap data" if their gap string is non-empty, OR
               // if they are the known leader (position === 1, gap deliberately "").
               const aHasGap = a.gap !== "" || a.position === 1;
@@ -910,6 +927,8 @@ export function useF1DataSSE(): F1DataState {
         .then((data) => {
           if (data.status !== "ok") return;
           setProxyMode(data.mode ?? null);
+          signalrOwnsPositionRef.current =
+            data.mode === "mqtt-live" && data.signalrRunning === true;
           // Degraded only when we actually have a live session running on MQTT
           // but SignalR isn't connected. In replay/standby a missing SignalR is
           // expected, so we don't warn there.
