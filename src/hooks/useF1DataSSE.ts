@@ -129,6 +129,14 @@ export function useF1DataSSE(): F1DataState {
   const statusPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const clockIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectedRef = useRef(false);
+  // Stale-connection watchdog: tracks the last time an SSE event actually
+  // arrived. If the stream silently stops delivering (a half-dead socket buffers
+  // writes without throwing, so onerror never fires), we force a reconnect so
+  // the dashboard self-heals instead of freezing until the user refreshes.
+  const lastSseEventRef = useRef<number>(Date.now());
+  const staleWatchdogRef = useRef<NodeJS.Timeout | null>(null);
+  const STALE_EVENT_MS = 45000; // no SSE event in 45s → stale, force reconnect
+  const WATCHDOG_CHECK_MS = 10000;
 
   // Clock data received from the proxy (data.clock)
   const clockRef = useRef<{ utc: string; remaining: string; extrapolating?: boolean } | null>(null);
@@ -741,6 +749,7 @@ export function useF1DataSSE(): F1DataState {
 
     eventSource.onopen = () => {
       console.log("[SSE] Connected");
+      lastSseEventRef.current = Date.now();
       setIsConnected(true);
       isConnectedRef.current = true;
       setError(null);
@@ -753,6 +762,7 @@ export function useF1DataSSE(): F1DataState {
     eventSource.addEventListener("initial", (event) => {
       const data = JSON.parse(event.data);
       const hasData = Object.keys(data).length > 0;
+      lastSseEventRef.current = Date.now();
       console.log(
         "[SSE] Received initial state",
         hasData
@@ -777,6 +787,7 @@ export function useF1DataSSE(): F1DataState {
 
     // Proxy signals a session change — clear all accumulated state
     eventSource.addEventListener("reset", () => {
+      lastSseEventRef.current = Date.now();
       console.log("[SSE] Session reset received — clearing state");
       setDrivers([]);
       driverListRef.current = {};
@@ -791,6 +802,7 @@ export function useF1DataSSE(): F1DataState {
 
     eventSource.addEventListener("update", (event) => {
       const data = JSON.parse(event.data);
+      lastSseEventRef.current = Date.now();
       processData(data);
     });
 
@@ -804,6 +816,21 @@ export function useF1DataSSE(): F1DataState {
         connect();
       }, 5000);
     };
+
+    // Stale-connection watchdog — reconnect if the stream goes quiet for too
+    // long. This recovers the case where the EventSource stays "open" but the
+    // proxy's writes buffer on a half-dead socket and never arrive, leaving the
+    // dashboard frozen on stale data until a manual refresh.
+    if (staleWatchdogRef.current) clearInterval(staleWatchdogRef.current);
+    staleWatchdogRef.current = setInterval(() => {
+      if (eventSourceRef.current !== eventSource) return; // a newer connect owns this
+      if (Date.now() - lastSseEventRef.current > STALE_EVENT_MS) {
+        console.warn(
+          `[SSE] No data for ${STALE_EVENT_MS / 1000}s — forcing reconnect`,
+        );
+        connect();
+      }
+    }, WATCHDOG_CHECK_MS);
   }, [processData]);
 
   // Clock extrapolation — ticks every second
@@ -912,6 +939,7 @@ export function useF1DataSSE(): F1DataState {
         clearTimeout(reconnectTimeoutRef.current);
       if (healthCheckIntervalRef.current)
         clearInterval(healthCheckIntervalRef.current);
+      if (staleWatchdogRef.current) clearInterval(staleWatchdogRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
