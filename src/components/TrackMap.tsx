@@ -548,6 +548,13 @@ export default function TrackMap({
         if (diff < 0) diff += totalPoints;
         diff -= totalPoints / 2;
 
+        // On-track cars only ever advance around the lap; a target that sits
+        // behind the car is GPS/estimate noise, not a real reversal (pit rejoins
+        // are handled by the snap above). Never reverse — hold the position until
+        // the target is ahead again. Lap wrap-around already resolves to a
+        // forward path above, so this doesn't break the finish-line crossing.
+        if (diff < 0) diff = 0;
+
         const absDiff = Math.abs(diff);
 
         let targetVelocity = baseSpeed;
